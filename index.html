@@ -4492,6 +4492,12 @@ var APP_CSS = [
   '.tabs-list::-webkit-scrollbar{display:none;}',
   '.tab{display:inline-flex;align-items:center;gap:6px;flex:none;max-width:230px;height:32px;padding:0 6px 0 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--surface) 55%,transparent);color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s;}',
   '.tab:hover{color:var(--ink);background:var(--surface);}',
+  '.tab{position:relative;user-select:none;-webkit-user-select:none;}',
+  '.tab.dragging{opacity:.45;}',
+  'body.tab-dragging,body.tab-dragging .tab{cursor:grabbing;}',
+  '.tab.drop-before::before,.tab.drop-after::after{content:"";position:absolute;top:3px;bottom:3px;width:3px;border-radius:2px;background:var(--accent);}',
+  '.tab.drop-before::before{inset-inline-start:-4px;}',
+  '.tab.drop-after::after{inset-inline-end:-4px;}',
   '.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);border-color:color-mix(in srgb,var(--accent) 50%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent);}',
   '.tab-t{overflow:hidden;text-overflow:ellipsis;max-width:170px;}',
   '.tab-rn{width:160px;height:24px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:inherit;padding:0 6px;outline:none;}',
@@ -9050,7 +9056,7 @@ if (typeof document !== 'undefined'){
     return text.trim() ? textTitle(text) : 'تب خالی';
   }
   function drawTabs(){
-    if (tabRenaming) return; // redrawing would throw away the name being typed
+    if (tabRenaming || (tabDrag && tabDrag.on)) return; // redrawing would throw away the name being typed, or the tab being dragged
     $('tabsList').innerHTML = tabs.map(function(t){
       var text = t.id === activeTab ? ta.value : t.text;
       var kind = t.id === activeTab ? renderedFmt : (text.trim() ? detectFormat(text) : '');
@@ -9222,6 +9228,84 @@ if (typeof document !== 'undefined'){
     activeTab = null;
     switchTab(last.tab.id);
   }
+  /** Moves a tab to position `to` (counted before the move); the bar and the saved order follow. */
+  function moveTab(id, to){
+    var t = tabs.filter(function(x){ return x.id === id; })[0], from = tabs.indexOf(t);
+    if (!t) return;
+    tabs.splice(from, 1);
+    if (to > from) to--;
+    tabs.splice(Math.max(0, Math.min(tabs.length, to)), 0, t);
+    drawTabs();
+    saveState();
+  }
+  function moveCurrentTab(dir){
+    var i = tabs.indexOf(currentTab()), to = i + dir;
+    if (tabs.length < 2 || to < 0 || to >= tabs.length) return;
+    moveTab(activeTab, dir > 0 ? to + 1 : to);
+  }
+  /* reordering by dragging: a mouse drags at once, a finger after a long press (a quick swipe still scrolls the bar) */
+  var tabDrag = null, tabDragEnded = 0;
+  function clearDropMarks(){
+    Array.prototype.forEach.call($('tabsList').querySelectorAll('.drop-before,.drop-after'), function(t){ t.classList.remove('drop-before', 'drop-after'); });
+  }
+  function startTabDrag(){
+    tabDrag.on = true;
+    tabDrag.el.classList.add('dragging');
+    body.classList.add('tab-dragging');
+  }
+  function endTabDrag(){
+    clearDropMarks();
+    body.classList.remove('tab-dragging');
+    if (tabDrag){ clearTimeout(tabDrag.timer); tabDrag.el.classList.remove('dragging'); }
+    tabDrag = null;
+  }
+  function dragOverTab(x, y){
+    var list = $('tabsList'), over = document.elementFromPoint(x, y), t = over && over.closest('#tabsList .tab');
+    clearDropMarks();
+    tabDrag.target = null;
+    if (t && t !== tabDrag.el){
+      // the half nearer the start of the bar (the right side in RTL) drops before the tab
+      var r = t.getBoundingClientRect(), rtl = getComputedStyle(list).direction === 'rtl', before = rtl ? x > r.left + r.width / 2 : x < r.left + r.width / 2;
+      t.classList.add(before ? 'drop-before' : 'drop-after');
+      tabDrag.target = t.dataset.tab;
+      tabDrag.before = before;
+    }
+    var box = list.getBoundingClientRect();
+    if (x < box.left + 32) list.scrollLeft -= 14;
+    else if (x > box.right - 32) list.scrollLeft += 14;
+  }
+  $('tabsList').addEventListener('pointerdown', function(e){
+    var el = e.target.closest('.tab');
+    if (!el || e.button !== 0 || tabRenaming || e.target.closest('[data-tab-close],[data-tab-rename],.tab-rn')) return;
+    tabDrag = { id: el.dataset.tab, el: el, x: e.clientX, y: e.clientY, pid: e.pointerId, touch: e.pointerType === 'touch', on: false, timer: null, target: null, before: true };
+    if (tabDrag.touch) tabDrag.timer = setTimeout(function(){ if (tabDrag && !tabDrag.on){ startTabDrag(); if (navigator.vibrate) navigator.vibrate(15); } }, 380);
+  });
+  document.addEventListener('pointermove', function(e){
+    if (!tabDrag || e.pointerId !== tabDrag.pid) return;
+    if (!tabDrag.on){
+      var far = Math.abs(e.clientX - tabDrag.x) > 6 || Math.abs(e.clientY - tabDrag.y) > 6;
+      if (!far) return;
+      if (tabDrag.touch){ endTabDrag(); return; }
+      startTabDrag();
+    }
+    e.preventDefault();
+    dragOverTab(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerup', function(e){
+    if (!tabDrag || e.pointerId !== tabDrag.pid) return;
+    var d = tabDrag;
+    endTabDrag();
+    if (!d.on) return;
+    tabDragEnded = Date.now();
+    if (d.target){
+      var target = tabs.filter(function(x){ return x.id === d.target; })[0];
+      moveTab(d.id, tabs.indexOf(target) + (d.before ? 0 : 1));
+    }
+  });
+  document.addEventListener('pointercancel', function(e){ if (tabDrag && e.pointerId === tabDrag.pid) endTabDrag(); });
+  // once a long press has picked a tab up, the finger moves the tab instead of scrolling the bar
+  $('tabsList').addEventListener('touchmove', function(e){ if (tabDrag && tabDrag.on) e.preventDefault(); }, { passive: false });
+  $('tabsList').addEventListener('contextmenu', function(e){ if (tabDrag && tabDrag.on) e.preventDefault(); });
   function stepTab(dir){
     if (tabs.length < 2) return;
     var i = tabs.indexOf(currentTab());
@@ -9239,6 +9323,7 @@ if (typeof document !== 'undefined'){
     if (fmt) setFormat(fmt);
   }
   $('tabsList').addEventListener('click', function(e){
+    if (Date.now() - tabDragEnded < 300) return; // the click that ends a drag
     var rn = e.target.closest('[data-tab-rename]');
     if (rn){ e.stopPropagation(); renameTab(rn.dataset.tabRename); return; }
     var x = e.target.closest('[data-tab-close]');
@@ -9846,6 +9931,8 @@ if (typeof document !== 'undefined'){
     'find-replace-toggle': { label: 'جست‌وجو و جایگزینی', icon: 'swap', kw: 'replace find', run: function(){ if ($('findbar').hidden) openFind(); var r = $('findRep'); r.hidden = !r.hidden; $('findRepBtn').setAttribute('aria-pressed', String(!r.hidden)); if (!r.hidden) $('findR').focus(); } },
     'find-replace-all': { label: 'جایگزینی همه', icon: 'swap', hidden: true, run: replaceAllInSource },
     'tab-list': { label: 'فهرست همهٔ تب‌ها', icon: 'list', kw: 'tabs list all', run: function(){ drawTabList(); togglePop('popTabs'); } },
+    'tab-move-next': { label: 'جابه‌جایی تب فعلی یکی به بعد', icon: 'swap', kbd: 'Alt Shift ]', kw: 'tab move reorder next', run: function(){ moveCurrentTab(1); } },
+    'tab-move-prev': { label: 'جابه‌جایی تب فعلی یکی به قبل', icon: 'swap', kbd: 'Alt Shift [', kw: 'tab move reorder previous', run: function(){ moveCurrentTab(-1); } },
     'tab-rename': { label: 'تغییر نام تب فعلی', icon: 'pen', kbd: 'F2', kw: 'tab rename name title', run: function(){ renameTab(activeTab); } },
     'tab-close-all': { label: 'بستن همهٔ تب‌ها', icon: 'trash', kw: 'tabs close all', run: function(){ closeManyTabs(false); } },
     'tab-close-others': { label: 'بستن بقیهٔ تب‌ها (فقط تب فعلی بماند)', icon: 'x', kw: 'tabs close others', run: function(){ closeManyTabs(true); } },
@@ -10424,6 +10511,7 @@ if (typeof document !== 'undefined'){
     if (e.altKey && !mod && cmpBox.hidden && palette.hidden){
       if (e.code === 'KeyN'){ e.preventDefault(); openTab(''); return; }
       if (e.code === 'KeyW'){ e.preventDefault(); closeTab(activeTab); return; }
+      if ((e.code === 'BracketLeft' || e.code === 'BracketRight') && e.shiftKey){ e.preventDefault(); moveCurrentTab(e.code === 'BracketRight' ? 1 : -1); return; }
       if (e.code === 'BracketLeft' || e.code === 'BracketRight'){ e.preventDefault(); stepTab(e.code === 'BracketRight' ? 1 : -1); return; }
     }
     if (!cmpBox.hidden){
