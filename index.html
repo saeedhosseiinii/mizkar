@@ -4486,6 +4486,8 @@ var APP_CSS = [
   '.tab:hover{color:var(--ink);background:var(--surface);}',
   '.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);border-color:color-mix(in srgb,var(--accent) 50%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent);}',
   '.tab-t{overflow:hidden;text-overflow:ellipsis;max-width:170px;}',
+  '.tab-rn{width:160px;height:24px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:inherit;padding:0 6px;outline:none;}',
+  '.tab.named .tab-t{font-weight:700;}',
   '.tab-f{font-size:.6rem;font-weight:800;color:var(--accent);letter-spacing:.02em;}',
   '.tab-x{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;font-size:.95rem;line-height:1;opacity:.55;}',
   '.tab-x:hover{opacity:1;color:#ef4444;background:color-mix(in srgb,#ef4444 14%,transparent);}',
@@ -8043,7 +8045,7 @@ if (typeof document !== 'undefined'){
     try {
       localStorage.setItem('fs2-state', JSON.stringify({
         text: ta.value, times: optTimes.checked, cronTz: state.cronTz, pasteTab: optPasteTab.checked, activeTab: activeTab,
-        tabs: tabs.map(function(t){ return { id: t.id, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),
+        tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),
         jsonView: state.jsonView, outline: state.outline, faRules: state.faRules, norm: optNorm.checked, bdi: optBdi.checked, sync: optSync.checked, pdf: state.pdf,
         fmt: state.fmt, view: state.view, split: state.split, size: state.size, width: state.width, accent: state.accent, ltr: state.ltr, read: state.read
       }));
@@ -8395,11 +8397,11 @@ if (typeof document !== 'undefined'){
       var fmt = !t.fmt || t.fmt === 'auto' ? detectFormat(t.text) : t.fmt, html;
       var text = t.text.length > RENDER_LIMIT && fmt !== 'json' ? t.text.slice(0, RENDER_LIMIT) : t.text;
       try { html = renderFormat(fmt, text, opts()); } catch(e){ html = '<div class="errbox">⚠ خطای رندر: ' + escapeHtml(e.message) + '</div>'; }
-      var title = textTitle(t.text);
-      return '<section class="tab-sec" id="tab-sec-' + (i + 1) + '">' + (/^<h[12][ >]/.test(html) ? '' : '<h1 dir="' + (textDir(title) || 'auto') + '">' + escapeHtml(title) + '</h1>') + html + '</section>';
+      var title = tabLabel(t);
+      return '<section class="tab-sec" id="tab-sec-' + (i + 1) + '">' + (/^<h[12][ >]/.test(html) && !t.name ? '' : '<h1 dir="' + (textDir(title) || 'auto') + '">' + escapeHtml(title) + '</h1>') + html + '</section>';
     });
     var toc = list.length > 2 ? '<nav class="toc"><div class="toc-title">فهرست</div><ul>' + list.map(function(t, i){
-      var title = textTitle(t.text);
+      var title = tabLabel(t);
       return '<li><a href="#tab-sec-' + (i + 1) + '" dir="' + (textDir(title) || 'auto') + '">' + faNum(i + 1) + '. ' + escapeHtml(title) + '</a></li>';
     }).join('') + '</ul></nav>' : '';
     zoomWrap.classList.remove('is-empty');
@@ -8764,7 +8766,7 @@ if (typeof document !== 'undefined'){
     Array.prototype.forEach.call(cmpBox.querySelectorAll('.cmp-pick'), function(sel){
       syncActiveTab();
       sel.innerHTML = '<option value="">از تب…</option>' + tabs.map(function(t){
-        return '<option value="' + t.id + '">' + escapeHtml(textTitle(t.text || '') ) + (t.id === activeTab ? ' (فعلی)' : '') + '</option>';
+        return '<option value="' + t.id + '">' + escapeHtml(tabLabel(t)) + (t.id === activeTab ? ' (فعلی)' : '') + '</option>';
       }).join('');
       sel.disabled = tabs.filter(function(t){ return t.text.trim(); }).length < 1;
     });
@@ -8953,12 +8955,19 @@ if (typeof document !== 'undefined'){
     t.undo = undoStack;
     t.redo = redoStack;
   }
+  /** The tab's own name when the user gave it one, otherwise a title taken from its text. */
+  function tabLabel(t, text){
+    if (t.name) return t.name;
+    text = text === undefined ? (t.id === activeTab ? ta.value : t.text) : text;
+    return text.trim() ? textTitle(text) : 'تب خالی';
+  }
   function drawTabs(){
+    if (tabRenaming) return; // redrawing would throw away the name being typed
     $('tabsList').innerHTML = tabs.map(function(t){
       var text = t.id === activeTab ? ta.value : t.text;
       var kind = t.id === activeTab ? renderedFmt : (text.trim() ? detectFormat(text) : '');
-      var title = text.trim() ? textTitle(text) : 'تب خالی';
-      return '<div class="tab" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + '">'
+      var title = tabLabel(t, text);
+      return '<div class="tab' + (t.name ? ' named' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
         + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
         + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span>'
         + '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span></div>';
@@ -8985,9 +8994,10 @@ if (typeof document !== 'undefined'){
   function drawTabList(){
     syncActiveTab();
     $('popTabs').innerHTML = '<div class="pop-title">همهٔ تب‌ها (' + faNum(tabs.length) + ')</div>' + tabs.map(function(t){
-      var title = t.text.trim() ? textTitle(t.text) : 'تب خالی', kind = t.text.trim() ? detectFormat(t.text) : '';
+      var title = tabLabel(t), kind = t.text.trim() ? detectFormat(t.text) : '';
       return '<div class="hist-row"><button type="button" class="hist-item" data-tab-go="' + t.id + '" aria-current="' + (t.id === activeTab) + '"><b dir="auto">' + escapeHtml(title) + '</b><small>'
         + escapeHtml((FMT_LABELS[kind] || 'خالی') + ' · ' + faNum(t.text.length) + ' کاراکتر') + '</small></button>'
+        + '<button type="button" class="hist-del" data-tab-rename="' + t.id + '" aria-label="تغییر نام" title="تغییر نام">✎</button>'
         + '<button type="button" class="hist-del" data-tab-close="' + t.id + '" aria-label="بستن">×</button></div>';
     }).join('') + '<div class="hist-foot">'
       + (closedTabs.length ? '<button type="button" data-action="tab-reopen">بازگرداندن آخرین تب بسته‌شده</button>' : '')
@@ -9047,7 +9057,9 @@ if (typeof document !== 'undefined'){
     var go = e.target.closest('[data-tab-go]');
     if (go){ e.stopPropagation(); closePops(); switchTab(go.dataset.tabGo); return; }
     var cl = e.target.closest('[data-tab-close]');
-    if (cl){ e.stopPropagation(); closeTab(cl.dataset.tabClose); drawTabList(); }
+    if (cl){ e.stopPropagation(); closeTab(cl.dataset.tabClose); drawTabList(); return; }
+    var rn = e.target.closest('[data-tab-rename]');
+    if (rn){ e.stopPropagation(); closePops(); renameTab(rn.dataset.tabRename); }
   });
   function switchTab(id){
     if (id === activeTab) return;
@@ -9147,7 +9159,51 @@ if (typeof document !== 'undefined'){
     var t = e.target.closest('[data-tab]');
     if (t && e.button === 1){ e.preventDefault(); closeTab(t.dataset.tab); }
   });
+  /* renaming: an input in place of the title; Enter or leaving keeps it, Esc cancels, an empty name goes back to the automatic title */
+  var tabRenaming = null, TAB_NAME_MAX = 60;
+  function renameTab(id){
+    var t = tabs.filter(function(x){ return x.id === id; })[0];
+    if (!t) return;
+    if (tabRenaming) tabRenaming.finish(true);
+    drawTabs();
+    var el = $('tabsList').querySelector('[data-tab="' + id + '"]');
+    if (!el) return;
+    var span = el.querySelector('.tab-t'), input = document.createElement('input');
+    input.className = 'tab-rn';
+    input.dir = 'auto';
+    input.maxLength = TAB_NAME_MAX;
+    input.value = tabLabel(t);
+    input.setAttribute('aria-label', 'نام تب');
+    span.replaceWith(input);
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    input.focus();
+    input.select();
+    tabRenaming = {
+      finish: function(keep){
+        if (!tabRenaming) return;
+        tabRenaming = null;
+        if (keep){
+          var name = input.value.replace(/\s+/g, ' ').trim();
+          // typing back the automatic title is the same as no name
+          t.name = name && name !== tabLabel({ id: t.id, text: t.text, name: '' }) ? name : '';
+          saveState();
+        }
+        drawTabs();
+      }
+    };
+    input.addEventListener('keydown', function(e){
+      e.stopPropagation();
+      if (e.key === 'Enter'){ e.preventDefault(); tabRenaming && tabRenaming.finish(true); }
+      else if (e.key === 'Escape'){ e.preventDefault(); tabRenaming && tabRenaming.finish(false); }
+    });
+    input.addEventListener('blur', function(){ if (tabRenaming) tabRenaming.finish(true); });
+  }
+  $('tabsList').addEventListener('dblclick', function(e){
+    var t = e.target.closest('[data-tab]');
+    if (t && !e.target.closest('[data-tab-close],.tab-rn')){ e.preventDefault(); renameTab(t.dataset.tab); }
+  });
   $('tabsList').addEventListener('keydown', function(e){
+    if (e.target.classList.contains('tab-rn')) return;
     var t = e.target.closest('[data-tab]');
     if (t && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); switchTab(t.dataset.tab); }
   });
@@ -9608,6 +9664,7 @@ if (typeof document !== 'undefined'){
     'find-replace-toggle': { label: 'جست‌وجو و جایگزینی', icon: 'swap', kw: 'replace find', run: function(){ if ($('findbar').hidden) openFind(); var r = $('findRep'); r.hidden = !r.hidden; $('findRepBtn').setAttribute('aria-pressed', String(!r.hidden)); if (!r.hidden) $('findR').focus(); } },
     'find-replace-all': { label: 'جایگزینی همه', icon: 'swap', hidden: true, run: replaceAllInSource },
     'tab-list': { label: 'فهرست همهٔ تب‌ها', icon: 'list', kw: 'tabs list all', run: function(){ drawTabList(); togglePop('popTabs'); } },
+    'tab-rename': { label: 'تغییر نام تب فعلی', icon: 'pen', kbd: 'F2', kw: 'tab rename name title', run: function(){ renameTab(activeTab); } },
     'tab-close-all': { label: 'بستن همهٔ تب‌ها', icon: 'trash', kw: 'tabs close all', run: function(){ closeManyTabs(false); } },
     'tab-close-others': { label: 'بستن بقیهٔ تب‌ها (فقط تب فعلی بماند)', icon: 'x', kw: 'tabs close others', run: function(){ closeManyTabs(true); } },
     'tab-new': { label: 'تب جدید', icon: 'plus', kbd: 'Alt N', kw: 'tab new', run: function(){ openTab(''); } },
@@ -9676,7 +9733,7 @@ if (typeof document !== 'undefined'){
     syncActiveTab();
     tabs.forEach(function(t){
       if (t.id === activeTab) return;
-      list.push({ label: 'تب: ' + (t.text.trim() ? textTitle(t.text) : 'تب خالی'), icon: 'file', kw: 'tab switch', run: function(){ switchTab(t.id); } });
+      list.push({ label: 'تب: ' + tabLabel(t), icon: 'file', kw: 'tab switch', run: function(){ switchTab(t.id); } });
     });
     historyLoad().forEach(function(h, k){
       if (h.t === ta.value) return;
@@ -10181,6 +10238,7 @@ if (typeof document !== 'undefined'){
       openFind();
       return;
     }
+    if (e.key === 'F2' && !mod && !e.altKey && !isEditable(e.target) && cmpBox.hidden && palette.hidden){ e.preventDefault(); renameTab(activeTab); return; }
     if (e.altKey && !mod && cmpBox.hidden && palette.hidden){
       if (e.code === 'KeyN'){ e.preventDefault(); openTab(''); return; }
       if (e.code === 'KeyW'){ e.preventDefault(); closeTab(activeTab); return; }
@@ -10263,7 +10321,7 @@ if (typeof document !== 'undefined'){
     if (typeof s.times === 'boolean') optTimes.checked = s.times;
     if (s.cronTz === 0 || s.cronTz === 210) state.cronTz = s.cronTz;
     if (Array.isArray(s.tabs) && s.tabs.length){
-      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
+      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
     }
     if (!tabs.length) tabs = [{ id: tabId(), text: '', fmt: s.fmt || 'auto', undo: [], redo: [] }];
     activeTab = tabs.some(function(t){ return t.id === s.activeTab; }) ? s.activeTab : tabs[0].id;
