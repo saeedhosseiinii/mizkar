@@ -4175,6 +4175,8 @@ var CSS = [
   '.jmore{padding-left:1.1em;color:var(--muted);font-style:italic;}',
   /* math (KaTeX) */
   '.math-inline{direction:ltr;unicode-bidi:isolate;}',
+  '.arr{display:inline-block;}',
+  '.arr:dir(rtl){transform:scaleX(-1);}',
   '.math-display{display:block;margin:1em 0;padding:.2em 0;overflow-x:auto;overflow-y:hidden;text-align:center;direction:ltr;}',
   '.math-display .katex-display{margin:0;}',
   '.content .katex{font-size:1.1em;}',
@@ -4694,8 +4696,14 @@ function hasRTL(s){ return RTL_RE.test(s); }
  */
 /** Persian function words: one of these makes a line a Persian sentence however many English terms it carries. */
 var FA_GLUE = /^(و|از|در|به|را|که|با|برای|روی|این|آن|است|نیست|هست|شد|شده|بود|یا|تا|اگر|هم|کن|کنید|می‌شود|می‌کند|نشده|باید)$/;
+/** Arrows that join the steps of a flow (A → B → C); ASCII ones only with spaces around them. */
+var FLOW_ARROW = '(?:\\s*[→⇒⟶➜➔]\\s*|\\s+(?:->|=>|-&gt;|=&gt;)\\s+)';
+var FLOW_SPLIT = new RegExp(FLOW_ARROW);
 function textDir(s){
   var rtl = 0, ltr = 0, glue = false;
+  // a flow of short Latin steps has no direction of its own: it follows the page, so it reads right-to-left in Persian text
+  var flow = String(s).replace(/`+[^`]*`+/g, 'code').split(FLOW_SPLIT);
+  if (flow.length > 1 && !hasRTL(String(s)) && flow.every(function(part){ return part.trim().split(/\s+/).length <= 4; })) return '';
   String(s).replace(/`+[^`]*`+/g, ' ').replace(/\$[^$]*\$/g, ' ').replace(/<\/?[a-z][^>]*>/gi, ' ').replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, ' ').split(/\s+/).forEach(function(w){
     if (hasRTL(w)){ rtl++; if (FA_GLUE.test(w.replace(/[^\u0600-\u06FF\u200c]/g, ''))) glue = true; }
     else if (/[A-Za-z]/.test(w)) ltr++;
@@ -4844,7 +4852,25 @@ function inlineFix(escaped, o){
     if (!/^https?:\/\/[^\/]/.test(url)) return url + trail + rest;
     return hold(anchor(url)) + trail + rest;
   });
+  s = flowChains(s, hold);
   return restoreHeld(styled(s), store);
+}
+/**
+ * Steps joined by arrows: each step is isolated and the arrow becomes its own span, so the chain follows the
+ * direction of the text around it (the CSS mirrors .arr in right-to-left text, keeping → for copying).
+ */
+function flowChains(s, hold){
+  if (!/[→⇒⟶➜➔]|\s(?:-&gt;|=&gt;)\s/.test(s)) return s;
+  // between Persian words the order is already right-to-left: only the arrow needs mirroring
+  s = s.replace(/([\u0600-\u06FF][\u200c\u064B-\u065F]*\s*)([→⇒⟶➜➔])(?=\s*[\u0600-\u06FF])/g, function(m, before, arrow){ return before + hold('<span class="arr">' + arrow + '</span>'); });
+  var word = '(?:\u0000\\d+\u0000|[*~]*[A-Za-z0-9_$][\\w$.\\-:/@#*~]*)', item = word + '(?:[ \\t]+' + word + ')*';
+  var chain = new RegExp(item + '(?:' + FLOW_ARROW + item + ')+', 'g');
+  return s.replace(chain, function(m){
+    var parts = m.split(new RegExp('(' + FLOW_ARROW + ')'));
+    return parts.map(function(part, i){
+      return i % 2 ? ' ' + hold('<span class="arr">' + part.trim() + '</span>') + ' ' : hold('<bdi>' + inlineStyles(part) + '</bdi>');
+    }).join('');
+  });
 }
 
 /* --- shell line detection (for pasted text whose code fences were lost) --- */
