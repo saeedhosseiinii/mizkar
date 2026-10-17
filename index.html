@@ -4491,6 +4491,10 @@ var APP_CSS = [
   '.tab-f{font-size:.6rem;font-weight:800;color:var(--accent);letter-spacing:.02em;}',
   '.tab-x{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;font-size:.95rem;line-height:1;opacity:.55;}',
   '.tab-x:hover{opacity:1;color:#ef4444;background:color-mix(in srgb,#ef4444 14%,transparent);}',
+  '.tab-e{width:20px;height:20px;border-radius:6px;display:none;place-items:center;font-size:.8rem;line-height:1;opacity:.55;cursor:pointer;}',
+  '.tab[aria-selected="true"] .tab-e,.tab:hover .tab-e{display:inline-grid;}',
+  '.tab-e:hover{opacity:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);}',
+  '.tab:has(.tab-rn) .tab-e{display:none;}',
   '.tab-new{flex:none;width:32px;height:32px;border-radius:10px;border:1px dashed var(--border-strong);background:transparent;color:var(--muted);cursor:pointer;display:inline-grid;place-items:center;}',
   '.tab-new:hover{color:var(--accent);border-color:var(--accent);}',
   '.tab-new .i{width:16px;height:16px;}',
@@ -8970,6 +8974,7 @@ if (typeof document !== 'undefined'){
       return '<div class="tab' + (t.name ? ' named' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
         + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
         + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span>'
+        + '<span class="tab-e" data-tab-rename="' + t.id + '" role="button" aria-label="تغییر نام تب" title="تغییر نام (F2)">✎</span>'
         + '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span></div>';
     }).join('');
     var act = $('tabsList').querySelector('[aria-selected="true"]');
@@ -9150,6 +9155,8 @@ if (typeof document !== 'undefined'){
     if (fmt) setFormat(fmt);
   }
   $('tabsList').addEventListener('click', function(e){
+    var rn = e.target.closest('[data-tab-rename]');
+    if (rn){ e.stopPropagation(); renameTab(rn.dataset.tabRename); return; }
     var x = e.target.closest('[data-tab-close]');
     if (x){ e.stopPropagation(); closeTab(x.dataset.tabClose); return; }
     var t = e.target.closest('[data-tab]');
@@ -9200,7 +9207,7 @@ if (typeof document !== 'undefined'){
   }
   $('tabsList').addEventListener('dblclick', function(e){
     var t = e.target.closest('[data-tab]');
-    if (t && !e.target.closest('[data-tab-close],.tab-rn')){ e.preventDefault(); renameTab(t.dataset.tab); }
+    if (t && !e.target.closest('[data-tab-close],[data-tab-rename],.tab-rn')){ e.preventDefault(); renameTab(t.dataset.tab); }
   });
   $('tabsList').addEventListener('keydown', function(e){
     if (e.target.classList.contains('tab-rn')) return;
