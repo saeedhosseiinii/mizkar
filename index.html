@@ -5602,7 +5602,35 @@ function guessLang(code){
   if (lines.length && lines.every(function(l){ return isCodeLine(l.trim()) || /^\s*#/.test(l) || /\\$/.test(l) || /^\s+-/.test(l); })) return 'bash';
   return '';
 }
+/**
+ * Persian comments and strings in left-to-right code: the text after the comment marker (or between the quotes) gets
+ * its own right-to-left box with English words isolated, so «// size: اندازهٔ دیسک VM» reads in order.
+ */
+function rtlInCode(html){
+  if (!RTL_RE.test(html)) return html;
+  return html.replace(/<span class="tok-(com|str)">([^<]*)<\/span>/g, function(m, kind, body){
+    if (!hasRTL(body)) return m;
+    return '<span class="tok-' + kind + '">' + body.split('\n').map(function(line){
+      var mm = kind === 'com'
+        ? line.match(/^(\s*(?:\/\/+|#+|--|\/\*+|\*+(?!\/)|;+|&lt;!--)?\s*)([\s\S]*?)(\s*(?:\*\/|--&gt;)?\s*)$/)
+        : line.match(/^(&quot;|'|`)?([\s\S]*?)(&quot;|'|`)?$/);
+      if (!mm || !hasRTL(mm[2]) || textDir(mm[2]) !== 'rtl') return line;
+      return mm[1] + '<bdi dir="rtl">' + bdiText(mm[2]) + '</bdi>' + (mm[3] || '');
+    }).join('\n') + '</span>';
+  });
+}
+/** Plain code blocks: a line that reads as Persian keeps its own right-to-left order. */
+function rtlPlainLines(html){
+  if (!RTL_RE.test(html)) return html;
+  return html.split('\n').map(function(line){
+    return hasRTL(line) && textDir(line) === 'rtl' ? '<bdi dir="rtl">' + bdiText(line) + '</bdi>' : line;
+  }).join('\n');
+}
 function highlightCode(lang, code){
+  var html = highlightTokens(lang, code);
+  return html === null ? rtlPlainLines(escapeHtml(code)) : rtlInCode(html);
+}
+function highlightTokens(lang, code){
   switch (lang){
     case 'php': return hlPhp(code);
     case 'js': case 'javascript': case 'mjs': case 'cjs': case 'ts': case 'typescript': case 'jsx': case 'tsx': return hlJs(code);
@@ -5616,7 +5644,7 @@ function highlightCode(lang, code){
     case 'yaml': case 'yml': return hlYaml(code);
     case 'toml': case 'ini': case 'cfg': case 'conf': case 'properties': case 'env': case 'dotenv': return hlIni(code);
     case 'xml': case 'html': case 'htm': case 'svg': case 'xhtml': case 'vue': return hlXml(code);
-    default: return escapeHtml(code);
+    default: return null;
   }
 }
 
@@ -5931,15 +5959,15 @@ function renderFormat(fmt, text, opts){
   text = String(text).replace(/^\uFEFF/, ''); // BOM from Excel / Windows Notepad
   switch (fmt){
     case 'markdown': return renderMarkdown(text, opts);
-    case 'json': return renderJSON(text);
-    case 'yaml': return renderYAML(text);
+    case 'json': return rtlInCode(renderJSON(text));
+    case 'yaml': return rtlInCode(renderYAML(text));
     case 'csv': return renderCSV(text, ',', opts);
     case 'tsv': return renderCSV(text, '\t', opts);
-    case 'toml': return renderINI(text);
-    case 'ini': return renderINI(text);
+    case 'toml': return rtlInCode(renderINI(text));
+    case 'ini': return rtlInCode(renderINI(text));
     case 'xml': return renderXML(text);
     case 'log': return renderLog(text);
-    case 'sql': return renderSQL(text);
+    case 'sql': return rtlInCode(renderSQL(text));
     case 'diff': return renderDiff(text);
     case 'jwt': return renderJWT(text);
     case 'cron': return renderCron(text, opts);
