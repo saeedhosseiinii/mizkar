@@ -4742,6 +4742,22 @@ function tokInfo(w){
  * phrase like "Load Balancer v2.0" keeps its word order inside RTL text.
  * Runs made only of plain letters are left alone — the browser already orders them.
  */
+/** Index of the token a Latin run (tokens i..j of `parts`) must end at so it holds no unpaired bracket, or -1. */
+function unmatchedBracketCut(parts, i, j){
+  var stack = [];
+  for (var k = i; k <= j; k += 2){
+    var t = tokInfo(parts[k]), text = (k === i ? '' : t.lead) + t.core + (k === j ? '' : t.tail);
+    for (var c = 0; c < text.length; c++){
+      var ch = text.charAt(c);
+      if (/[(\[{]/.test(ch)) stack.push({ ch: ch, k: k });
+      else if (BRACKET_OPEN[ch]){
+        if (stack.length && stack[stack.length - 1].ch === BRACKET_OPEN[ch]) stack.pop();
+        else if (k < j) return k; // closes something opened before the run
+      }
+    }
+  }
+  return stack.length && stack[0].k > i ? stack[0].k - 2 : -1; // opens something closed after the run
+}
 function bdiText(s){
   var parts = s.split(/(\s+)/), out = [], i = 0;
   while (i < parts.length){
@@ -4753,6 +4769,8 @@ function bdiText(s){
       if (!next.q) break;
       j += 2; last = next;
     }
+    // a bracket whose partner lies outside the run must stay in the RTL text: end the run before it
+    for (var cut = unmatchedBracketCut(parts, i, j); cut >= 0; cut = unmatchedBracketCut(parts, i, j)){ j = cut; last = tokInfo(parts[j]); }
     var inner = parts.slice(i, j + 1).join(''), tail = last.tail;
     inner = inner.slice(first.lead.length, inner.length - tail.length);
     while (tail && BRACKET_OPEN[tail.charAt(0)] && countOf(inner, BRACKET_OPEN[tail.charAt(0)]) > countOf(inner, tail.charAt(0))){
