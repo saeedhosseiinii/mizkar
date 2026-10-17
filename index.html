@@ -204,7 +204,8 @@
     <div class="preview" id="preview"><article id="zoomWrap" class="content sheet"></article></div>
     <div class="findbar" id="findbar" data-ui hidden role="search">
       <div class="find-row">
-        <input id="findQ" type="search" placeholder="جست‌وجو در متن…" dir="auto" autocomplete="off" spellcheck="false" aria-label="جست‌وجو">
+        <div class="seg find-scope" id="findScope" role="group" aria-label="جست‌وجو در"><button type="button" data-fs="preview" aria-pressed="true" title="جست‌وجو در پیش‌نمایش">پیش‌نمایش</button><button type="button" data-fs="source" aria-pressed="false" title="جست‌وجو در متن خام ورودی">متن خام</button></div>
+        <input id="findQ" type="search" placeholder="جست‌وجو در پیش‌نمایش…" dir="auto" autocomplete="off" spellcheck="false" aria-label="جست‌وجو">
         <span class="find-count" id="findCount"></span>
         <button class="ib sm" type="button" data-action="find-prev" aria-label="نتیجهٔ قبلی" title="قبلی (Shift+Enter)"><svg class="i"><use href="#i-up"/></svg></button>
         <button class="ib sm" type="button" data-action="find-next" aria-label="نتیجهٔ بعدی" title="بعدی (Enter)"><svg class="i" style="transform:rotate(180deg)"><use href="#i-up"/></svg></button>
@@ -218,7 +219,7 @@
         <button class="elbtn" type="button" data-action="find-replace-all">جایگزینی همه در متن</button>
       </div>
     </div>
-    <nav class="outline" id="outline" data-ui hidden aria-label="فهرست سرفصل‌ها"><div class="outline-title">در این سند</div><div class="outline-list" id="outlineList"></div></nav>
+    <nav class="outline" id="outline" data-ui hidden aria-label="فهرست سرفصل‌ها"><div class="ol-grip" id="olGrip" title="کشیدن: تغییر عرض · دوبار کلیک: عرض پیش‌فرض"></div><div class="outline-title">در این سند</div><div class="outline-list" id="outlineList"></div></nav>
     <div class="fabs" id="fabs">
       <button class="fab-mini" type="button" data-action="quick-edit" title="ویرایش سریع (E)" aria-label="ویرایش سریع"><svg class="i"><use href="#i-pen"/></svg></button>
       <button class="fab" type="button" data-action="paste" title="جایگزینی متن با محتوای کلیپ‌بورد (Ctrl+V)"><svg class="i"><use href="#i-clipboard"/></svg>چسباندن</button>
@@ -4428,14 +4429,19 @@ var APP_CSS = [
   '.hist-foot{display:flex;justify-content:flex-end;padding:6px 4px 2px;border-top:1px solid var(--border);margin-top:4px;}',
   '.hist-foot button{border:0;background:transparent;color:var(--muted);font-size:.74rem;cursor:pointer;padding:4px 8px;border-radius:8px;}',
   '.hist-foot button:hover{color:#ef4444;background:color-mix(in srgb,#ef4444 10%,transparent);}',
-  '.outline{position:absolute;top:58px;right:18px;z-index:5;width:220px;max-height:calc(100% - 80px);overflow:auto;padding:10px 8px;border-radius:14px;background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border);box-shadow:0 10px 30px -18px rgba(15,23,42,.35);scrollbar-width:thin;}',
+  '.outline{position:absolute;top:58px;right:18px;z-index:5;width:var(--ol-w,220px);max-height:calc(100% - 80px);display:flex;flex-direction:column;overflow:hidden;padding:10px 8px;border-radius:14px;background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border);box-shadow:0 10px 30px -18px rgba(15,23,42,.35);scrollbar-width:thin;}',
+  '.outline[hidden]{display:none;}',
+  '.outline-list{overflow:auto;min-height:0;scrollbar-width:thin;}',
+  '.ol-grip{position:absolute;top:0;bottom:0;left:0;width:7px;cursor:ew-resize;z-index:1;touch-action:none;}',
+  '.ol-grip:hover,.ol-grip.drag{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 45%,transparent),transparent);}',
   '.outline-title{font-size:.7rem;font-weight:800;color:var(--muted);padding:0 8px 6px;}',
-  '.outline-list a{display:block;padding:4px 8px;border-radius:8px;font-size:.78rem;line-height:1.6;color:var(--ink-2);text-decoration:none;border:0;border-inline-start:2px solid transparent;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+  '.outline-list a{text-align:right;display:block;padding:4px 8px;border-radius:8px;font-size:.78rem;line-height:1.6;color:var(--ink-2);text-decoration:none;border:0;border-inline-start:2px solid transparent;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
   '.outline-list a:hover{background:var(--surface-2);color:var(--ink);}',
   '.outline-list a.ol-2{padding-inline-start:18px;}.outline-list a.ol-3{padding-inline-start:28px;font-size:.74rem;}',
   '.outline-list a.active{color:var(--accent);border-inline-start-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent);font-weight:700;}',
   'body.readmode .outline{top:24px;}',
-  '.with-outline .preview{padding-right:262px;}',
+  '.with-outline .preview{padding-right:calc(var(--ol-w,220px) + 42px);}',
+  'body.ltren .outline-list a{text-align:left;}',
   '@media(max-width:600px){.ph-actions [data-action^="zoom"],.ph-actions #zLvl,.ph-actions [data-action="hand"]{display:none;}}',
   '.cmp{position:fixed;inset:0;z-index:96;display:flex;padding:14px;background:rgba(5,8,15,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:fade .12s;}',
   '.cmp[hidden]{display:none;}',
@@ -4533,6 +4539,14 @@ var APP_CSS = [
   '.find-opt[aria-pressed="true"]{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}',
   'mark.fhit{background:#fde047;color:#111;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.08);}',
   'mark.fhit.cur{background:#f97316;color:#fff;}',
+  '.find-scope{flex:none;}',
+  '.find-scope button{height:26px;padding:0 9px;font-size:.72rem;}',
+  '#inCard{position:relative;}',
+  'textarea#input{position:relative;z-index:1;}',
+  '.ta-hl{position:absolute;z-index:0;overflow:hidden;pointer-events:none;color:transparent;box-sizing:border-box;margin:0;border:0;}',
+  '.ta-hl[hidden]{display:none;}',
+  '.ta-hl mark{color:transparent;background:rgba(250,204,21,.5);border-radius:2px;}',
+  '.ta-hl mark.cur{background:rgba(249,115,22,.65);}',
   '.empty-state{text-align:center;padding:9vh 12px;color:var(--muted);font-size:.9rem;}',
   '.empty-state .es-icon{width:76px;height:76px;margin:0 auto 18px;border-radius:24px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 18px 40px -14px color-mix(in srgb,var(--accent) 75%,transparent);transform:rotate(-6deg);}',
   '.empty-state .es-icon .i{width:34px;height:34px;stroke-width:1.6;transform:rotate(6deg);}',
@@ -8096,7 +8110,7 @@ if (typeof document !== 'undefined'){
       localStorage.setItem('fs2-state', JSON.stringify({
         text: ta.value, times: optTimes.checked, cronTz: state.cronTz, pasteTab: optPasteTab.checked, activeTab: activeTab,
         tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),
-        jsonView: state.jsonView, outline: state.outline, faRules: state.faRules, norm: optNorm.checked, bdi: optBdi.checked, sync: optSync.checked, pdf: state.pdf,
+        jsonView: state.jsonView, outline: state.outline, outlineW: state.outlineW, faRules: state.faRules, norm: optNorm.checked, bdi: optBdi.checked, sync: optSync.checked, pdf: state.pdf,
         fmt: state.fmt, view: state.view, split: state.split, size: state.size, width: state.width, accent: state.accent, ltr: state.ltr, read: state.read
       }));
       quotaWarned = false;
@@ -8784,10 +8798,34 @@ if (typeof document !== 'undefined'){
     if (!show) return;
     var min = Math.min.apply(null, hs.map(function(h){ return +h.tagName.charAt(1); }));
     $('outlineList').innerHTML = hs.map(function(h, k){
-      return '<a href="#' + h.id + '" data-oi="' + k + '" class="ol-' + (+h.tagName.charAt(1) - min + 1) + '" dir="auto" title="' + escapeHtml(h.textContent.trim()) + '">' + escapeHtml(h.textContent.trim()) + '</a>';
+      // the heading's own direction, with English runs isolated like in the page, so every entry lines up the same way
+      var text = h.textContent.trim(), dir = h.getAttribute('dir') || textDir(text) || (state.ltr ? 'ltr' : 'rtl');
+      return '<a href="#' + h.id + '" data-oi="' + k + '" class="ol-' + (+h.tagName.charAt(1) - min + 1) + '" dir="' + dir + '" title="' + escapeHtml(text) + '">' + bdiText(escapeHtml(text)) + '</a>';
     }).join('');
     syncOutline();
   }
+  var OUTLINE_W = 220;
+  function setOutlineWidth(w){
+    state.outlineW = Math.max(160, Math.min(520, Math.round(w)));
+    out.parentNode.style.setProperty('--ol-w', state.outlineW + 'px');
+  }
+  // drag the panel's inner edge to resize it; double-click goes back to the default width
+  $('olGrip').addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    var grip = e.currentTarget, startX = e.clientX, startW = state.outlineW || OUTLINE_W;
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add('drag');
+    function move(ev){ setOutlineWidth(startW + (startX - ev.clientX)); }
+    function up(){
+      grip.classList.remove('drag');
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      saveState();
+    }
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+  });
+  $('olGrip').addEventListener('dblclick', function(){ setOutlineWidth(OUTLINE_W); saveState(); });
   function syncOutline(){
     if (!outlineHeads.length) return;
     var limit = out.getBoundingClientRect().top + 90, active = 0;
@@ -9276,8 +9314,75 @@ if (typeof document !== 'undefined'){
     zoomWrap.normalize();
     find.hits = [];
   }
+  /* the raw text: matches are [start, end] offsets, painted by a mirror layer behind the transparent textarea */
+  var findScope = 'preview', taHl = null, TA_HL_MAX = 400000, HL_PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'];
+  function setFindScope(scope){
+    findScope = scope;
+    Array.prototype.forEach.call(document.querySelectorAll('#findScope button'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.fs === scope)); });
+    $('findQ').placeholder = scope === 'source' ? 'جست‌وجو در متن خام…' : 'جست‌وجو در پیش‌نمایش…';
+    if (scope === 'source'){
+      clearFindHits();
+      if (state.view === 'preview') setView('split');
+    }
+    find.hits = [];
+    drawSourceHits();
+  }
+  function drawSourceHits(){
+    if (!taHl){
+      taHl = document.createElement('div');
+      taHl.className = 'ta-hl';
+      taHl.setAttribute('aria-hidden', 'true');
+      ta.parentNode.insertBefore(taHl, ta);
+    }
+    if (findScope !== 'source' || $('findbar').hidden || !find.hits.length || ta.value.length > TA_HL_MAX){ taHl.hidden = true; taHl.textContent = ''; return; }
+    var cs = getComputedStyle(ta), text = ta.value, html = '', at = 0;
+    HL_PROPS.forEach(function(p){ taHl.style[p] = cs[p]; });
+    taHl.style.top = ta.offsetTop + 'px';
+    taHl.style.left = ta.offsetLeft + 'px';
+    taHl.style.width = ta.clientWidth + 'px';
+    taHl.style.height = ta.clientHeight + 'px';
+    find.hits.forEach(function(h, k){
+      html += escapeHtml(text.slice(at, h[0])) + '<mark' + (k === find.idx ? ' class="cur"' : '') + '>' + escapeHtml(text.slice(h[0], h[1])) + '</mark>';
+      at = h[1];
+    });
+    taHl.innerHTML = html + escapeHtml(text.slice(at)) + '\n ';
+    taHl.hidden = false;
+    taHl.scrollTop = ta.scrollTop;
+  }
+  function runFindSource(keepIdx){
+    var re = findPattern(true), count = $('findCount'), hits = [], text = ta.value, m;
+    count.classList.toggle('bad', re === 'bad');
+    if (re && re !== 'bad'){
+      re.lastIndex = 0;
+      while ((m = re.exec(text)) && hits.length < 5000){
+        if (!m[0]){ re.lastIndex++; continue; }
+        hits.push([m.index, m.index + m[0].length]);
+      }
+    }
+    find.hits = hits;
+    if (!re || re === 'bad' || !hits.length){
+      find.idx = -1;
+      count.textContent = re === 'bad' ? 'regex نامعتبر' : re ? 'پیدا نشد' : '';
+      drawSourceHits();
+      return;
+    }
+    find.idx = keepIdx && find.idx >= 0 ? Math.min(find.idx, hits.length - 1) : 0;
+    showFindHit(!keepIdx);
+  }
+  function showSourceHit(scroll){
+    var h = find.hits[find.idx];
+    $('findCount').textContent = faNum(find.idx + 1) + ' از ' + faNum(find.hits.length) + (find.hits.length >= 5000 ? '+' : '');
+    drawSourceHits();
+    ta.setSelectionRange(h[0], h[1]);
+    if (scroll === false) return;
+    var mark = taHl && !taHl.hidden && taHl.querySelector('mark.cur');
+    if (mark) ta.scrollTop = mark.offsetTop - ta.clientHeight / 2 + mark.offsetHeight / 2;
+    else ta.scrollTop = (ta.value.slice(0, h[0]).split('\n').length - 1) * parseFloat(getComputedStyle(ta).lineHeight) - ta.clientHeight / 2;
+    if (taHl) taHl.scrollTop = ta.scrollTop;
+  }
   /** Wraps matches in the rendered page (text nodes only; diagrams, formulas and tool buttons are skipped). */
   function runFind(keepIdx){
+    if (findScope === 'source'){ runFindSource(keepIdx); return; }
     clearFindHits();
     var re = findPattern(false), count = $('findCount');
     count.classList.toggle('bad', re === 'bad');
@@ -9314,6 +9419,7 @@ if (typeof document !== 'undefined'){
   function showFindHit(scroll){
     var hits = find.hits;
     if (!hits.length) return;
+    if (findScope === 'source'){ showSourceHit(scroll); return; }
     hits.forEach(function(h, k){ h.classList.toggle('cur', k === find.idx); });
     $('findCount').textContent = faNum(find.idx + 1) + ' از ' + faNum(hits.length) + (hits.length >= 2000 ? '+' : '');
     if (scroll === false) return;
@@ -9327,18 +9433,25 @@ if (typeof document !== 'undefined'){
     showFindHit(true);
   }
   function openFind(){
+    // Ctrl+F inside the input text searches the raw text
+    var fromSource = document.activeElement === ta;
     if (state.view === 'editor') setView('split');
-    var bar = $('findbar'), sel = String(window.getSelection ? window.getSelection() : '').trim();
+    var bar = $('findbar'), sel = (fromSource ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : String(window.getSelection ? window.getSelection() : '')).trim();
     bar.hidden = false;
+    setFindScope(fromSource ? 'source' : findScope);
     if (sel && sel.length < 80 && sel.indexOf('\n') === -1) $('findQ').value = sel;
     $('findQ').focus();
     $('findQ').select();
     runFind(false);
   }
   function closeFind(){
+    var hit = findScope === 'source' && find.hits[find.idx];
     $('findbar').hidden = true;
     clearFindHits();
+    drawSourceHits();
     $('findCount').textContent = '';
+    // leave the caret on the current match, ready to edit it
+    if (hit){ ta.focus(); ta.setSelectionRange(hit[0], hit[1]); }
   }
   function replaceAllInSource(){
     var re = findPattern(true);
@@ -9353,6 +9466,7 @@ if (typeof document !== 'undefined'){
     });
     if (!n){ toast('در متن ورودی پیدا نشد', 'search'); return; }
     replaceText(next, faNum(n) + ' مورد جایگزین شد');
+    if (findScope === 'source') runFind(false);
   }
   $('findQ').addEventListener('input', function(){ runFind(false); });
   $('findQ').addEventListener('keydown', function(e){
@@ -9363,6 +9477,21 @@ if (typeof document !== 'undefined'){
     if (e.key === 'Enter'){ e.preventDefault(); replaceAllInSource(); }
     else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeFind(); }
   });
+  $('findScope').addEventListener('click', function(e){
+    var b = e.target.closest('[data-fs]');
+    if (!b || b.dataset.fs === findScope) return;
+    setFindScope(b.dataset.fs);
+    runFind(false);
+    $('findQ').focus();
+  });
+  var findSourceTimer = null;
+  ta.addEventListener('input', function(){
+    if (findScope !== 'source' || $('findbar').hidden || !$('findQ').value) return;
+    clearTimeout(findSourceTimer);
+    findSourceTimer = setTimeout(function(){ runFind(true); }, 150);
+  });
+  ta.addEventListener('scroll', function(){ if (taHl && !taHl.hidden) taHl.scrollTop = ta.scrollTop; });
+  if (window.ResizeObserver) new ResizeObserver(function(){ if (taHl && !taHl.hidden) drawSourceHits(); }).observe(ta);
   ['findCase', 'findRegex'].forEach(function(id){
     $(id).addEventListener('click', function(){
       $(id).setAttribute('aria-pressed', String($(id).getAttribute('aria-pressed') !== 'true'));
@@ -10389,6 +10518,7 @@ if (typeof document !== 'undefined'){
     if (s.faRules && typeof s.faRules === 'object') state.faRules = s.faRules;
     if (s.jsonView === 'tree' || s.jsonView === 'text') state.jsonView = s.jsonView;
     if (typeof s.outline === 'boolean') state.outline = s.outline;
+    if (typeof s.outlineW === 'number') setOutlineWidth(s.outlineW);
     if (s.pdf && typeof s.pdf === 'object') Object.keys(PDF_DEFAULTS).forEach(function(k){ if (typeof s.pdf[k] === typeof PDF_DEFAULTS[k]) state.pdf[k] = s.pdf[k]; });
     var z = parseFloat(storeGet('fs2-zoom'));
     setZoom(z >= 0.5 && z <= 3 ? z : 1);
