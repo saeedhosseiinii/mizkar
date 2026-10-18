@@ -9173,10 +9173,11 @@ if (typeof document !== 'undefined'){
       var kind = t.id === activeTab ? renderedFmt : (text.trim() ? detectFormat(text) : '');
       var title = tabLabel(t, text);
       return '<div class="tab' + (t.name ? ' named' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
-        + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
-        + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span>'
+        // close and rename sit at the start of the tab (its right side in RTL)
+        + '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span>'
         + '<span class="tab-e" data-tab-rename="' + t.id + '" role="button" aria-label="تغییر نام تب" title="تغییر نام (F2)">✎</span>'
-        + '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span></div>';
+        + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
+        + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span></div>';
     }).join('');
     var act = $('tabsList').querySelector('[aria-selected="true"]');
     if (act){
