@@ -7158,6 +7158,16 @@ function hexDecode(s){
   for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
   return new TextDecoder('utf-8').decode(bytes);
 }
+/** \u0633, \u{1F600}, \x41 and surrogate pairs (\ud83d\ude00) back to text, as in JSON or PHP output. */
+function unicodeUnescape(s){
+  return s.replace(/\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})/g, function(m, cp, u, x){
+    return cp ? String.fromCodePoint(parseInt(cp, 16)) : String.fromCharCode(parseInt(u || x, 16));
+  });
+}
+/** Every non-ASCII character as \uXXXX (characters beyond the BMP as a surrogate pair, like JSON). */
+function unicodeEscape(s){
+  return s.replace(/[^\x00-\x7e]/g, function(ch){ return '\\u' + ('000' + ch.charCodeAt(0).toString(16)).slice(-4); });
+}
 function htmlUnescape(s){
   var named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', zwnj: '‌', copy: '©', reg: '®', hellip: '…', mdash: '—', ndash: '–', laquo: '«', raquo: '»' };
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, function(m, e){
@@ -7223,6 +7233,8 @@ var TOOL_OPS = [
   { id: 'html-unesc', group: 'HTML', label: 'باز کردن entityهای HTML', run: htmlUnescape },
   { id: 'json-esc', group: 'JSON', label: 'تبدیل به رشتهٔ JSON', run: function(s){ return JSON.stringify(s); } },
   { id: 'json-unesc', group: 'JSON', label: 'باز کردن رشتهٔ JSON', run: function(s){ var t = s.trim(); var v = JSON.parse(/^".*"$/s.test(t) ? t : '"' + t + '"'); return typeof v === 'string' ? v : JSON.stringify(v); } },
+  { id: 'uni-dec', group: 'Unicode', label: 'باز کردن \\uXXXX', run: unicodeUnescape },
+  { id: 'uni-enc', group: 'Unicode', label: 'تبدیل به \\uXXXX', run: unicodeEscape },
   { id: 'hex-enc', group: 'Hex', label: 'کدگذاری Hex', run: hexEncode },
   { id: 'hex-dec', group: 'Hex', label: 'باز کردن Hex', run: hexDecode },
   { id: 'md5', group: 'Hash', label: 'MD5', run: md5Hex },
