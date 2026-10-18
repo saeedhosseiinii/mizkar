@@ -4417,6 +4417,12 @@ var APP_CSS = [
   '.bignote{margin:0 0 16px;padding:10px 14px;border-radius:12px;font-size:.85rem;line-height:1.9;background:color-mix(in srgb,#f59e0b 13%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);}',
   '.bignote button{margin-inline-start:6px;border:0;border-radius:8px;padding:3px 12px;font:inherit;font-weight:700;cursor:pointer;color:#fff;background:#d97706;}',
   '#popHistory{width:340px;max-height:min(460px,70vh);overflow:auto;}',
+  '.hist-q{width:calc(100% - 8px);margin:0 4px 6px;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.8rem;outline:none;}',
+  '.hist-q:focus{border-color:var(--accent);}',
+  '#popHistory .pop-title,#popHistory .hist-q{position:sticky;z-index:1;background:var(--surface);}',
+  '#popHistory .pop-title{top:-6px;margin:-6px -6px 0;padding:10px 14px 8px;}',
+  '#popHistory .hist-q{top:30px;}',
+  '#popHistory .hist-foot{position:sticky;bottom:-6px;background:var(--surface);margin:4px -6px -6px;padding:8px 10px;}',
   '.hist-row{display:flex;align-items:stretch;gap:2px;}',
   '.hist-item{flex:1;min-width:0;display:block;text-align:start;border:0;background:transparent;border-radius:10px;padding:7px 10px;cursor:pointer;color:var(--ink);}',
   '.hist-item:hover{background:var(--surface-2);}',
@@ -8161,13 +8167,17 @@ if (typeof document !== 'undefined'){
       }));
       quotaWarned = false;
     } catch(e){
-      // too much for browser storage: keep at least the current tab
-      try {
-        localStorage.setItem('fs2-state', JSON.stringify({ text: ta.value, fmt: state.fmt, view: state.view, theme: state.theme, pasteTab: optPasteTab.checked }));
-        if (!quotaWarned && tabs.length > 1){
+      // too much for browser storage: every tab goes to IndexedDB, browser storage keeps the current one and a note to look there
+      syncActiveTab();
+      var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, text: t.text, fmt: t.fmt }; }) };
+      idbSet('tabs', full).then(function(ok){
+        if (!ok && !quotaWarned && tabs.length > 1){
           quotaWarned = true;
           toast('همهٔ تب‌ها در حافظهٔ مرورگر جا نمی‌شوند — فقط تب فعلی نگه داشته می‌شود', 'x');
         }
+      });
+      try {
+        localStorage.setItem('fs2-state', JSON.stringify({ text: ta.value, fmt: state.fmt, view: state.view, theme: state.theme, pasteTab: optPasteTab.checked, tabsInIdb: full.at }));
         return;
       } catch(e2){}
       // browser storage is ~5 MB: say so once instead of silently losing the text on reload
@@ -8792,41 +8802,102 @@ if (typeof document !== 'undefined'){
   }
 
   /* --- recent texts --- */
-  var HISTORY_KEY = 'fs2-history', HISTORY_MAX = 10, HISTORY_ITEM_MAX = 300000;
-  function historyLoad(){ try { var h = JSON.parse(storeGet(HISTORY_KEY) || '[]'); return Array.isArray(h) ? h : []; } catch(e){ return []; } }
+  /* --- IndexedDB: room for many recent texts and for every tab (browser storage holds only ~5 MB) --- */
+  var idbOpen = null;
+  function idb(){
+    if (!idbOpen) idbOpen = new Promise(function(resolve, reject){
+      if (!window.indexedDB){ reject(new Error('no IndexedDB')); return; }
+      var rq = indexedDB.open('mizkar', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('kv'); };
+      rq.onsuccess = function(){ resolve(rq.result); };
+      rq.onerror = function(){ reject(rq.error); };
+    });
+    return idbOpen;
+  }
+  function idbGet(key){
+    return idb().then(function(db){ return new Promise(function(resolve, reject){
+      var rq = db.transaction('kv').objectStore('kv').get(key);
+      rq.onsuccess = function(){ resolve(rq.result); };
+      rq.onerror = function(){ reject(rq.error); };
+    }); });
+  }
+  function idbSet(key, value){
+    return idb().then(function(db){ return new Promise(function(resolve, reject){
+      var tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(value, key);
+      tx.oncomplete = function(){ resolve(true); };
+      tx.onerror = function(){ reject(tx.error); };
+    }); }).catch(function(){ return false; });
+  }
+
+  /* --- recent texts: kept in IndexedDB (browser storage only when it is missing) --- */
+  var HISTORY_KEY = 'fs2-history', HISTORY_MAX = 200, HISTORY_ITEM_MAX = 2000000, HISTORY_TOTAL_MAX = 40000000, histCache = null, histInIdb = false, histQuery = '';
+  function historyFromStorage(){ try { var h = JSON.parse(storeGet(HISTORY_KEY) || '[]'); return Array.isArray(h) ? h : []; } catch(e){ return []; } }
+  function historyLoad(){ return histCache || historyFromStorage(); }
   function historySave(list){
-    while (list.length){
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); return; } catch(e){ list.pop(); }
+    var total = 0;
+    list = list.filter(function(h){ total += h.t.length; return total <= HISTORY_TOTAL_MAX; }).slice(0, HISTORY_MAX);
+    histCache = list;
+    if (histInIdb){ idbSet('history', list); return; }
+    var small = list.slice(0, 10);
+    while (small.length){
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(small)); return; } catch(e){ small.pop(); }
     }
     try { localStorage.removeItem(HISTORY_KEY); } catch(e){}
   }
+  // move the old list out of browser storage (it frees room for the tabs) and merge it in
+  idbGet('history').then(function(saved){
+    var merged = Array.isArray(saved) ? saved : [], seen = {};
+    merged.forEach(function(h){ seen[h.t] = true; });
+    historyFromStorage().forEach(function(h){ if (!seen[h.t]) merged.push(h); });
+    merged.sort(function(a, b){ return b.at - a.at; });
+    histInIdb = true;
+    historySave(merged);
+    try { localStorage.removeItem(HISTORY_KEY); } catch(e){}
+  }).catch(function(){});
   function textTitle(t){
     var m = t.match(/^\s{0,3}#{1,3}\s+(.+)$/m);
     var line = m ? m[1] : (t.split('\n').filter(function(l){ return l.trim(); })[0] || '');
     if (line.trim().length < 4) line = t.replace(/\s+/g, ' '); // e.g. a JSON document whose first line is just "{"
     return line.replace(/[*_`#>\[\]]/g, '').trim().slice(0, 70) || 'بدون عنوان';
   }
-  function remember(text, fmt, kind){
+  /** `tab` (the closed tab) keeps its name with the text, so a tab closed by mistake is easy to find. */
+  function remember(text, fmt, kind, tab){
     if (!text || !text.trim() || text.length > HISTORY_ITEM_MAX) return;
     var list = historyLoad().filter(function(h){ return h.t !== text; });
-    list.unshift({ t: text, title: textTitle(text), fmt: fmt || 'auto', kind: kind || detectFormat(text), at: Date.now() });
-    historySave(list.slice(0, HISTORY_MAX));
+    var item = { t: text, title: textTitle(text), fmt: fmt || 'auto', kind: kind || detectFormat(text), at: Date.now() };
+    if (tab){ item.closed = true; if (tab.name) item.name = tab.name; }
+    list.unshift(item);
+    historySave(list);
   }
   function drawHistory(){
     var list = historyLoad();
-    $('popHistory').innerHTML = '<div class="pop-title">متن‌های اخیر</div>' + (list.length ? list.map(function(h, k){
-      var current = h.t === ta.value;
-      var meta = (FMT_LABELS[h.kind] || FMT_LABELS[h.fmt] || 'متن') + ' · ' + faNum(h.t.length) + ' کاراکتر · ' + (current ? 'متن فعلی' : relTime((h.at - Date.now()) / 1000));
-      return '<div class="hist-row"><button type="button" class="hist-item" data-hi="' + k + '"' + (current ? ' disabled' : '') + '><b dir="auto">' + escapeHtml(h.title) + '</b><small>' + escapeHtml(meta) + '</small></button>'
-        + '<button type="button" class="hist-del" data-hd="' + k + '" aria-label="حذف">×</button></div>';
-    }).join('') + '<div class="hist-foot"><button type="button" data-action="history-clear">پاک کردن همه</button></div>'
-      : '<div class="hist-empty">هنوز متنی ذخیره نشده — با جایگزین کردن یا باز کردن متن، متن قبلی اینجا می‌آید.</div>');
+    $('popHistory').innerHTML = '<div class="pop-title">متن‌های اخیر' + (list.length ? ' (' + faNum(list.length) + ')' : '') + '</div>'
+      + (list.length > 6 ? '<input class="hist-q" id="histQ" type="search" dir="auto" placeholder="جست‌وجو در عنوان و متن…" aria-label="جست‌وجو در متن‌های اخیر" value="' + escapeHtml(histQuery) + '">' : '')
+      + '<div id="histList"></div>'
+      + (list.length ? '<div class="hist-foot"><button type="button" data-action="history-clear">پاک کردن همه</button></div>' : '');
+    drawHistoryList();
   }
+  function drawHistoryList(){
+    var list = historyLoad(), q = histQuery.trim().toLowerCase(), shown = 0;
+    var rows = list.map(function(h, k){
+      if (q && (h.name || '').toLowerCase().indexOf(q) === -1 && h.title.toLowerCase().indexOf(q) === -1 && h.t.toLowerCase().indexOf(q) === -1) return '';
+      shown++;
+      var current = h.t === ta.value;
+      var meta = (h.closed ? 'تب بسته‌شده · ' : '') + (FMT_LABELS[h.kind] || FMT_LABELS[h.fmt] || 'متن') + ' · ' + faNum(h.t.length) + ' کاراکتر · ' + (current ? 'متن فعلی' : relTime((h.at - Date.now()) / 1000));
+      return '<div class="hist-row"><button type="button" class="hist-item" data-hi="' + k + '"' + (current ? ' disabled' : '') + '><b dir="auto">' + escapeHtml(h.name || h.title) + '</b><small>' + escapeHtml(meta) + '</small></button>'
+        + '<button type="button" class="hist-del" data-hd="' + k + '" aria-label="حذف">×</button></div>';
+    }).join('');
+    $('histList').innerHTML = !list.length ? '<div class="hist-empty">هنوز متنی ذخیره نشده — با جایگزین کردن یا باز کردن متن، یا بستن یک تب، متن قبلی اینجا می‌آید.</div>'
+      : shown ? rows : '<div class="hist-empty">چیزی پیدا نشد</div>';
+  }
+  $('popHistory').addEventListener('input', function(e){ if (e.target.id === 'histQ'){ histQuery = e.target.value; drawHistoryList(); } });
   function openHistoryItem(k){
     var h = historyLoad()[k];
     if (!h) return;
     closePops();
     receiveText(h.t, h.fmt || 'auto', 'متن قبلی باز شد');
+    if (h.name && currentTab() && currentTab().text === h.t){ currentTab().name = h.name; drawTabs(); }
     saveState();
   }
 
@@ -9145,7 +9216,7 @@ if (typeof document !== 'undefined'){
     var snapshot = { tabs: tabs.slice(), active: activeTab };
     var closing = tabs.filter(function(t){ return !(keepCurrent && t.id === activeTab); });
     if (!closing.length || (!keepCurrent && tabs.length === 1 && !tabs[0].text.trim())) return;
-    closing.forEach(function(t){ if (t.text.trim()) remember(t.text, t.fmt); });
+    closing.forEach(function(t){ if (t.text.trim()) remember(t.text, t.fmt, null, t); });
     if (keepCurrent){
       tabs = [currentTab()];
     } else {
@@ -9221,7 +9292,7 @@ if (typeof document !== 'undefined'){
     // keep the bar manageable: the oldest untouched-for-longest tab goes to recent texts
     while (tabs.length > TAB_MAX){
       var victim = tabs[0].id === t.id ? tabs[1] : tabs[0];
-      remember(victim.text, victim.fmt);
+      remember(victim.text, victim.fmt, null, victim);
       tabs.splice(tabs.indexOf(victim), 1);
     }
     switchTab(t.id);
@@ -9235,7 +9306,7 @@ if (typeof document !== 'undefined'){
     if (!t) return;
     if (tabs.length === 1){
       if (!t.text.trim()) return;
-      remember(t.text, t.fmt);
+      remember(t.text, t.fmt, null, t);
       pushUndo(ta.value);
       ta.value = '';
       t.text = '';
@@ -9245,7 +9316,7 @@ if (typeof document !== 'undefined'){
       return;
     }
     var idx = tabs.indexOf(t);
-    if (t.text.trim()){ remember(t.text, t.fmt); closedTabs.push({ tab: t, idx: idx }); }
+    if (t.text.trim()){ remember(t.text, t.fmt, null, t); closedTabs.push({ tab: t, idx: idx }); }
     tabs.splice(idx, 1);
     if (id === activeTab){
       activeTab = null;
@@ -9991,7 +10062,7 @@ if (typeof document !== 'undefined'){
     'share': { label: 'لینک اشتراک (متن داخل خود لینک)', icon: 'link', kw: 'share link url', run: shareLink },
     'convert': { label: 'تبدیل فرمت…', icon: 'swap', kw: 'convert', hidden: true, run: openConversions },
     'history': { label: 'متن‌های اخیر', icon: 'clock', kw: 'history recent', run: function(){ drawHistory(); togglePop('popHistory'); } },
-    'history-clear': { label: 'پاک کردن تاریخچه', icon: 'trash', hidden: true, run: function(){ historySave([]); try { localStorage.removeItem(HISTORY_KEY); } catch(e){} drawHistory(); toast('تاریخچه پاک شد', 'trash'); } },
+    'history-clear': { label: 'پاک کردن تاریخچه', icon: 'trash', hidden: true, run: function(){ historySave([]); try { localStorage.removeItem(HISTORY_KEY); } catch(e){} histQuery = ''; drawHistory(); toast('تاریخچه پاک شد', 'trash'); } },
     'outline': { label: 'نمایش/پنهان کردن فهرست سرفصل‌ها', icon: 'list', kw: 'outline toc headings', run: function(){ state.outline = state.outline === false; updateOutline(); saveState(); if (state.outline && $('outline').hidden) toast('فهرست وقتی دیده می‌شود که سند حداقل ۳ سرفصل و کنار صفحه جا داشته باشد', 'list'); } },
     'png-copy': { label: 'کپی تصویر کل سند (برای تلگرام)', icon: 'image', kw: 'png image screenshot copy telegram', run: function(){ pngOfDocument(true); } },
     'png-download': { label: 'دانلود تصویر PNG کل سند', icon: 'image', kw: 'png image screenshot download', run: function(){ pngOfDocument(false); } },
@@ -10169,7 +10240,7 @@ if (typeof document !== 'undefined'){
     var hi = e.target.closest('.hist-item[data-hi]');
     if (hi){ openHistoryItem(+hi.dataset.hi); return; }
     var hd = e.target.closest('.hist-del[data-hd]');
-    if (hd){ var hl = historyLoad(); hl.splice(+hd.dataset.hd, 1); historySave(hl); if (!hl.length){ try { localStorage.removeItem(HISTORY_KEY); } catch(err){} } drawHistory(); return; }
+    if (hd){ var hl = historyLoad().slice(); hl.splice(+hd.dataset.hd, 1); historySave(hl); if (!hl.length){ try { localStorage.removeItem(HISTORY_KEY); } catch(err){} } drawHistory(); return; }
     var lgr = e.target.closest('.lg-row[data-g]');
     if (lgr){
       // show only this message group (click again to show everything)
@@ -10634,6 +10705,15 @@ if (typeof document !== 'undefined'){
       tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
     }
     if (!tabs.length) tabs = [{ id: tabId(), text: '', fmt: s.fmt || 'auto', undo: [], redo: [] }];
+    // the tabs did not fit in browser storage last time: bring them back from IndexedDB
+    if (s.tabsInIdb) idbGet('tabs').then(function(full){
+      if (!full || full.at !== s.tabsInIdb || !Array.isArray(full.tabs) || full.tabs.length < 2) return;
+      var cur = ta.value;
+      tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
+      activeTab = tabs.some(function(t){ return t.id === full.activeTab; }) ? full.activeTab : tabs[0].id;
+      currentTab().text = cur; // what the editor shows now wins
+      drawTabs();
+    }).catch(function(){});
     activeTab = tabs.some(function(t){ return t.id === s.activeTab; }) ? s.activeTab : tabs[0].id;
     currentTab().text = ta.value;
     setView(VIEWS[s.view] && !(ta.value.length > RENDER_LIMIT && s.view !== 'preview') ? s.view : 'preview');
