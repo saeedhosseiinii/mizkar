@@ -39,6 +39,7 @@
   <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-columns" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
@@ -4508,6 +4509,13 @@ var APP_CSS = [
   '.tab-t{overflow:hidden;text-overflow:ellipsis;max-width:170px;}',
   '.tab-rn{width:160px;height:24px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:inherit;padding:0 6px;outline:none;}',
   '.tab.named .tab-t{font-weight:700;}',
+  '.tab.pinned{border-color:color-mix(in srgb,var(--accent) 35%,var(--border));}',
+  '.tab.pinned .tab-t{max-width:120px;}',
+  '.tab-p{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;color:var(--accent);cursor:pointer;}',
+  '.tab-p .i{width:13px;height:13px;}',
+  '.tab-p:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);}',
+  '.hist-del.pin-on{color:var(--accent);}',
+  '.hist-del .i{width:14px;height:14px;}',
   '.tab-f{font-size:.6rem;font-weight:800;color:var(--accent);letter-spacing:.02em;}',
   '.tab-x{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;font-size:.95rem;line-height:1;opacity:.55;}',
   '.tab-x:hover{opacity:1;color:#ef4444;background:color-mix(in srgb,#ef4444 14%,transparent);}',
@@ -8161,7 +8169,7 @@ if (typeof document !== 'undefined'){
     try {
       localStorage.setItem('fs2-state', JSON.stringify({
         text: ta.value, times: optTimes.checked, cronTz: state.cronTz, pasteTab: optPasteTab.checked, activeTab: activeTab,
-        tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),
+        tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),
         jsonView: state.jsonView, outline: state.outline, outlineW: state.outlineW, faRules: state.faRules, norm: optNorm.checked, bdi: optBdi.checked, sync: optSync.checked, pdf: state.pdf,
         fmt: state.fmt, view: state.view, split: state.split, size: state.size, width: state.width, accent: state.accent, ltr: state.ltr, read: state.read
       }));
@@ -8169,7 +8177,7 @@ if (typeof document !== 'undefined'){
     } catch(e){
       // too much for browser storage: every tab goes to IndexedDB, browser storage keeps the current one and a note to look there
       syncActiveTab();
-      var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, text: t.text, fmt: t.fmt }; }) };
+      var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.text, fmt: t.fmt }; }) };
       idbSet('tabs', full).then(function(ok){
         if (!ok && !quotaWarned && tabs.length > 1){
           quotaWarned = true;
@@ -9172,9 +9180,10 @@ if (typeof document !== 'undefined'){
       var text = t.id === activeTab ? ta.value : t.text;
       var kind = t.id === activeTab ? renderedFmt : (text.trim() ? detectFormat(text) : '');
       var title = tabLabel(t, text);
-      return '<div class="tab' + (t.name ? ' named' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
+      return '<div class="tab' + (t.name ? ' named' : '') + (t.pinned ? ' pinned' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
         // close and rename sit at the start of the tab (its right side in RTL)
-        + '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span>'
+        + (t.pinned ? '<span class="tab-p" data-tab-pin="' + t.id + '" role="button" aria-label="برداشتن سنجاق" title="سنجاق‌شده — کلیک: برداشتن سنجاق (Alt+Shift+P)">' + icon('pin') + '</span>'
+          : '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span>')
         + '<span class="tab-e" data-tab-rename="' + t.id + '" role="button" aria-label="تغییر نام تب" title="تغییر نام (F2)">✎</span>'
         + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
         + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span></div>';
@@ -9204,22 +9213,35 @@ if (typeof document !== 'undefined'){
       var title = tabLabel(t), kind = t.text.trim() ? detectFormat(t.text) : '';
       return '<div class="hist-row"><button type="button" class="hist-item" data-tab-go="' + t.id + '" aria-current="' + (t.id === activeTab) + '"><b dir="auto">' + escapeHtml(title) + '</b><small>'
         + escapeHtml((FMT_LABELS[kind] || 'خالی') + ' · ' + faNum(t.text.length) + ' کاراکتر') + '</small></button>'
+        + '<button type="button" class="hist-del' + (t.pinned ? ' pin-on' : '') + '" data-tab-pin="' + t.id + '" aria-pressed="' + !!t.pinned + '" aria-label="' + (t.pinned ? 'برداشتن سنجاق' : 'سنجاق کردن') + '" title="' + (t.pinned ? 'برداشتن سنجاق' : 'سنجاق کردن') + '">' + icon('pin') + '</button>'
         + '<button type="button" class="hist-del" data-tab-rename="' + t.id + '" aria-label="تغییر نام" title="تغییر نام">✎</button>'
-        + '<button type="button" class="hist-del" data-tab-close="' + t.id + '" aria-label="بستن">×</button></div>';
+        + (t.pinned ? '' : '<button type="button" class="hist-del" data-tab-close="' + t.id + '" aria-label="بستن">×</button>') + '</div>';
     }).join('') + '<div class="hist-foot">'
       + (closedTabs.length ? '<button type="button" data-action="tab-reopen">بازگرداندن آخرین تب بسته‌شده</button>' : '')
       + (tabs.length > 1 ? '<button type="button" data-action="tab-close-others">بستن بقیه</button>' : '')
-      + '<button type="button" data-action="tab-close-all">بستن همه</button></div>';
+      + '<button type="button" data-action="tab-close-all">' + (tabs.some(function(t){ return t.pinned; }) ? 'بستن همه جز سنجاق‌شده‌ها' : 'بستن همه') + '</button></div>';
   }
   /** Closes every tab (or every other tab); all of them come back with one click, and their texts stay in recent texts. */
   function closeManyTabs(keepCurrent){
     syncActiveTab();
     var snapshot = { tabs: tabs.slice(), active: activeTab };
-    var closing = tabs.filter(function(t){ return !(keepCurrent && t.id === activeTab); });
-    if (!closing.length || (!keepCurrent && tabs.length === 1 && !tabs[0].text.trim())) return;
+    var keep = tabs.filter(function(t){ return t.pinned || (keepCurrent && t.id === activeTab); });
+    var closing = tabs.filter(function(t){ return keep.indexOf(t) === -1; });
+    if (!closing.length || (!keepCurrent && tabs.length === 1 && !tabs[0].text.trim())){
+      if (!closing.length && keep.length > 1) toast('تب‌های سنجاق‌شده بسته نمی‌شوند', 'pin');
+      return;
+    }
     closing.forEach(function(t){ if (t.text.trim()) remember(t.text, t.fmt, null, t); });
-    if (keepCurrent){
-      tabs = [currentTab()];
+    if (keep.length){
+      tabs = keep;
+      if (keep.indexOf(currentTab()) === -1){
+        var first = keep[0];
+        activeTab = first.id;
+        ta.value = first.text;
+        undoStack = first.undo || [];
+        redoStack = first.redo || [];
+        setFormat(first.fmt || 'auto');
+      }
     } else {
       var fresh = { id: tabId(), text: '', fmt: 'auto', undo: [], redo: [] };
       tabs = [fresh];
@@ -9232,7 +9254,7 @@ if (typeof document !== 'undefined'){
     closePops();
     drawTabs();
     saveState();
-    toast(keepCurrent ? faNum(closing.length) + ' تب دیگر بسته شد' : 'همهٔ تب‌ها بسته شد', 'x', { label: 'بازگرداندن همه', icon: 'undo', run: function(){
+    toast(keepCurrent ? faNum(closing.length) + ' تب دیگر بسته شد' : keep.length ? faNum(closing.length) + ' تب بسته شد — سنجاق‌شده‌ها ماندند' : 'همهٔ تب‌ها بسته شد', 'x', { label: 'بازگرداندن همه', icon: 'undo', run: function(){
       syncActiveTab();
       tabs = snapshot.tabs;
       var target = snapshot.active;
@@ -9266,7 +9288,9 @@ if (typeof document !== 'undefined'){
     var cl = e.target.closest('[data-tab-close]');
     if (cl){ e.stopPropagation(); closeTab(cl.dataset.tabClose); drawTabList(); return; }
     var rn = e.target.closest('[data-tab-rename]');
-    if (rn){ e.stopPropagation(); closePops(); renameTab(rn.dataset.tabRename); }
+    if (rn){ e.stopPropagation(); closePops(); renameTab(rn.dataset.tabRename); return; }
+    var pn = e.target.closest('[data-tab-pin]');
+    if (pn){ e.stopPropagation(); togglePin(pn.dataset.tabPin); drawTabList(); }
   });
   function switchTab(id){
     if (id === activeTab) return;
@@ -9290,9 +9314,11 @@ if (typeof document !== 'undefined'){
     var t = { id: tabId(), text: text || '', fmt: fmt || 'auto', undo: [], redo: [] };
     var at = tabs.indexOf(currentTab());
     tabs.splice(at + 1, 0, t);
+    pinnedFirst();
     // keep the bar manageable: the oldest untouched-for-longest tab goes to recent texts
     while (tabs.length > TAB_MAX){
-      var victim = tabs[0].id === t.id ? tabs[1] : tabs[0];
+      var victim = tabs.filter(function(x){ return !x.pinned && x.id !== t.id; })[0];
+      if (!victim) break;
       remember(victim.text, victim.fmt, null, victim);
       tabs.splice(tabs.indexOf(victim), 1);
     }
@@ -9305,6 +9331,7 @@ if (typeof document !== 'undefined'){
     syncActiveTab();
     var t = tabs.filter(function(x){ return x.id === id; })[0];
     if (!t) return;
+    if (t.pinned){ toast('این تب سنجاق شده است', 'pin', { label: 'برداشتن سنجاق', icon: 'pin', run: function(){ togglePin(t.id); } }); return; }
     if (tabs.length === 1){
       if (!t.text.trim()) return;
       remember(t.text, t.fmt, null, t);
@@ -9347,8 +9374,22 @@ if (typeof document !== 'undefined'){
     tabs.splice(from, 1);
     if (to > from) to--;
     tabs.splice(Math.max(0, Math.min(tabs.length, to)), 0, t);
+    pinnedFirst();
     drawTabs();
     saveState();
+  }
+  /* pinned tabs: always first, never closed by ×, «close all/others» or the tab limit */
+  function pinnedFirst(){
+    tabs = tabs.filter(function(t){ return t.pinned; }).concat(tabs.filter(function(t){ return !t.pinned; }));
+  }
+  function togglePin(id){
+    var t = tabs.filter(function(x){ return x.id === id; })[0];
+    if (!t) return;
+    t.pinned = !t.pinned;
+    pinnedFirst();
+    drawTabs();
+    saveState();
+    toast(t.pinned ? 'تب سنجاق شد — اول نوار می‌ماند و با «بستن همه» بسته نمی‌شود' : 'سنجاق تب برداشته شد', 'pin');
   }
   function moveCurrentTab(dir){
     var i = tabs.indexOf(currentTab()), to = i + dir;
@@ -9436,6 +9477,8 @@ if (typeof document !== 'undefined'){
   }
   $('tabsList').addEventListener('click', function(e){
     if (Date.now() - tabDragEnded < 300) return; // the click that ends a drag
+    var pn = e.target.closest('[data-tab-pin]');
+    if (pn){ e.stopPropagation(); togglePin(pn.dataset.tabPin); return; }
     var rn = e.target.closest('[data-tab-rename]');
     if (rn){ e.stopPropagation(); renameTab(rn.dataset.tabRename); return; }
     var x = e.target.closest('[data-tab-close]');
@@ -10045,6 +10088,7 @@ if (typeof document !== 'undefined'){
     'tab-list': { label: 'فهرست همهٔ تب‌ها', icon: 'list', kw: 'tabs list all', run: function(){ drawTabList(); togglePop('popTabs'); } },
     'tab-move-next': { label: 'جابه‌جایی تب فعلی یکی به بعد', icon: 'swap', kbd: 'Alt Shift ]', kw: 'tab move reorder next', run: function(){ moveCurrentTab(1); } },
     'tab-move-prev': { label: 'جابه‌جایی تب فعلی یکی به قبل', icon: 'swap', kbd: 'Alt Shift [', kw: 'tab move reorder previous', run: function(){ moveCurrentTab(-1); } },
+    'tab-pin': { label: 'سنجاق کردن / برداشتن سنجاق تب فعلی', icon: 'pin', kbd: 'Alt Shift P', kw: 'tab pin unpin sticky', run: function(){ togglePin(activeTab); } },
     'tab-rename': { label: 'تغییر نام تب فعلی', icon: 'pen', kbd: 'F2', kw: 'tab rename name title', run: function(){ renameTab(activeTab); } },
     'tab-close-all': { label: 'بستن همهٔ تب‌ها', icon: 'trash', kw: 'tabs close all', run: function(){ closeManyTabs(false); } },
     'tab-close-others': { label: 'بستن بقیهٔ تب‌ها (فقط تب فعلی بماند)', icon: 'x', kw: 'tabs close others', run: function(){ closeManyTabs(true); } },
@@ -10623,6 +10667,7 @@ if (typeof document !== 'undefined'){
     if (e.altKey && !mod && cmpBox.hidden && palette.hidden){
       if (e.code === 'KeyN'){ e.preventDefault(); openTab(''); return; }
       if (e.code === 'KeyW'){ e.preventDefault(); closeTab(activeTab); return; }
+      if (e.code === 'KeyP' && e.shiftKey){ e.preventDefault(); togglePin(activeTab); return; }
       if ((e.code === 'BracketLeft' || e.code === 'BracketRight') && e.shiftKey){ e.preventDefault(); moveCurrentTab(e.code === 'BracketRight' ? 1 : -1); return; }
       if (e.code === 'BracketLeft' || e.code === 'BracketRight'){ e.preventDefault(); stepTab(e.code === 'BracketRight' ? 1 : -1); return; }
     }
@@ -10703,14 +10748,14 @@ if (typeof document !== 'undefined'){
     if (typeof s.times === 'boolean') optTimes.checked = s.times;
     if (s.cronTz === 0 || s.cronTz === 210) state.cronTz = s.cronTz;
     if (Array.isArray(s.tabs) && s.tabs.length){
-      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
+      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
     }
     if (!tabs.length) tabs = [{ id: tabId(), text: '', fmt: s.fmt || 'auto', undo: [], redo: [] }];
     // the tabs did not fit in browser storage last time: bring them back from IndexedDB
     if (s.tabsInIdb) idbGet('tabs').then(function(full){
       if (!full || full.at !== s.tabsInIdb || !Array.isArray(full.tabs) || full.tabs.length < 2) return;
       var cur = ta.value;
-      tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
+      tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });
       activeTab = tabs.some(function(t){ return t.id === full.activeTab; }) ? full.activeTab : tabs[0].id;
       currentTab().text = cur; // what the editor shows now wins
       drawTabs();
