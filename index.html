@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-19T13:01Z">
+<meta name="app-version" content="2026-10-19T13:14Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -9214,12 +9214,11 @@ if (typeof document !== 'undefined'){
       var text = t.id === activeTab ? ta.value : t.text;
       var kind = t.id === activeTab ? renderedFmt : (text.trim() ? detectFormat(text) : '');
       var title = tabLabel(t, text);
-      return '<div class="tab' + (t.name ? ' named' : '') + (t.pinned ? ' pinned' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — دوبار کلیک: تغییر نام">'
+      return '<div class="tab' + (t.name ? ' named' : '') + (t.pinned ? ' pinned' : '') + '" role="tab" tabindex="0" data-tab="' + t.id + '" aria-selected="' + (t.id === activeTab) + '" title="' + escapeHtml(title) + ' — کلیک راست: گزینه‌ها · دوبار کلیک: تغییر نام">'
         // close and rename sit at the start of the tab (its right side in RTL)
         + (t.pinned ? '<span class="tab-p" data-tab-pin="' + t.id + '" role="button" aria-label="برداشتن سنجاق" title="سنجاق‌شده — کلیک: برداشتن سنجاق (Alt+Shift+P)">' + icon('pin') + '</span>'
-          : '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span>'
-            + '<span class="tab-e tab-pn" data-tab-pin="' + t.id + '" role="button" aria-label="سنجاق کردن تب" title="سنجاق کردن (Alt+Shift+P)">' + icon('pin') + '</span>')
-        + '<span class="tab-e" data-tab-rename="' + t.id + '" role="button" aria-label="تغییر نام تب" title="تغییر نام (F2)">✎</span>'
+          : '<span class="tab-x" data-tab-close="' + t.id + '" role="button" aria-label="بستن تب" title="بستن (Alt+W)">×</span>')
+        // pin, rename and the rest live in the right-click menu, so the tab itself stays clean
         + (kind && kind !== 'markdown' ? '<span class="tab-f">' + escapeHtml(FMT_LABELS[kind] || kind) + '</span>' : '')
         + '<span class="tab-t" dir="auto">' + escapeHtml(title) + '</span></div>';
     }).join('');
