@@ -4339,6 +4339,12 @@ var APP_CSS = [
   '.mi small{display:block;color:var(--muted);font-size:.7rem;line-height:1.4;}',
   '.mi kbd{margin-inline-start:auto;}',
   '.mi-sep{height:1px;background:var(--border);margin:5px 6px;}',
+  '.ctx-menu{position:fixed;z-index:90;min-width:230px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px -16px rgba(15,23,42,.35);animation:pop .14s cubic-bezier(.2,.9,.3,1.2);}',
+  '.ctx-menu[hidden]{display:none;}',
+  '.ctx-menu .mi{padding:7px 10px;font-size:.82rem;}',
+  '.ctx-menu .mi[disabled]{opacity:.4;cursor:default;background:transparent;}',
+  '.ctx-menu .mi:focus-visible{outline:0;background:var(--surface-2);}',
+  '.ctx-menu kbd{font-size:.68rem;}',
   '.sw{display:flex;align-items:flex-start;gap:11px;padding:8px;border-radius:10px;cursor:pointer;}',
   '.sw:hover{background:var(--surface-2);}',
   '.sw input{position:absolute;opacity:0;pointer-events:none;}',
@@ -9223,10 +9229,11 @@ if (typeof document !== 'undefined'){
       + '<button type="button" data-action="tab-close-all">' + (tabs.some(function(t){ return t.pinned; }) ? 'بستن همه جز سنجاق‌شده‌ها' : 'بستن همه') + '</button></div>';
   }
   /** Closes every tab (or every other tab); all of them come back with one click, and their texts stay in recent texts. */
-  function closeManyTabs(keepCurrent){
+  /** `keepIds` also stay open (e.g. the tabs up to a clicked one); `focusId` becomes current if the current tab closes. */
+  function closeManyTabs(keepCurrent, keepIds, focusId){
     syncActiveTab();
     var snapshot = { tabs: tabs.slice(), active: activeTab };
-    var keep = tabs.filter(function(t){ return t.pinned || (keepCurrent && t.id === activeTab); });
+    var keep = tabs.filter(function(t){ return t.pinned || (keepCurrent && t.id === activeTab) || (keepIds && keepIds.indexOf(t.id) !== -1); });
     var closing = tabs.filter(function(t){ return keep.indexOf(t) === -1; });
     if (!closing.length || (!keepCurrent && tabs.length === 1 && !tabs[0].text.trim())){
       if (!closing.length && keep.length > 1) toast('تب‌های سنجاق‌شده بسته نمی‌شوند', 'pin');
@@ -9236,7 +9243,7 @@ if (typeof document !== 'undefined'){
     if (keep.length){
       tabs = keep;
       if (keep.indexOf(currentTab()) === -1){
-        var first = keep[0];
+        var first = keep.filter(function(t){ return t.id === focusId; })[0] || keep[0];
         activeTab = first.id;
         ta.value = first.text;
         undoStack = first.undo || [];
@@ -9255,7 +9262,7 @@ if (typeof document !== 'undefined'){
     closePops();
     drawTabs();
     saveState();
-    toast(keepCurrent ? faNum(closing.length) + ' تب دیگر بسته شد' : keep.length ? faNum(closing.length) + ' تب بسته شد — سنجاق‌شده‌ها ماندند' : 'همهٔ تب‌ها بسته شد', 'x', { label: 'بازگرداندن همه', icon: 'undo', run: function(){
+    toast(keepCurrent ? faNum(closing.length) + ' تب دیگر بسته شد' : keepIds ? faNum(closing.length) + ' تب بسته شد' : keep.length ? faNum(closing.length) + ' تب بسته شد — سنجاق‌شده‌ها ماندند' : 'همهٔ تب‌ها بسته شد', 'x', { label: 'بازگرداندن همه', icon: 'undo', run: function(){
       syncActiveTab();
       tabs = snapshot.tabs;
       var target = snapshot.active;
@@ -9443,6 +9450,7 @@ if (typeof document !== 'undefined'){
       startTabDrag();
     }
     e.preventDefault();
+    tabDrag.moved = true;
     dragOverTab(e.clientX, e.clientY);
   });
   document.addEventListener('pointerup', function(e){
@@ -9451,6 +9459,7 @@ if (typeof document !== 'undefined'){
     endTabDrag();
     if (!d.on) return;
     tabDragEnded = Date.now();
+    if (d.touch && !d.moved){ showTabMenu(d.id, e.clientX, e.clientY); return; }
     if (d.target){
       var target = tabs.filter(function(x){ return x.id === d.target; })[0];
       moveTab(d.id, tabs.indexOf(target) + (d.before ? 0 : 1));
@@ -9459,7 +9468,76 @@ if (typeof document !== 'undefined'){
   document.addEventListener('pointercancel', function(e){ if (tabDrag && e.pointerId === tabDrag.pid) endTabDrag(); });
   // once a long press has picked a tab up, the finger moves the tab instead of scrolling the bar
   $('tabsList').addEventListener('touchmove', function(e){ if (tabDrag && tabDrag.on) e.preventDefault(); }, { passive: false });
-  $('tabsList').addEventListener('contextmenu', function(e){ if (tabDrag && tabDrag.on) e.preventDefault(); });
+  /* right-click menu on a tab (a long press without moving on touch screens) */
+  var ctxMenu = document.createElement('div');
+  ctxMenu.className = 'ctx-menu';
+  ctxMenu.setAttribute('role', 'menu');
+  ctxMenu.hidden = true;
+  body.appendChild(ctxMenu);
+  var ctxActions = {};
+  function closeCtxMenu(){ ctxMenu.hidden = true; }
+  function duplicateTab(id){
+    syncActiveTab();
+    var t = tabs.filter(function(x){ return x.id === id; })[0];
+    if (!t) return;
+    if (t.id !== activeTab) switchTab(t.id);
+    openTab(t.text, t.fmt, 'تب تکثیر شد');
+    if (t.name){ currentTab().name = t.name + ' (کپی)'; drawTabs(); saveState(); }
+  }
+  function showTabMenu(id, x, y){
+    syncActiveTab();
+    var t = tabs.filter(function(tab){ return tab.id === id; })[0];
+    if (!t) return;
+    var idx = tabs.indexOf(t), after = tabs.slice(idx + 1).filter(function(x){ return !x.pinned; }).length, others = tabs.filter(function(x){ return x !== t && !x.pinned; }).length;
+    var items = [
+      ['pin', t.pinned ? 'برداشتن سنجاق' : 'سنجاق کردن', 'Alt Shift P', function(){ togglePin(id); }],
+      ['pen', 'تغییر نام', 'F2', function(){ renameTab(id); }],
+      ['plus', 'تکثیر تب', '', function(){ duplicateTab(id); }],
+      ['copy', 'کپی متن تب', '', function(){ copyToClipboard('', t.id === activeTab ? ta.value : t.text).then(function(ok){ toast(ok ? 'متن تب کپی شد' : 'کپی انجام نشد', ok ? 'copy' : 'x'); }); }, !t.text.trim()],
+      null,
+      ['x', 'بستن', 'Alt W', function(){ closeTab(id); }, t.pinned],
+      ['x', 'بستن بقیه', '', function(){ closeManyTabs(false, [id], id); }, !others],
+      ['x', 'بستن تب‌های بعد از این', '', function(){ closeManyTabs(false, tabs.slice(0, idx + 1).map(function(x){ return x.id; }), id); }, !after],
+      ['trash', 'بستن همه', '', function(){ closeManyTabs(false); }, !tabs.some(function(x){ return !x.pinned; })]
+    ];
+    if (closedTabs.length) items.push(null, ['undo', 'بازگرداندن آخرین تب بسته‌شده', '', reopenTab]);
+    ctxActions = {};
+    ctxMenu.innerHTML = items.map(function(it, k){
+      if (!it) return '<div class="mi-sep"></div>';
+      ctxActions[k] = it[3];
+      return '<button type="button" class="mi" role="menuitem" data-ctx="' + k + '"' + (it[4] ? ' disabled' : '') + '>' + icon(it[0]) + '<span>' + escapeHtml(it[1]) + '</span>' + (it[2] ? '<kbd>' + it[2] + '</kbd>' : '') + '</button>';
+    }).join('');
+    closePops();
+    ctxMenu.hidden = false;
+    // open towards the inside of the window, right-aligned to the pointer in RTL
+    var w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+    ctxMenu.style.left = Math.max(8, Math.min(innerWidth - w - 8, getComputedStyle(body).direction === 'rtl' ? x - w : x)) + 'px';
+    ctxMenu.style.top = Math.max(8, Math.min(innerHeight - h - 8, y)) + 'px';
+    var first = ctxMenu.querySelector('.mi:not([disabled])');
+    if (first) first.focus();
+  }
+  ctxMenu.addEventListener('click', function(e){
+    var b = e.target.closest('[data-ctx]');
+    if (!b || b.disabled) return;
+    closeCtxMenu();
+    ctxActions[b.dataset.ctx]();
+  });
+  ctxMenu.addEventListener('keydown', function(e){
+    var list = Array.prototype.slice.call(ctxMenu.querySelectorAll('.mi:not([disabled])')), at = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); list[(at + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length].focus(); }
+    else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeCtxMenu(); }
+  });
+  $('tabsList').addEventListener('contextmenu', function(e){
+    var t = e.target.closest('.tab');
+    if (!t || e.target.closest('.tab-rn')) return;
+    e.preventDefault();
+    if (tabDrag && tabDrag.on) return; // a long press on touch opens the menu when it is released
+    showTabMenu(t.dataset.tab, e.clientX, e.clientY);
+  });
+  document.addEventListener('mousedown', function(e){ if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) closeCtxMenu(); }, true);
+  window.addEventListener('blur', closeCtxMenu);
+  window.addEventListener('resize', closeCtxMenu);
+  $('tabsList').addEventListener('scroll', closeCtxMenu, { passive: true });
   function stepTab(dir){
     if (tabs.length < 2) return;
     var i = tabs.indexOf(currentTab());
