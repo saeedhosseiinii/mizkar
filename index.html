@@ -9505,6 +9505,7 @@ if (typeof document !== 'undefined'){
     input.dir = 'auto';
     input.maxLength = TAB_NAME_MAX;
     input.value = tabLabel(t);
+    input.placeholder = 'خالی = عنوان خودکار از متن';
     input.setAttribute('aria-label', 'نام تب');
     span.replaceWith(input);
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -9516,8 +9517,8 @@ if (typeof document !== 'undefined'){
         tabRenaming = null;
         if (keep){
           var name = input.value.replace(/\s+/g, ' ').trim();
-          // typing back the automatic title is the same as no name
-          t.name = name && name !== tabLabel({ id: t.id, text: t.text, name: '' }) ? name : '';
+          // a name the user confirms stays put whatever the text becomes; only an empty name goes back to the automatic title
+          t.name = name;
           saveState();
         }
         drawTabs();
