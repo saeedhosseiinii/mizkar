@@ -3,7 +3,7 @@
  * The page opens straight from the cache (fast, also offline) while the network copy is fetched in the
  * background; when it differs, open tabs are told so they can offer a reload. Icons and the manifest are cache-first.
  */
-var CACHE = 'mizkar-v1';
+var CACHE = 'mizkar-v2';
 var ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', function(event){
@@ -39,6 +39,8 @@ function refreshPage(cache, cached){
 self.addEventListener('fetch', function(event){
   var request = event.request;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  // the update check must always see the live version
+  if (/\/version\.json$/.test(new URL(request.url).pathname)) return;
   if (request.mode === 'navigate'){
     event.respondWith(caches.open(CACHE).then(function(cache){
       return cache.match('index.html').then(function(cached){

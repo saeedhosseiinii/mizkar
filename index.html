@@ -2,6 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
+<meta name="app-version" content="2026-10-19T13:01Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -235,6 +236,7 @@
   <span class="st-sp"></span>
   <span class="st-tag" id="stDir">RTL</span>
   <span class="st-tag" id="stZoom">100%</span>
+  <div class="pop-wrap st-upd-wrap"><button class="st-upd" type="button" data-action="update-panel" id="btnUpd" aria-haspopup="dialog" aria-expanded="false" title="نسخه و به‌روزرسانی"><i class="upd-dot" id="updDot"></i><span id="updText">نسخه</span></button><div class="pop pop-up" id="popUpd" role="dialog" aria-label="به‌روزرسانی"></div></div>
   <button class="st-k" type="button" data-action="palette"><kbd>Ctrl</kbd><kbd>K</kbd> فرمان‌ها</button>
 </footer>
 
@@ -4598,6 +4600,31 @@ var APP_CSS = [
   '.st-fmt{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--ink-2);}',
   '.st-fmt::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);}',
   '.st-sp{flex:1;}',
+  '.st-upd-wrap{position:relative;}',
+  '.st-upd{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font:inherit;font-size:.72rem;cursor:pointer;padding:3px 8px;border-radius:8px;}',
+  '.st-upd:hover,.st-upd[aria-expanded="true"]{background:var(--surface-2);color:var(--ink);}',
+  '.upd-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;flex:none;opacity:.6;}',
+  '.upd-dot.ok{background:#22c55e;opacity:1;}',
+  '.upd-dot.new{background:#f59e0b;opacity:1;box-shadow:0 0 0 3px color-mix(in srgb,#f59e0b 28%,transparent);animation:updpulse 1.6s ease-in-out infinite;}',
+  '.upd-dot.busy{width:10px;height:10px;background:transparent;opacity:1;border:2px solid var(--accent);border-top-color:transparent;animation:updspin .8s linear infinite;}',
+  '.upd-dot.bad{background:#ef4444;opacity:1;}',
+  '@keyframes updspin{to{transform:rotate(360deg)}}',
+  '@keyframes updpulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,#f59e0b 10%,transparent)}}',
+  '.pop-up{top:auto;bottom:calc(100% + 8px);}',
+  '#popUpd{width:320px;max-height:70vh;overflow:auto;}',
+  '.upd-row{display:flex;justify-content:space-between;gap:10px;padding:5px 8px;font-size:.8rem;}',
+  '.upd-row span{color:var(--muted);}',
+  '.upd-state{margin:6px 8px;padding:8px 10px;border-radius:10px;background:var(--surface-2);font-size:.8rem;line-height:1.7;}',
+  '.upd-state.new{background:color-mix(in srgb,#f59e0b 14%,transparent);}',
+  '.upd-state.ok{background:color-mix(in srgb,#22c55e 12%,transparent);}',
+  '.upd-state.bad{background:color-mix(in srgb,#ef4444 12%,transparent);}',
+  '.upd-actions{display:flex;gap:6px;padding:4px 8px 8px;flex-wrap:wrap;}',
+  '.upd-actions button{height:32px;font-size:.78rem;padding:0 12px;}',
+  '.upd-notes{border-top:1px solid var(--border);margin-top:4px;padding:8px 8px 2px;}',
+  '.upd-notes h5{margin:0 0 4px;font-size:.74rem;color:var(--muted);font-weight:700;}',
+  '.upd-notes .fresh h5{color:var(--accent);}',
+  '.upd-notes ul{margin:0 0 8px;padding-inline-start:1.2em;font-size:.78rem;line-height:1.75;}',
+  '.upd-meta{padding:2px 8px 4px;font-size:.7rem;color:var(--muted);}',
   '.st-tag{font-weight:700;direction:ltr;font-variant-numeric:tabular-nums;}',
   '.st-k{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;color:var(--muted);font-size:.72rem;cursor:pointer;padding:3px 6px;border-radius:7px;}',
   '.st-k:hover{color:var(--ink);background:var(--surface-2);}',
@@ -7853,6 +7880,7 @@ if (typeof document !== 'undefined'){
   document.getElementById('appStyle').textContent = CSS + '\n' + APP_CSS;
   var $ = function(id){ return document.getElementById(id); };
   var root = document.documentElement, body = document.body;
+  var APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || '', upd = { state: 'idle', remote: '', changes: [], checkedAt: 0, error: '' };
   var ta = $('input'), out = $('preview'), zoomWrap = $('zoomWrap'), work = $('work'), divider = $('divider');
   var optNorm = $('optNorm'), optBdi = $('optBdi'), optSync = $('optSync'), optPasteTab = $('optPasteTab'), optTimes = $('optTimes');
   var toastEl = $('toast'), palette = $('palette'), palInput = $('palInput'), palList = $('palList');
@@ -10168,6 +10196,10 @@ if (typeof document !== 'undefined'){
     'tab-list': { label: 'فهرست همهٔ تب‌ها', icon: 'list', kw: 'tabs list all', run: function(){ drawTabList(); togglePop('popTabs'); } },
     'tab-move-next': { label: 'جابه‌جایی تب فعلی یکی به بعد', icon: 'swap', kbd: 'Alt Shift ]', kw: 'tab move reorder next', run: function(){ moveCurrentTab(1); } },
     'tab-move-prev': { label: 'جابه‌جایی تب فعلی یکی به قبل', icon: 'swap', kbd: 'Alt Shift [', kw: 'tab move reorder previous', run: function(){ moveCurrentTab(-1); } },
+    'update-panel': { label: 'نسخه و به‌روزرسانی', icon: 'redo', hidden: true, run: function(){ togglePop('popUpd'); drawUpd(); } },
+    'update-check': { label: 'بررسی به‌روزرسانی میزکار', icon: 'redo', kw: 'update version new check', run: function(){ if (!$('popUpd').classList.contains('open')) togglePop('popUpd'); checkUpdate(true); drawUpd(); } },
+    'update-apply': { label: 'به‌روزرسانی به نسخهٔ جدید', icon: 'redo', hidden: true, run: applyUpdate },
+    'update-reload': { label: 'تازه‌سازی', icon: 'redo', hidden: true, run: function(){ saveState(); location.reload(); } },
     'tab-pin': { label: 'سنجاق کردن / برداشتن سنجاق تب فعلی', icon: 'pin', kbd: 'Alt Shift P', kw: 'tab pin unpin sticky', run: function(){ togglePin(activeTab); } },
     'tab-rename': { label: 'تغییر نام تب فعلی', icon: 'pen', kbd: 'F2', kw: 'tab rename name title', run: function(){ renameTab(activeTab); } },
     'tab-close-all': { label: 'بستن همهٔ تب‌ها', icon: 'trash', kw: 'tabs close all', run: function(){ closeManyTabs(false); } },
@@ -10217,7 +10249,7 @@ if (typeof document !== 'undefined'){
   function runAction(id){
     var a = ACTIONS[id];
     if (!a) return;
-    if (id !== 'settings' && id !== 'export-menu' && id !== 'history' && id !== 'tab-list') closePops();
+    if (id !== 'settings' && id !== 'export-menu' && id !== 'history' && id !== 'tab-list' && id !== 'update-panel') closePops();
     a.run();
   }
 
@@ -10783,6 +10815,93 @@ if (typeof document !== 'undefined'){
     if (window.matchMedia && matchMedia('(display-mode: standalone)').matches){ toast('برنامه از قبل نصب است', 'check'); return; }
     toast('از منوی مرورگر گزینهٔ «Install» یا «Add to Home Screen» را بزنید', 'install');
   }
+  /* --- version and updates: version.json (a few bytes) is checked on load, every 30 minutes and on demand --- */
+  function updLabel(v){
+    var ms = Date.parse(v || '');
+    return isNaN(ms) ? (v || 'نامشخص') : faDateTime(ms, 'Asia/Tehran', { weekday: undefined });
+  }
+  function drawUpd(){
+    var s = upd.state, dot = $('updDot'), txt = $('updText');
+    dot.className = 'upd-dot' + ({ latest: ' ok', available: ' new', ready: ' new', checking: ' busy', downloading: ' busy', error: ' bad' }[s] || '');
+    txt.textContent = { latest: 'به‌روز', available: 'نسخهٔ جدید هست', ready: 'آمادهٔ تازه‌سازی', checking: 'بررسی…', downloading: 'در حال به‌روزرسانی…', error: 'بررسی نشد', offline: 'آفلاین' }[s] || 'نسخه';
+    $('btnUpd').title = 'نسخهٔ فعلی: ' + updLabel(APP_VERSION);
+    if (!$('popUpd').classList.contains('open')) return;
+    var msg = {
+      latest: ['ok', 'میزکار به‌روز است.'],
+      available: ['new', 'نسخهٔ جدیدی منتشر شده. «به‌روزرسانی» آن را می‌گیرد و صفحه را تازه می‌کند — متن‌ها و تب‌ها سر جایشان می‌مانند.'],
+      ready: ['new', 'نسخهٔ جدید دریافت شده؛ با تازه‌سازی صفحه فعال می‌شود.'],
+      checking: ['', 'در حال بررسی…'],
+      downloading: ['', 'در حال دریافت نسخهٔ جدید…'],
+      error: ['bad', upd.error || 'بررسی به‌روزرسانی ممکن نشد.'],
+      offline: ['', 'اینترنت وصل نیست؛ میزکار آفلاین کار می‌کند و وقتی وصل شوی دوباره بررسی می‌کند.']
+    }[s] || ['', 'هنوز بررسی نشده.'];
+    var newer = upd.changes.filter(function(c){ return APP_VERSION && c.v > APP_VERSION; });
+    var older = upd.changes.filter(function(c){ return !(APP_VERSION && c.v > APP_VERSION); }).slice(0, 3);
+    var notes = function(list, fresh){
+      return list.map(function(c){
+        return '<div' + (fresh ? ' class="fresh"' : '') + '><h5>' + escapeHtml(updLabel(c.v)) + (fresh ? ' · تازه' : '') + '</h5><ul>'
+          + (c.items || []).map(function(it){ return '<li dir="auto">' + escapeHtml(it) + '</li>'; }).join('') + '</ul></div>';
+      }).join('');
+    };
+    var busy = s === 'checking' || s === 'downloading';
+    $('popUpd').innerHTML = '<div class="pop-title">نسخه و به‌روزرسانی</div>'
+      + '<div class="upd-row"><span>نسخهٔ فعلی</span><b>' + escapeHtml(updLabel(APP_VERSION)) + '</b></div>'
+      + (upd.remote && upd.remote !== APP_VERSION ? '<div class="upd-row"><span>آخرین نسخه</span><b>' + escapeHtml(updLabel(upd.remote)) + '</b></div>' : '')
+      + '<div class="upd-state ' + msg[0] + '">' + escapeHtml(msg[1]) + '</div>'
+      + '<div class="upd-actions">'
+      + (s === 'available' ? '<button class="btn-primary" type="button" data-action="update-apply">به‌روزرسانی</button>' : '')
+      + (s === 'ready' ? '<button class="btn-primary" type="button" data-action="update-reload">تازه‌سازی</button>' : '')
+      + '<button class="btn-soft" type="button" data-action="update-check"' + (busy ? ' disabled' : '') + '>بررسی دوباره</button></div>'
+      + (newer.length || older.length ? '<div class="upd-notes">' + (newer.length ? notes(newer, true) : '<h5>تغییرات اخیر</h5>') + notes(older, false) + '</div>' : '')
+      + (upd.checkedAt ? '<div class="upd-meta">آخرین بررسی: ' + escapeHtml(relTime((upd.checkedAt - Date.now()) / 1000)) + '</div>' : '');
+  }
+  function checkUpdate(manual){
+    if (upd.state === 'downloading' || upd.state === 'checking') return;
+    if (navigator.onLine === false){ upd.state = 'offline'; drawUpd(); return; }
+    var was = upd.state;
+    upd.state = 'checking';
+    drawUpd();
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : Promise.reject(new Error(r.status)); }).then(function(v){
+      upd.remote = v.version || '';
+      upd.changes = Array.isArray(v.changes) ? v.changes : [];
+      upd.checkedAt = Date.now();
+      var newer = !!APP_VERSION && upd.remote > APP_VERSION;
+      upd.state = !newer ? 'latest' : was === 'ready' ? 'ready' : 'available';
+      drawUpd();
+      if (newer && was !== 'available' && was !== 'ready' && !manual) toast('نسخهٔ جدید میزکار منتشر شده', 'redo', { label: 'به‌روزرسانی', icon: 'redo', run: applyUpdate });
+    }).catch(function(){
+      upd.state = was === 'ready' ? 'ready' : 'error';
+      upd.error = 'به سرور میزکار دسترسی نشد؛ بعداً دوباره امتحان کن.';
+      drawUpd();
+    });
+  }
+  /** Puts the new page into the offline cache, then reloads; the saved texts and tabs are untouched. */
+  function applyUpdate(){
+    upd.state = 'downloading';
+    drawUpd();
+    saveState();
+    fetch('index.html', { cache: 'no-store' }).then(function(r){
+      if (!r.ok) throw new Error(r.status);
+      return (window.caches ? caches.keys() : Promise.resolve([])).then(function(keys){
+        return Promise.all(keys.filter(function(k){ return /^mizkar-/.test(k); }).map(function(k){ return caches.open(k).then(function(c){ return c.put('index.html', r.clone()); }); }));
+      });
+    }).then(function(){
+      upd.state = 'ready';
+      drawUpd();
+      toast('نسخهٔ جدید دریافت شد — صفحه تازه می‌شود…', 'check');
+      setTimeout(function(){ location.reload(); }, 700);
+    }).catch(function(){
+      upd.state = 'error';
+      upd.error = 'دریافت نسخهٔ جدید ممکن نشد؛ دوباره امتحان کن.';
+      drawUpd();
+    });
+  }
+  drawUpd();
+  if (/^https?:$/.test(location.protocol)){
+    setTimeout(function(){ checkUpdate(false); }, 4000);
+    setInterval(function(){ if (!document.hidden) checkUpdate(false); }, 30 * 60000);
+    window.addEventListener('online', function(){ checkUpdate(false); });
+  }
   if (/^https?:$/.test(location.protocol)){
     var manifestLink = document.createElement('link');
     manifestLink.rel = 'manifest';
@@ -10796,7 +10915,11 @@ if (typeof document !== 'undefined'){
       var hadController = !!navigator.serviceWorker.controller;
       // the worker serves the saved copy at once and fetches the new one; when it changed, offer a reload
       navigator.serviceWorker.addEventListener('message', function(e){
-        if (e.data && e.data.type === 'fs-update') toast('نسخهٔ جدید میزکار آماده است', 'check', { label: 'تازه‌سازی', icon: 'redo', run: function(){ location.reload(); } });
+        if (e.data && e.data.type === 'fs-update'){
+          upd.state = 'ready';
+          drawUpd();
+          toast('نسخهٔ جدید میزکار دریافت شد', 'check', { label: 'تازه‌سازی', icon: 'redo', run: function(){ location.reload(); } });
+        }
       });
       navigator.serviceWorker.register('sw.js').then(function(reg){
         if (!hadController) reg.addEventListener('updatefound', function(){
