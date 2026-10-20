@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-20T07:06Z">
+<meta name="app-version" content="2026-10-20T12:36Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -4279,6 +4279,11 @@ var CSS = [
   '  h1,h2,h3,h4,h5,h6{break-after:avoid;}',
   '  pre{white-space:pre-wrap;overflow-wrap:anywhere;}',
   '  body,pre,table,th,td,code,.callout,blockquote,.toc,.content h1{print-color-adjust:exact;-webkit-print-color-adjust:exact;}',
+  /* a dark-theme HTML export printed on paper: light-theme colours for what the dark theme lightens */
+  '  :root[data-theme="dark"] :not(pre)>code{color:color-mix(in srgb,var(--accent) 72%,#000);background:color-mix(in srgb,var(--accent) 9%,transparent);border-color:color-mix(in srgb,var(--accent) 20%,transparent);}',
+  '  :root[data-theme="dark"] .filelink{color:var(--accent);}',
+  '  :root[data-theme="dark"] .errbox{color:#dc2626;}',
+  '  :root[data-theme="dark"] .jh{color:#e11d48;}:root[data-theme="dark"] .jp{color:#7c3aed;}:root[data-theme="dark"] .js{color:#0891b2;}',
   '}'
 ].join('\n');
 
@@ -8528,11 +8533,20 @@ if (typeof document !== 'undefined'){
       // Chrome names the PDF after the page title
       document.title = (title.replace(/[\\\/:*?"<>|]+/g, '').slice(0, 80)) || 'document';
     }
-    if (currentTheme() === 'dark' && !printSwapped){ processMermaid('light', null, true); printSwapped = true; }
+    if (currentTheme() === 'dark' && !printSwapped){
+      // paper is light: print with the light theme so code chips, links and labels keep their contrast
+      root.setAttribute('data-theme', 'light');
+      processMermaid('light', null, true);
+      printSwapped = true;
+    }
   }
   function finishPrint(){
     if (savedTitle !== null){ document.title = savedTitle; savedTitle = null; }
-    if (printSwapped){ printSwapped = false; processMermaid(currentTheme(), null, true); }
+    if (printSwapped){
+      printSwapped = false;
+      root.setAttribute('data-theme', 'dark');
+      processMermaid('dark', null, true);
+    }
   }
   function printDoc(){
     var all = state.pdf.scope === 'all' && tabs.length > 1;
