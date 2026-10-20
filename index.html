@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-19T13:14Z">
+<meta name="app-version" content="2026-10-20T07:06Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -159,7 +159,7 @@
         <button class="ib sm" type="button" data-action="fa-edit" data-tip="ویراستار فارسی" aria-label="ویراستار فارسی"><svg class="i"><use href="#i-spell"/></svg></button>
         <button class="ib sm" type="button" data-action="sample" data-tip="درج نمونه" aria-label="درج نمونه"><svg class="i"><use href="#i-sparkles"/></svg></button>
         <button class="ib sm" type="button" data-action="clear" data-tip="پاک کردن (Ctrl+Z برمی‌گرداند)" aria-label="پاک کردن"><svg class="i"><use href="#i-trash"/></svg></button>
-        <button class="ib sm drawer-x" type="button" data-action="drawer-close" data-tip="بستن · Esc" aria-label="بستن ویرایش سریع"><svg class="i"><use href="#i-x"/></svg></button>
+        <button class="ib sm drawer-x" type="button" data-action="drawer-close" data-tip="بستن ورودی (فقط پیش‌نمایش) · Alt+3" aria-label="بستن ورودی"><svg class="i"><use href="#i-x"/></svg></button>
       </span>
     </div>
     <div class="mdbar" id="mdBar" role="toolbar" aria-label="قالب‌بندی Markdown" hidden>
@@ -4695,7 +4695,7 @@ var APP_CSS = [
   '.fab-mini{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;border:1px solid var(--border);background:var(--surface);color:var(--ink-2);cursor:pointer;box-shadow:0 12px 28px -14px rgba(15,23,42,.45);transition:color .15s,transform .15s;}',
   '.fab-mini:hover{color:var(--accent);transform:translateY(-2px);}',
   '.drawer-x{display:none !important;}',
-  'body.drawer-open .drawer-x{display:inline-grid !important;}',
+  'body.drawer-open .drawer-x,#work[data-view="split"] .drawer-x{display:inline-grid !important;}',
   'body.drawer-open #work[data-view="preview"] .pane.editor{display:flex;position:fixed;z-index:45;top:74px;bottom:46px;right:16px;width:min(560px,calc(100vw - 32px));background:var(--surface);box-shadow:0 34px 90px -24px rgba(0,0,0,.5),0 0 0 1px var(--border);animation:slidein .22s cubic-bezier(.2,.9,.3,1);}',
   '@media(min-width:1100px){body.drawer-open #work[data-view="preview"] .pane.out{margin-inline-start:572px;transition:margin .22s;}}',
   '#zoomWrap.swapped{animation:swap .55s ease-out;}',
@@ -9662,14 +9662,14 @@ if (typeof document !== 'undefined'){
     find.hits = [];
   }
   /* the raw text: matches are [start, end] offsets, painted by a mirror layer behind the transparent textarea */
-  var findScope = 'preview', taHl = null, TA_HL_MAX = 400000, HL_PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'];
+  var findOpenedEditor = false, findScope = 'preview', taHl = null, TA_HL_MAX = 400000, HL_PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'];
   function setFindScope(scope){
     findScope = scope;
     Array.prototype.forEach.call(document.querySelectorAll('#findScope button'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.fs === scope)); });
     $('findQ').placeholder = scope === 'source' ? 'جست‌وجو در متن خام…' : 'جست‌وجو در پیش‌نمایش…';
     if (scope === 'source'){
       clearFindHits();
-      if (state.view === 'preview') setView('split');
+      if (state.view === 'preview'){ setView('split'); findOpenedEditor = true; }
     }
     find.hits = [];
     drawSourceHits();
@@ -9797,8 +9797,10 @@ if (typeof document !== 'undefined'){
     clearFindHits();
     drawSourceHits();
     $('findCount').textContent = '';
-    // leave the caret on the current match, ready to edit it
-    if (hit){ ta.focus(); ta.setSelectionRange(hit[0], hit[1]); }
+    // the input pane opened just for the search goes away again; otherwise the caret waits on the current match
+    if (findOpenedEditor && state.view === 'split'){ setView('preview'); saveState(); }
+    else if (hit){ ta.focus(); ta.setSelectionRange(hit[0], hit[1]); }
+    findOpenedEditor = false;
   }
   function replaceAllInSource(){
     var re = findPattern(true);
@@ -10234,7 +10236,11 @@ if (typeof document !== 'undefined'){
     } },
     'paste': { label: 'چسباندن از کلیپ‌بورد (جایگزینی متن)', icon: 'clipboard', kbd: 'Ctrl V', kw: 'paste clipboard replace', run: function(){ pasteFromClipboard(); } },
     'quick-edit': { label: 'ویرایش سریع متن', icon: 'pen', kbd: 'E', kw: 'edit drawer', run: function(){ openDrawer(); } },
-    'drawer-close': { label: 'بستن ویرایش سریع', icon: 'x', hidden: true, run: function(){ closeDrawer(); } },
+    'drawer-close': { label: 'بستن ورودی', icon: 'x', hidden: true, run: function(){
+      // the quick-edit drawer closes; in two columns the input pane goes away and only the preview stays
+      if (body.classList.contains('drawer-open')) closeDrawer();
+      else if (state.view === 'split'){ setView('preview'); saveState(); }
+    } },
     'undo-replace': { label: 'بازگشت به متن قبلی', icon: 'undo', kbd: 'Ctrl Z', kw: 'undo previous', run: function(){ if (!undoReplace()) toast('متن قبلی‌ای برای بازگشت نیست', 'x'); } },
     'redo-replace': { label: 'دوباره جلو رفتن (بعد از بازگشت)', icon: 'redo', kbd: 'Ctrl Y', kw: 'redo forward', run: function(){ if (!redoReplace()) toast('چیزی برای جلو رفتن نیست', 'x'); } },
     'install': { label: 'نصب به‌عنوان برنامه (کار بدون اینترنت)', icon: 'install', kw: 'install pwa app offline', run: installApp },
