@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-20T12:36Z">
+<meta name="app-version" content="2026-10-22T17:12Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -5672,10 +5672,21 @@ function rtlInCode(html){
   });
 }
 /** Plain code blocks: a line that reads as Persian keeps its own right-to-left order. */
+/** Tree drawings, tables of aligned columns and arrow sketches: their layout is left-to-right and must not flip. */
+var DIAGRAM_RE = /[─━│┃├┤┬┴┼└┘┌┐╭╮╯╰═║╔╗╚╝╠╣╦╩╬▸▶►◂◀]|\S {3,}\S/;
+/** A Persian phrase: Persian words joined by single spaces, with Latin glued to a word kept on it (VMهای). */
+var FA_PHRASE_RE = /[A-Za-z0-9_]*[\u0621-\u064A\u066E-\u06D3\u06F0-\u06F9](?:[\u0621-\u065F\u066E-\u06D3\u06F0-\u06F9\u200c]| (?=[A-Za-z0-9_]*[\u0621-\u064A\u066E-\u06D3\u06F0-\u06F9]))*[A-Za-z0-9_]*/g;
+/**
+ * Plain code blocks. In a diagram only the Persian phrases are isolated, so each reads right-to-left in its place and
+ * the drawing keeps its shape; elsewhere a line that reads as Persian keeps its own right-to-left order.
+ */
 function rtlPlainLines(html){
   if (!RTL_RE.test(html)) return html;
-  return html.split('\n').map(function(line){
-    return hasRTL(line) && textDir(line) === 'rtl' ? '<bdi dir="rtl">' + bdiText(line) + '</bdi>' : line;
+  var lines = html.split('\n'), diagram = lines.filter(function(l){ return DIAGRAM_RE.test(l); }).length >= Math.min(2, lines.length);
+  return lines.map(function(line){
+    if (!hasRTL(line)) return line;
+    if (diagram) return line.replace(FA_PHRASE_RE, function(m){ return '<bdi dir="rtl">' + m + '</bdi>'; });
+    return textDir(line) === 'rtl' ? '<bdi dir="rtl">' + bdiText(line) + '</bdi>' : line;
   }).join('\n');
 }
 function highlightCode(lang, code){
