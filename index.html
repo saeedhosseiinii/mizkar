@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-22T17:15Z">
+<meta name="app-version" content="2026-10-22T21:26Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -4060,6 +4060,8 @@ var CSS = [
   'pre{direction:ltr;text-align:left;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--border);padding:16px 18px;border-radius:12px;overflow-x:auto;font-size:.84em;line-height:1.7;white-space:pre;unicode-bidi:isolate;margin:1em 0;tab-size:4;}',
   'pre:has(.rtl-block){direction:rtl;text-align:right;}',
   '.rtl-block .mir{display:inline-block;transform:scaleX(-1);}',
+  '.fa-cell{display:inline-block;white-space:nowrap;text-align:right;text-align-last:justify;}',
+  '.emo-cell{display:inline-block;width:2ch;text-align:center;}',
   'code{background:color-mix(in srgb,var(--accent) 9%,transparent);color:color-mix(in srgb,var(--accent) 72%,#000);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);padding:.08em .42em;border-radius:6px;font-size:.86em;font-weight:500;direction:ltr;unicode-bidi:isolate;transition:background .15s,border-color .15s;}',
   ':root[data-theme="dark"] :not(pre)>code{color:color-mix(in srgb,var(--accent) 38%,#fff);background:color-mix(in srgb,var(--accent) 17%,transparent);border-color:color-mix(in srgb,var(--accent) 34%,transparent);}',
   '.filelink{display:inline;color:var(--accent);font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.86em;font-weight:600;border-bottom:1px dashed color-mix(in srgb,var(--accent) 55%,transparent);unicode-bidi:isolate;}',
@@ -5683,10 +5685,21 @@ var FA_PHRASE_RE = /[A-Za-z0-9_]*[\u0621-\u064A\u066E-\u06D3\u06F0-\u06F9](?:[\u
  * the drawing keeps its shape; elsewhere a line that reads as Persian keeps its own right-to-left order.
  */
 var MIRROR_CHARS = /[├┤└┘┌┐╭╮╰╯╠╣╔╗╚╝←→◀▶▸◂►◄⇒⇐]/g;
+var EMOJI_RE = /\p{Emoji_Presentation}\uFE0F?|\p{Extended_Pictographic}\uFE0F/gu;
+/**
+ * Code fonts have no Persian letters, so Persian falls back to a proportional font and pushes the drawing out of line.
+ * Each Persian phrase gets a box exactly as wide as its characters in monospace cells (ZWNJ and vowel marks take none),
+ * and each emoji two cells, as a terminal would draw them.
+ */
+function diagramCells(line){
+  return line.replace(FA_PHRASE_RE, function(m){
+    return '<span class="fa-cell" dir="rtl" style="width:' + m.replace(/[\u200c\u064B-\u065F\u0670]/g, '').length + 'ch">' + m + '</span>';
+  }).replace(EMOJI_RE, function(m){ return '<span class="emo-cell">' + m + '</span>'; });
+}
 /** A right-to-left drawing: the block flows from the right, corners and arrows are flipped by CSS (copying keeps them). */
 function rtlDiagram(html){
   return '<span class="rtl-block" dir="rtl">' + html.split('\n').map(function(line){
-    return bdiText(line).replace(MIRROR_CHARS, function(ch){ return '<span class="mir">' + ch + '</span>'; });
+    return bdiRuns(diagramCells(line)).replace(MIRROR_CHARS, function(ch){ return '<span class="mir">' + ch + '</span>'; });
   }).join('\n') + '</span>';
 }
 function rtlPlainLines(html, lang){
@@ -5697,7 +5710,7 @@ function rtlPlainLines(html, lang){
   if (diagram && lang !== 'ltr' && textDir(html.replace(/[─━│┃├┤┬┴┼└┘┌┐╭╮╯╰═║╔╗╚╝╠╣╦╩╬•←→]/g, ' ')) === 'rtl') return rtlDiagram(html);
   return lines.map(function(line){
     if (!hasRTL(line)) return line;
-    if (diagram) return line.replace(FA_PHRASE_RE, function(m){ return '<bdi dir="rtl">' + m + '</bdi>'; });
+    if (diagram) return diagramCells(line);
     return textDir(line) === 'rtl' ? '<bdi dir="rtl">' + bdiText(line) + '</bdi>' : line;
   }).join('\n');
 }
