@@ -20,8 +20,8 @@ first: it explains the build (`dev/apply.py`), the beta (`dev/beta.py`) and the 
 
 ## Priorities
 
-1. Layout regroup + sidebar toggle (§1), right-click map (§2), all-Shamsi dates (§3)
-2. Mobile app feel (§4)
+1. Layout regroup + sidebar toggle (§1), right-click map (§2), all-Shamsi dates (§3), pending-changes list (§8)
+2. Mobile app feel (§4), recent texts in the sidebar (§7)
 3. Drag and drop (§5)
 4. Polish and extras (§6)
 
@@ -152,6 +152,49 @@ Use pointer events (mouse drags at once; touch after a long press, like the tab 
 6. **Empty states with one clear action** for: empty notebook, no tasks, empty day, no search results.
 7. **Claude Sessions:** the KB script on the user's machine (`/var/www/kb/tools`) will push its notes into
    `Claude Sessions/`; keep that folder read-only and give it its own filter in search.
+
+## 7. Recent texts move into the sidebar («موقت»)
+
+**Today:** recent texts (up to 200, stored in IndexedDB, `historyLoad()`/`remember()` in the app) open from a
+clock button in the top bar as a popover; the sidebar has a separate «موقت» section listing open temp tabs.
+Both are about «not in the notebook» texts, in two places.
+
+**Wanted:**
+
+1. The «موقت» section gets two parts: **«باز»** (open temp tabs, as today) and **«اخیر»** (the recent texts),
+   with one search box on top that filters both.
+2. «اخیر» is grouped by day: «امروز» · «دیروز» · «این هفته» · «قدیمی‌تر». Each row: title, kind (JSON, Log,
+   … or «تب بسته‌شده»), size, time; hover (or long-press) shows the first lines.
+3. Row actions (buttons on hover/focus, and the same in right-click / long-press): «باز کردن» ·
+   «ذخیره در دفترچه…» (pick folder/collection, like temp tabs) · «حذف»; plus «پاک کردن همه» at the bottom.
+4. The clock button leaves the top bar; Ctrl+K keeps its «متن اخیر: …» entries; the bottom navigation (§4)
+   reaches it through «دفترچه» → «موقت».
+5. Secret notes never appear here (`remember()` already refuses them — keep it that way).
+
+**Accept:** no clock button in the top bar; «موقت» shows open tabs and the grouped recent texts with one search;
+opening, saving to the notebook and deleting work from the row and from its menu.
+
+## 8. What is waiting to be sent
+
+**Today:** the status chip says «تغییر منتظر ارسال ۲» and its popover has «گرفتن»/«ارسال», but not *which*
+files are waiting. Files the user did not touch directly also count (a template made with a collection,
+`.mizkar/config.json` after collection changes), which is confusing.
+
+**Wanted:**
+
+1. The chip's popover lists the pending files (`nbDirtyList()` plus pending attachments): title, folder, and
+   what happened — «تازه» (new), «ویرایش» (changed), «حذف» (deleted), «جابه‌جا» (moved: shown as one row
+   old → new, not as a delete plus a new file). System files get a plain label: `.mizkar/config.json` →
+   «تنظیمات مجموعه‌ها», `templates/…` → «قالب».
+2. Each row: click opens the note; a small diff view («چه چیزی عوض شده») against the last pulled version
+   (the app has a line diff: `nbDiffLines`, and a compare view); «دور انداختن تغییر» puts the file back to the
+   pulled version (or removes a new file, or restores a deleted one) after a confirmation, with «بازگشت».
+3. «ارسال همه» at the bottom; if sending is blocked, the popover says why in one line (no repository/token,
+   token locked, offline, conflict) with the button that fixes it.
+4. The sidebar footer («۲ تغییر منتظر ارسال») opens the same list.
+
+**Accept:** with two edited notes and one deleted, the popover shows three rows with the right labels; discarding
+one brings back the pulled text and the count drops; «ارسال همه» sends the rest in one commit.
 
 ## Not in scope now
 
