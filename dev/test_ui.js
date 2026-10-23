@@ -723,6 +723,68 @@ async function until(fn, ms = 3000) {
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
 
+  console.log('\n— §7: recent texts live in the sidebar «موقت» —');
+  ok('the top bar no longer shows the clock button', /body\.ui-calm \.ui-near #btnHistory[^{]*\{[^}]*display:none/.test(doc.getElementById('appStyle').textContent));
+  // a couple of recent texts, one of them closed, plus an open temp tab
+  win.replaceText ? null : null;
+  nb.ui.sidebar(true);
+  nb.ui.section('temps');
+  await sleep(60);
+  const tempBox = () => doc.getElementById('nbBody');
+  ok('«موقت» has one search box on top', !!doc.getElementById('nbTempQ'), tempBox().textContent.slice(0, 60));
+  ok('and two parts: باز and اخیر', /باز/.test(tempBox().textContent) && /اخیر/.test(tempBox().textContent), tempBox().textContent.slice(0, 120));
+  const histRow = doc.querySelector('#nbBody .nb-hist-row');
+  ok('the recent texts are listed', !!histRow, doc.querySelectorAll('#nbBody .nb-hist-row').length);
+  if (histRow){
+    ok('a row carries kind, size and time', /(JSON|Log|متن|Markdown|تب بسته شده|[۰-۹]+ بایت)/.test(histRow.textContent), histRow.textContent);
+    const meta = histRow.querySelector('.nb-hist-meta');
+    ok('and a title for hovering', !!histRow.getAttribute('title') || !!meta, histRow.getAttribute('title'));
+    ok('row actions are there for hover and touch', !!histRow.querySelector('[data-nb-hist-open]') && !!histRow.querySelector('[data-nb-hist-save]') && !!histRow.querySelector('[data-nb-hist-del]'), histRow.innerHTML.slice(0, 100));
+  }
+  const q = doc.getElementById('nbTempQ');
+  const histCount = doc.querySelectorAll('#nbBody .nb-hist-row').length;
+  q.value = 'zzz-nothing-matches';
+  q.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(60);
+  eq('the search box filters the recent list', doc.querySelectorAll('#nbBody .nb-hist-row').length, 0);
+  const q2 = doc.getElementById('nbTempQ');
+  q2.value = '';
+  q2.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(60);
+  eq('and clearing it brings them back', doc.querySelectorAll('#nbBody .nb-hist-row').length, histCount);
+
+  console.log('\n— opening, saving and deleting a recent text —');
+  const first = doc.querySelector('#nbBody .nb-hist-row');
+  const tabsBefore7 = doc.querySelectorAll('#tabsList .tab').length;
+  first.querySelector('[data-nb-hist-open]').click();
+  await sleep(80);
+  ok('«باز کردن» brings it back as a tab', doc.querySelectorAll('#tabsList .tab').length >= tabsBefore7, [tabsBefore7, doc.querySelectorAll('#tabsList .tab').length]);
+  nb.ui.section('temps');
+  await sleep(50);
+  const beforeFiles = Object.keys(nb.ui.files()).length;
+  doc.querySelector('#nbBody .nb-hist-row [data-nb-hist-save]').click();
+  await sleep(60);
+  const fld = doc.getElementById('nbSvFolder'), nm = doc.getElementById('nbSvName');
+  ok('«ذخیره در دفترچه…» asks for folder and name', !!fld && !!nm && fld.options.length >= 1, fld && nm && fld.options.length);
+  doc.getElementById('nbMiniOk').click();
+  await sleep(80);
+  ok('and a note is made of it', Object.keys(nb.ui.files()).length > beforeFiles, Object.keys(nb.ui.files()).length - beforeFiles);
+  nb.ui.section('temps');
+  await sleep(50);
+  const delCount = doc.querySelectorAll('#nbBody .nb-hist-row').length;
+  doc.querySelector('#nbBody .nb-hist-row [data-nb-hist-del]').click();
+  await sleep(40);
+  eq('«حذف» drops the row', doc.querySelectorAll('#nbBody .nb-hist-row').length, delCount - 1);
+  const undoBtn = [...doc.querySelectorAll('.toast button, #toast button')].pop();
+  if (undoBtn){ undoBtn.click(); await sleep(60); }
+  ok('and «بازگشت» in the toast brings it back', doc.querySelectorAll('#nbBody .nb-hist-row').length === delCount, doc.querySelectorAll('#nbBody .nb-hist-row').length);
+  const row7 = doc.querySelector('#nbBody .nb-hist-row');
+  row7.dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 30 }));
+  await sleep(30);
+  const menu7 = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent.trim());
+  ok('the same actions are in the right-click menu', ['باز کردن', 'ذخیره در دفترچه…', 'کپی متن', 'نخستین خط ها', 'حذف'].every((s) => menu7.some((l) => l.indexOf(s) !== -1)), menu7);
+  doc.getElementById('nbMenu').hidden = true;
+
   console.log('\n— §8: what is waiting to be sent —');
   nb.ui.provider('github');
   nb.ui.cfg({ repo: 'me/notes', branch: 'main', token: 'fake-token', auto: false });
@@ -877,7 +939,7 @@ async function until(fn, ms = 3000) {
   nb.ui.write(taskPath, '# کارها\n- [ ] کاری برای انجام 📅\n');
   nb.ui.section('tasks');
   await sleep(60);
-  const taskRow = doc.querySelector('#nbBody [data-task-open]');
+  const taskRow = [...doc.querySelectorAll('#nbBody [data-task-open]')].filter((b) => decodeURIComponent(b.dataset.taskOpen).indexOf(taskPath) === 0)[0];
   ok('the tasks section lists it', !!taskRow, !!taskRow);
   ctxAt(taskRow);
   ok('a task offers a due date, today, tomorrow and done', ['تاریخ سررسید…', 'امروز', 'فردا', 'بدون تاریخ', 'انجام شد'].every((s) => menuLabels().some((l) => l === s)), menuLabels());

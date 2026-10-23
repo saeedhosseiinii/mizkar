@@ -1276,13 +1276,7 @@ function nbCommitMessage(list){
           + (C && C.repo ? ' و «گرفتن» را بزن تا یادداشت های مخزن بیایند.' : '.') + '</div>';
       if (active) html += nbBacklinksHtml(active);
     } else if (NB.section === 'temps'){
-      html += '<div class="nb-hint">تب ها متن های موقت اند؛ تا «ذخیره در دفترچه» را نزنی به مخزن نمی روند.</div>';
-      html += tabs.map(function(x){
-        return '<div class="nb-row nb-temp-row' + (x.id === activeTab ? ' active' : '') + '" data-nb-temp="' + x.id + '" tabindex="0">'
-          + icon(x.nb ? 'file' : 'text') + '<span class="nb-name" dir="auto">' + escapeHtml(tabLabel(x)) + '</span>'
-          + (x.nb ? '<span class="nb-saved">دفترچه</span>' : '<button type="button" class="elbtn xs" data-nb-save="' + x.id + '">ذخیره در دفترچه</button>')
-          + '</div>';
-      }).join('');
+      html += nbTempsHtml();
     } else if (NB.section === 'search'){
       html += '<div class="nb-search">'
         + '<input class="nb-input" id="nbFind" type="search" dir="auto" placeholder="جستجو در همهٔ یادداشت ها…" value="' + escapeHtml(NB.query || '') + '">'
@@ -1386,9 +1380,36 @@ function nbCommitMessage(list){
       var note = e.target.closest('[data-nb-note]');
       if (note){ nbOpen(note.dataset.nbNote); return; }
       var temp = e.target.closest('[data-nb-temp]');
-      if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); }
+      if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); return; }
+      var hs = e.target.closest('[data-nb-hist-save]');
+      if (hs){ nbHistSaveToNotebook(+hs.dataset.nbHistSave); return; }
+      var hd = e.target.closest('[data-nb-hist-del]');
+      if (hd){ nbHistDelete(+hd.dataset.nbHistDel); return; }
+      var hist = e.target.closest('[data-nb-hist-item]');
+      if (hist){ nbHistOpen(+hist.dataset.nbHistItem); nbRender(); return; }
+      var clr = e.target.closest('[data-nb-hist-clear]');
+      if (clr){
+        nbConfirm('پاک کردن متن های اخیر', 'همهٔ متن های اخیر پاک شوند؟ (تب های باز دست نمی خورند)', function(){
+          var keep = historyLoad().slice();
+          historySave([]);
+          try { localStorage.removeItem('fs2-history'); } catch(err){}
+          nbRender();
+          toast('متن های اخیر پاک شد', 'undo', { label: 'بازگشت', icon: 'undo', run: function(){ historySave(keep); nbRender(); } });
+        });
+        return;
+      }
+    });
+    box.addEventListener('input', function(e){
+      if (e.target.id !== 'nbTempQ') return;
+      var at = e.target.selectionStart;
+      NB.tempQuery = e.target.value;
+      nbRender();
+      var q = $('nbTempQ');
+      if (q){ q.focus(); try { q.setSelectionRange(at, at); } catch(err){} }
     });
     box.addEventListener('contextmenu', function(e){
+      var hi = e.target.closest('.nb-hist-row');
+      if (hi){ e.preventDefault(); nbHistMenu(+hi.dataset.nbHistItem, e.clientX, e.clientY); return; }
       var note = e.target.closest('[data-nb-note]'), dir = e.target.closest('[data-nb-dir]'), att = e.target.closest('[data-nb-att]');
       if (!note && !dir && !att){
         if (NB.section !== 'notes' || !e.target.closest('#nbList')) return;
@@ -3474,6 +3495,148 @@ function nbCommitMessage(list){
     if (chip) chip.click();
   });
 
+  /* ================= «موقت»: تب های باز و متن های اخیر، یک جا ================= */
+  function nbByteSize(n){
+    n = +n || 0;
+    if (n < 1024) return faNum(n) + ' بایت';
+    if (n < 1024 * 1024) return faNum(Math.round(n / 1024)) + ' کیلوبایت';
+    return faNum(Math.round(n / 1048576 * 10) / 10) + ' مگابایت';
+  }
+  function nbKindLabel(item){
+    if (item.closed) return 'تب بسته شده';
+    var k = item.kind || item.fmt || 'text';
+    return (typeof FMT_LABELS === 'object' && FMT_LABELS[k]) || k;
+  }
+  function nbHistFirstLines(item){
+    return String(item.t || '').split('\n').slice(0, 3).join('\n').slice(0, 200);
+  }
+  /** «امروز» / «دیروز» / «این هفته» / «قدیمی تر» */
+  function nbHistGroup(at){
+    var d = new Date(at || 0), now = new Date();
+    var day = function(x){ return x.getFullYear() + '-' + nbPad2(x.getMonth() + 1) + '-' + nbPad2(x.getDate()); };
+    if (day(d) === day(now)) return 0;
+    var y = new Date(now.getTime() - 864e5);
+    if (day(d) === day(y)) return 1;
+    if (now.getTime() - d.getTime() < 7 * 864e5) return 2;
+    return 3;
+  }
+  var NB_HIST_GROUPS = ['امروز', 'دیروز', 'این هفته', 'قدیمی تر'];
+  function nbTempsHtml(){
+    var q = nbNorm(NB.tempQuery || '');
+    var openTabs = tabs.filter(function(x){ return !x.nb; });
+    var hist = (typeof historyLoad === 'function' ? historyLoad() : []);
+    var match = function(text, title){ return !q || nbNorm(String(title || '') + ' ' + String(text || '')).indexOf(q) !== -1; };
+    var openRows = openTabs.filter(function(x){ return match(x.text, tabLabel(x)); });
+    var histRows = hist.filter(function(h){ return match(h.t, h.title); });
+    var html = '<div class="nb-search"><input class="nb-input" id="nbTempQ" type="search" dir="auto" placeholder="جستجو در تب ها و متن های اخیر…" value="' + escapeHtml(NB.tempQuery || '') + '"></div>';
+    html += '<div class="nb-temp-part"><h5>باز <b>' + faNum(openRows.length) + '</b></h5>';
+    html += openRows.length ? openRows.map(function(x){
+      return '<div class="nb-row nb-temp-row' + (x.id === activeTab ? ' active' : '') + '" data-nb-temp="' + x.id + '" tabindex="0">'
+        + icon(x.nb ? 'file' : 'text') + '<span class="nb-name" dir="auto">' + escapeHtml(tabLabel(x)) + '</span>'
+        + (x.nb ? '<span class="nb-saved">دفترچه</span>' : '<button type="button" class="elbtn xs" data-nb-save="' + x.id + '">ذخیره در دفترچه</button>')
+        + '</div>';
+    }).join('') : '<div class="nb-empty">تب موقتی باز نیست.</div>';
+    html += '</div>';
+    html += '<div class="nb-temp-part"><h5>اخیر <b>' + faNum(histRows.length) + '</b></h5>';
+    if (!histRows.length) html += '<div class="nb-empty">' + (q ? 'چیزی پیدا نشد.' : 'متن اخیری نیست.') + '</div>';
+    else {
+      for (var g = 0; g < 4; g++){
+        var inGroup = histRows.filter(function(h){ return nbHistGroup(h.at) === g; });
+        if (!inGroup.length) continue;
+        html += '<h6 class="nb-temp-g">' + NB_HIST_GROUPS[g] + '</h6>';
+        html += inGroup.slice(0, 40).map(function(h){
+          var idx = hist.indexOf(h);
+          return '<div class="nb-row nb-hist-row" data-nb-hist-item="' + idx + '" tabindex="0" title="' + escapeHtml(nbHistFirstLines(h)) + '">'
+            + icon(h.closed ? 'x' : 'clock')
+            + '<span class="nb-name" dir="auto">' + escapeHtml(h.title || 'بدون عنوان') + '</span>'
+            + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span>'
+            + '<span class="nb-hist-btns">'
+            + '<button type="button" class="elbtn xs" data-nb-hist-open="' + idx + '">باز کردن</button>'
+            + '<button type="button" class="elbtn xs" data-nb-hist-save="' + idx + '">ذخیره در دفترچه…</button>'
+            + '<button type="button" class="elbtn xs" data-nb-hist-del="' + idx + '" title="حذف">حذف</button>'
+            + '</span></div>';
+        }).join('');
+      }
+      html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-hist-clear="1">پاک کردن همه</button></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+  function nbHistOpen(idx){
+    var h = historyLoad()[idx];
+    if (!h) return;
+    if (tabs.some(function(x){ return x.text === h.t; })){ 
+      var same = tabs.filter(function(x){ return x.text === h.t; })[0];
+      switchTab(same.id);
+      return;
+    }
+    openTab(h.t, h.fmt, 'متن اخیر باز شد — تا «ذخیره در دفترچه» به مخزن نمی رود');
+    if (h.name){ var t = currentTab(); t.name = h.name; drawTabs(); saveState(); }
+  }
+  function nbHistSaveToNotebook(idx){
+    var h = historyLoad()[idx];
+    if (!h) return;
+    nbSaveTextDialog(h.t, h.name || h.title || '');
+  }
+  function nbHistDelete(idx){
+    var h = historyLoad()[idx];
+    if (!h) return;
+    var list = historyLoad().slice();
+    list.splice(idx, 1);
+    historySave(list);
+    nbRender();
+    toast('از متن های اخیر برداشته شد', 'undo', { label: 'بازگشت', icon: 'undo', run: function(){ var back = historyLoad().slice(); back.splice(idx, 0, h); historySave(back); nbRender(); } });
+  }
+  function nbHistMenu(idx, x, y){
+    var h = historyLoad()[idx];
+    if (!h) return;
+    nbMenu(x, y, [
+      { label: 'باز کردن', act: function(){ nbHistOpen(idx); } },
+      { label: 'ذخیره در دفترچه…', act: function(){ nbHistSaveToNotebook(idx); } },
+      { label: 'کپی متن', act: function(){ copyToClipboard('متن', h.t).then(function(ok){ toast(ok ? 'کپی شد' : 'کپی نشد', 'copy'); }); } },
+      { label: 'نخستین خط ها', act: function(){ nbHistPreview(idx); } },
+      null,
+      { label: 'حذف', danger: true, act: function(){ nbHistDelete(idx); } }
+    ]);
+  }
+  /** Saving a text into the notebook from the sidebar: pick the folder, then the name. */
+  function nbSaveTextDialog(text, name){
+    var folders = (function(){
+      var out = [''];
+      NB.paths.forEach(function(p){
+        if (p.slice(-1) === '/'){ if (out.indexOf(p.slice(0, -1)) === -1) out.push(p.slice(0, -1)); }
+        else { var d = nbFolder(p); if (d && out.indexOf(d) === -1) out.push(d); }
+      });
+      return out;
+    })();
+    nbModalBox('ذخیره در دفترچه',
+      '<div class="nb-field"><label>پوشه</label><select id="nbSvFolder">'
+      + folders.map(function(f){ return '<option value="' + escapeHtml(f) + '">' + escapeHtml(f || 'ریشهٔ دفترچه') + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div class="nb-field"><label>نام یادداشت</label><input class="nb-input" id="nbSvName" dir="auto" value="' + escapeHtml(String(name || '').slice(0, 60)) + '"></div>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button>'
+      + '<button class="btn-primary" type="button" id="nbMiniOk">ذخیره</button>', 'cloud');
+    $('nbMiniOk').onclick = function(){
+      var folder = $('nbSvFolder').value, nm = $('nbSvName').value.trim() || textTitle(text) || 'یادداشت';
+      var path = (folder ? folder + '/' : '') + nbSlug(nm) + '.md';
+      if (NB.files[path] && !NB.files[path].deleted){ toast('یادداشتی با همین نام هست', 'x'); return; }
+      nbWrite(path, text);
+      nbCloseMini();
+      nbOpen(path);
+      toast('در دفترچه ذخیره شد: ' + nbTitle(path), 'cloud');
+    };
+  }
+  /** A preview of the first lines. */
+  function nbHistPreview(idx){
+    var h = historyLoad()[idx];
+    if (!h) return;
+    nbModalBox(h.title || 'متن اخیر',
+      '<pre class="nb-preview" dir="auto">' + escapeHtml(String(h.t || '').slice(0, 1200)) + '</pre>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>'
+      + '<button class="btn-primary" type="button" id="nbMiniOk">باز کردن</button>', 'text');
+    $('nbMiniOk').onclick = function(){ nbCloseMini(); nbHistOpen(idx); };
+  }
+
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
   nbSlot();
@@ -3502,6 +3665,8 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, syncPop: function(){ return $('nbSyncPop'); },
+    tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
+    histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
     attach: nbAddAttachment, attachments: function(){ return NB.attach; }, downloadAttachment: nbDownloadAttachment,
     profiles: nbProfiles, useProfile: nbUseProfile, saveProfile: nbSaveProfile, reload: nbReloadFiles,

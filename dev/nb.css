@@ -219,3 +219,20 @@ details.nb-adv h5{margin:12px 0 6px;font-size:.78rem;color:var(--muted);}
 .nb-diff-add{background:color-mix(in srgb,#16a34a 12%,transparent);}
 .nb-diff-del{background:color-mix(in srgb,#dc2626 12%,transparent);}
 .nb-foot{cursor:pointer;}
+
+/* --- «موقت»: تب های باز و متن های اخیر (nbTempsHtml) --- */
+.nb-temp-part h5{margin:10px 2px 4px;font-size:.74rem;font-weight:800;color:var(--muted);}
+.nb-temp-part h5 b{color:var(--accent);margin-inline-start:4px;}
+.nb-temp-g{margin:8px 2px 2px;font-size:.7rem;font-weight:700;color:var(--muted);opacity:.9;}
+.nb-hist-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:9px;cursor:pointer;}
+.nb-hist-row:hover{background:var(--surface-2);}
+.nb-hist-row .nb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem;}
+.nb-hist-meta{flex:none;color:var(--muted);font-size:.68rem;}
+.nb-preview{max-height:min(52vh,420px);overflow:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px;font-size:.78rem;white-space:pre-wrap;word-break:break-word;}
+/* the recent texts live in the sidebar «موقت» now, not in the top bar */
+body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]{display:none;}
+
+/* the row actions show on hover or focus; on a phone they are always there (no hover) */
+.nb-hist-btns{display:flex;gap:3px;flex:none;opacity:0;transition:opacity .12s;}
+.nb-hist-row:hover .nb-hist-btns,.nb-hist-row:focus-within .nb-hist-btns,.nb-hist-row:focus .nb-hist-btns{opacity:1;}
+@media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }
