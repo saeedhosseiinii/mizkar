@@ -84,6 +84,12 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
     flex:none; position:relative; z-index:30; align-items:center; gap:16px; min-height:52px;
     padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);
   }
+  /* The app's hover toolbars (کپی on code blocks, اکسل/تصویر on tables and diagrams) are absolutely placed over
+     the top of the block. A touch device has no hover and always shows them, so they cover the first line of the
+     code / the header row of the table. Give them their own band above the content. */
+  body.nb-nav-on .pane.out .codewrap,
+  body.nb-nav-on .pane.out .elwrap{ padding-top:38px; }
+
   /* The table-size picker lives in the bottom toolbar. The app's own phone rule turns a .pop into a sheet, but its
      JS then pins this one *under the table button* — which is 740px down a 740px screen, so the picker opened off
      the screen (that is «روی جدول درست نشده»). Keep it as the sheet, like the app's other phone popovers. */
