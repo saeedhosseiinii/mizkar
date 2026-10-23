@@ -1,9 +1,9 @@
 #!/bin/bash
-# Build the beta next to the served app, so the phone can test it at /beta/ with no delay.
+# Build the beta into the main branch's beta/ folder (a worktree of `main`), ready to commit there.
+# Usage: dev/publish-beta.sh ../mizkar-main "what changed" ["…"]
 set -e
-cd /root/workspace/mizkar
+cd "$(dirname "$0")/.."
+MAIN="${1:?path to a worktree of the main branch}"; shift
 python3 dev/apply.py >/dev/null
-rm -rf /root/workspace/mizkar/beta
-python3 dev/beta.py /root/workspace/mizkar/beta "$@"
-grep -o "mzbeta-[0-9TZ]*" beta/sw.js | head -1
-curl -sk -o /dev/null -w "served beta: %{http_code}\n" https://45.39.60.14:8901/beta/
+python3 dev/beta.py "$MAIN/beta" "$@"
+echo "now commit $MAIN/beta on main (only that folder)"
