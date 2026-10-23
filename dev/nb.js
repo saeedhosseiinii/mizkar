@@ -2287,6 +2287,7 @@ function nbCommitMessage(list){
   /** A menu at (x, y). `null` items are separators (never two in a row, never at either end). */
   function nbMenu(x, y, items){
     var m = $('nbMenu');
+    nbMenuOpenedTouch = nbTouchSeq;
     items = (items || []).filter(function(it, i, all){ return it || (i > 0 && all[i - 1] && all.slice(i + 1).some(Boolean)); });
     if (!items.some(Boolean)) return;
     if (!m.contains(document.activeElement)) nbMenu.back = document.activeElement;   // focus goes back there when it closes
@@ -2325,11 +2326,17 @@ function nbCommitMessage(list){
     if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
   }
   function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
-  /* The finger that opened a long-press menu is still lifting: the browser then sends its own mousedown → click,
-     and those must not count as «outside» and close the menu again (that is why a long press looked dead on a
-     phone, and it takes the FAB with it — the FAB is the switch of its own menu). */
+  /* The finger that opened a menu is still lifting: the browser then sends its own mousedown → click, and that
+     one must not count as «outside» and close the menu the finger just opened. Only that instant gets grace — a
+     deliberate tap outside (even a quick one) closes it right away. */
+  var nbTouchSeq = 0, nbMenuOpenedTouch = -1;
+  document.addEventListener('touchstart', function(){ nbTouchSeq++; }, { passive: true, capture: true });
   document.addEventListener('mousedown', function(e){
-    if (typeof nbSwallowUntil === 'number' && nbSwallowUntil && Date.now() < nbSwallowUntil) return;
+    /* A finger that just opened a menu also sends the browser's own compatibility mousedown — same touch, so no
+       new touchstart has happened since the menu opened: that one must not close it (it used to, which is why a
+       long press looked dead on a phone). A deliberate tap outside is a NEW touch and closes it at once. */
+    var compat = e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents;
+    if (compat && nbTouchSeq === nbMenuOpenedTouch) return;
     if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose();
   }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);

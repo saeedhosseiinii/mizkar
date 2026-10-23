@@ -1051,7 +1051,7 @@ async function until(fn, ms = 3000) {
     return /100dvh/.test(css) && /safe-area-inset-bottom/.test(css) && /#nbNav\b/.test(css) && /overscroll-behavior:contain/.test(css);
   })());
   ok('the Markdown toolbar has all its buttons', doc.querySelectorAll('.mdbar .mdb').length >= 13, doc.querySelectorAll('.mdbar .mdb').length);
-  ok('and on a phone it wraps instead of hiding buttons behind a scroll', /\.pane\.editor \.mdbar\{[^}]*flex-wrap:wrap/.test(doc.getElementById('appStyle').textContent));
+  ok('and on a phone it is a 7-column grid instead of hiding buttons behind a scroll', /\.pane\.editor \.mdbar\{ display:grid; grid-template-columns:repeat\(7, 1fr\)/.test(doc.getElementById('appStyle').textContent));
   ok('the reading area has no double-tap zoom (two taps must reach the editor)', /\.preview, #zoomWrap, #nbList, #nbBody\{ touch-action:manipulation; \}/.test(doc.getElementById('appStyle').textContent));
   console.log('\n— a sideways finger turns the phone\'s pages —');
   const wideW0 = win.innerWidth;
@@ -2013,17 +2013,28 @@ async function until(fn, ms = 3000) {
   await sleep(50);
   const lpMenu = () => doc.getElementById('nbMenu');
   const lpRow = doc.querySelector('#nbBody [data-nb-note]') || doc.querySelector('#nbList [data-nb-note]');
+  // a touch-synthesised mousedown, like the one Chrome sends after a finger lifts
+  const compatDown = () => {
+    const ev = new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 });
+    Object.defineProperty(ev, 'sourceCapabilities', { value: { firesTouchEvents: true } });
+    doc.body.dispatchEvent(ev);
+  };
   if (lpRow){
+    lpRow.dispatchEvent(tev('touchstart', 60, 60));            // the finger that opens the menu
+    lpRow.dispatchEvent(tev('touchend', 60, 60));
     ok('a long press opens the row menu', win.mizkarNotebook.ui.longPressAt(60, 60, lpRow) === true && !lpMenu().hidden);
-    doc.body.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-    ok('the browser own mousedown as the finger lifts does not close it', !lpMenu().hidden);
+    compatDown();
+    ok('that same finger lifting does not close it', !lpMenu().hidden);
     doc.body.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
-    // jsdom has no trusted events, and the app only swallows the click a real browser sends (isTrusted) —
-    // that half is checked in a real Chromium over CDP, not here
+    // jsdom has no trusted events, and the app only swallows the click a real browser sends (isTrusted)
     ok('an untrusted click closes it here (a real browser’s trusted click is swallowed)', lpMenu().hidden === true);
-    await sleep(900);
+    win.mizkarNotebook.ui.longPressAt(60, 60, lpRow);           // open it again
+    doc.body.dispatchEvent(tev('touchstart', 200, 400));        // a NEW touch: a deliberate tap outside
+    compatDown();
+    ok('a quick tap outside closes it on the first tap', lpMenu().hidden);
+    win.mizkarNotebook.ui.longPressAt(60, 60, lpRow);
     doc.body.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-    ok('but a real press outside, later, does close it', lpMenu().hidden);
+    ok('a plain mouse press outside closes it too', lpMenu().hidden);
   }
   console.log('\n— the note page button says what it does —');
   const editTop = doc.querySelector('#nbTop [data-nb-top="edit"]');
@@ -2094,6 +2105,13 @@ async function until(fn, ms = 3000) {
   doc.getElementById('nbSync').click();
   await sleep(60);
   ok('and the sync popover shows it too', doc.getElementById('nbSyncPop').textContent.indexOf('نسخه: ' + build) > -1);
+
+  console.log('\n— the phone bars never sit on top of a dialog —');
+  const shellCss = doc.getElementById('appStyle').textContent;
+  ok('an app dialog is raised over the phone bars', /body\.nb-nav-on \.modal\{ z-index:280; \}/.test(shellCss));
+  ok('the format bar is a 7-column grid with no separator columns', /\.pane\.editor \.mdbar\{ display:grid; grid-template-columns:repeat\(7, 1fr\)/.test(shellCss) && /> \.mdsep\{ display:none; \}/.test(shellCss));
+  const built = fs.readFileSync(HTML, 'utf8');
+  ok('the finger that opened a menu does not close it', /sourceCapabilities && e\.sourceCapabilities\.firesTouchEvents/.test(built) && /nbTouchSeq === nbMenuOpenedTouch/.test(built));
 
   console.log('\n— the worker asks the network for the page first —');
   const swSrc = fs.readFileSync(require('path').join(require('path').dirname(HTML), 'sw.js'), 'utf8');

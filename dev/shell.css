@@ -84,6 +84,10 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
     flex:none; position:relative; z-index:30; align-items:center; gap:16px; min-height:52px;
     padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);
   }
+  /* the phone's bars sit at z 215: an app dialog (its own z is 97) must still be the top layer, or the bar
+     covers its buttons — that is what hid the Persian editor's «اعمال» button */
+  body.nb-nav-on .modal{ z-index:280; }
+
   #nbTop .ib{ flex:none; min-width:44px; min-height:44px; border-radius:12px; }
   #nbTop [data-nb-top="edit"]{ background:var(--soft); }   /* the pen is its own target, not a neighbour's edge */
   #nbTop .ib:active{ background:var(--soft); }
@@ -154,7 +158,12 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
   .mdbar .mdb{ min-width:34px; min-height:34px; }
   /* the toolbar wraps on a phone: 530px of buttons never fitted a 360px row, and the hidden sideways
      scroll left «❝ { } جدول ―» off-screen with nothing to say so. Two rows, everything in sight. */
-  .pane.editor .mdbar{ flex-wrap:wrap; justify-content:center; row-gap:2px; overflow-x:visible; }
+  /* a real grid, not centred flex lines: every button sits in its own column, so the second row lines up with
+     the first one instead of sliding under other columns */
+  /* seven columns: 13 buttons become two aligned rows (7+6) on any phone width */
+  .pane.editor .mdbar{ display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; overflow-x:visible; }
+  .pane.editor .mdbar > *{ width:100%; min-width:0; }
+  .pane.editor .mdbar > .mdsep{ display:none; }   /* separators and the table picker are not columns */
   textarea#input{ padding-bottom:104px; font-size:16px; }     /* 16px: the phone does not zoom into the field */
   .nb-input, #nbBody input, #nbBody select{ font-size:16px; }
 
