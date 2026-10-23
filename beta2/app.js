@@ -7511,7 +7511,7 @@ var NB_CSS = [
   '#nbMenu{ z-index:var(--z-menu); }',
   '.nb-drag-ghost{ z-index:var(--z-ghost); }',
   '.nb-rtl-back{ transform:rotate(-90deg); }           /* the chevron points down; «back» in a right-to-left page points right */',
-  '#nbNav, #nbTop{ display:none; }',
+  '#nbNav, #nbTop, #ipDone{ display:none; }',   /* phone shell only; desktop must never show «تمام» */
   '',
   '/* --- the panel --- */',
   '#nb{',
