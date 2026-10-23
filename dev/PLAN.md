@@ -24,6 +24,7 @@ first: it explains the build (`dev/apply.py`), the beta (`dev/beta.py`) and the 
 2. Mobile app feel (§4), recent texts in the sidebar (§7)
 3. Drag and drop (§5)
 4. Polish and extras (§6)
+5. Sharing through Gist (§9)
 
 ---
 
@@ -196,7 +197,49 @@ files are waiting. Files the user did not touch directly also count (a template 
 **Accept:** with two edited notes and one deleted, the popover shows three rows with the right labels; discarding
 one brings back the pulled text and the count drops; «ارسال همه» sends the rest in one commit.
 
+## 9. Sharing through GitHub Gist (password optional) and «اشتراک‌ها»
+
+**Today:** «لینک اشتراک» puts the whole text inside the link (`makeShareLink`, `#z=…`). Long notes make links
+too long for Telegram, a link cannot be taken back, and nobody knows what was shared.
+
+**Wanted:**
+
+1. «اشتراک‌گذاری…» on a note (menu, ⋯, Ctrl+K) opens a small sheet with three choices:
+   - «باز» — anyone with the link reads it. The gist holds the plain Markdown.
+   - «کلید در لینک» — the gist holds AES-GCM ciphertext; the random key is in the link's fragment
+     (`#g=<id>.<key>`), which never reaches GitHub. Whoever has the full link reads it without typing anything;
+     github.com shows only ciphertext.
+   - «رمزدار» — the same ciphertext, the key comes from a password (PBKDF2, the code secret notes already use);
+     the link is `#g=<id>` and the reader is asked for the password. The password is never stored.
+   The default is «باز» for normal notes. A secret note can only be shared «رمزدار» or «کلید در لینک», and
+   the sheet says so.
+2. The gist is created with the connected GitHub token (`POST /gists`, `public:false` = unlisted). The token
+   needs the Gists permission (fine-grained: Account → Gists → read/write; classic: `gist` scope). If it does
+   not have it, the sheet says that in one line and shows the steps instead of failing at send time.
+   One gist per share, file `<slug>.md` (or `<slug>.mizkar` for ciphertext), description
+   `mizkar-share: <title>` so the app can find its own gists again.
+3. Opening a link: the app reads `#g=` on load (next to `readShareHash`), fetches the gist without a token
+   (`GET https://api.github.com/gists/<id>`; for a large file follow `raw_url`), decrypts if needed and opens
+   it read-only in a temporary tab, like the current share link. Deleted gist → «این اشتراک برداشته شده».
+   Wrong password → asks again, nothing else happens.
+4. «اشتراک‌ها» — one list of everything shared, reachable from the note's ⋯ («اشتراک‌های این یادداشت»), the
+   settings page, and Ctrl+K. The source of truth is GitHub (`GET /gists`, filtered by the description
+   prefix), so the list is the same on every device; a local copy keeps it usable offline and remembers each
+   link's key for «کلید در لینک» shares (never the password). Each row: note title, mode (باز / کلید / رمز),
+   date, and actions «کپی لینک», «به‌روزرسانی» (re-send the note's current text into the same gist, same link),
+   «برداشتن» (`DELETE /gists/<id>` after a confirm; the link stops working).
+5. Optional expiry («بعد از ۱ روز / ۷ روز / ۳۰ روز / هرگز») stored in the gist description; the app deletes
+   expired shares the next time it runs online and says so in a toast. The sheet states plainly that a gist
+   cannot expire by itself.
+6. Not in this round: images (warn «تصویرها همراهش نمی‌روند» when the note has attachments), GitLab snippets.
+
+**Accept:** with a token that has Gists, sharing a note «باز» gives a link that opens the text in a fresh
+browser; «رمزدار» asks for the password and a wrong one opens nothing; the gist's page on github.com shows
+only ciphertext for the two encrypted modes; «اشتراک‌ها» lists all three, «به‌روزرسانی» changes what the same
+link shows, and «برداشتن» makes the link say it was removed. Tests: the fake GitHub in `dev/test_ui.js` gets
+`/gists` (create, list, patch, delete, get); the crypto round-trip and the link parsing go in `dev/test_nb.js`.
+
 ## Not in scope now
 
 - A WYSIWYG/CodeMirror editor (the in-place editor in `inplace.js` is the chosen direction for now).
-- Server-side features (sharing links, server PDF, bots).
+- Server-side features (server PDF, bots). Sharing goes through GitHub Gist (§9), no server of our own.
