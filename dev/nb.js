@@ -1058,6 +1058,7 @@ function nbCommitMessage(list){
     setFormat('markdown');
     nbApplyReadOnly();
     drawTabs(); saveState(); render();
+    ipSync();
     if (typeof at === 'number'){ ta.focus(); ta.setSelectionRange(at, at); }
     nbRender();
   }
@@ -2751,7 +2752,7 @@ function nbCommitMessage(list){
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
-  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); if (!ta.value.trim()) render(); });
+  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); ipSync(); if (!ta.value.trim()) render(); });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
     open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,
@@ -2772,7 +2773,7 @@ function nbCommitMessage(list){
   };
   window.mizkarNotebook = NB;
   // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
-  window.nbAfterSwitch = nbAfterSwitch;
+  window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); };
   window.nbHomeHtml = nbHomeHtml;
   window.nbPaletteItems = nbPaletteItems;
 })();

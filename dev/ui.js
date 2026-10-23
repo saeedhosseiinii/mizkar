@@ -15,7 +15,8 @@
     edit.innerHTML = icon('pen') + '<span>ویرایش</span>';
     edit.addEventListener('click', function(e){
       e.stopPropagation();
-      setView(state.view === 'preview' ? 'split' : 'preview');
+      // a notebook note is edited in place (one column); a temp tab gets the source next to the preview
+      setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview');
       saveState();
       if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
     });

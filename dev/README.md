@@ -15,6 +15,8 @@ dev/
 │                      recent notes, notes in the Ctrl+K palette — shares nb.js's scope
 ├── ui.js / ui.css     the calmer layout: format chips → status-bar menu, one read/edit switch,
 │                      «ابزارها» menu, preview «⋯» menu (nothing removed: buttons move into menus)
+├── inplace.js         a notebook note is one page: reading by default, double-click/E edits the same column in
+│                      place (caret on the clicked line, Markdown tinted), Esc reads again; ☐ ticks while reading
 ├── beta.py            builds /beta/ from index.html with its own storage namespace (see below)
 ├── apply.py           assembles index.html from the pristine upstream file + the three above
 ├── test_nb.js         engine tests: Jalali dates, paths, templates, zip, diff, merge

@@ -61,3 +61,19 @@ body.ui-calm .pane.out .ph-actions > .sep{display:none !important;}
 .hm-hint{margin-top:18px;color:var(--muted);font-size:.8rem;text-align:center;}
 #nbBody .hm-task{padding:6px 4px;}
 #nbBody .hm-group h5{padding:0 4px;}
+/* --- a notebook note edited in place (inplace.js): one centred column, Markdown tinted behind the text --- */
+body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}
+body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}
+body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}
+body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}
+body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}
+.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);}
+.ta-md[hidden]{display:none;}
+.ta-md .mk-h{color:var(--accent);}
+.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}
+.ta-md .mk-c{color:var(--tok-str,#047857);background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:3px;}
+.ta-md .mk-l{color:var(--tok-fn,#0369a1);}
+.ta-md .mk-t{color:#d97706;}
+.ta-md .mk-fm{color:var(--muted);}
+body.ip-on #zoomWrap li.task > .box{cursor:pointer;}
+body.ip-on #zoomWrap{cursor:text;}

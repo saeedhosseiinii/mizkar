@@ -225,7 +225,7 @@ def main():
     css = (DEV / 'nb.css').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.css').read_text(encoding='utf-8')
     module = js_string_array(css.split('\n')) + '\n' + (DEV / 'nb.js').read_text(encoding='utf-8')
     # the home page and the calmer layout share the notebook's scope (dev/home.js, dev/ui.js)
-    module = module.replace('  /* --- init --- */', (DEV / 'home.js').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.js').read_text(encoding='utf-8') + '\n  /* --- init --- */', 1)
+    module = module.replace('  /* --- init --- */', (DEV / 'home.js').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.js').read_text(encoding='utf-8') + '\n' + (DEV / 'inplace.js').read_text(encoding='utf-8') + '\n  /* --- init --- */', 1)
     html = replace_once(html, '  /* --- init --- */', module + '\n  /* --- init --- */', 'init marker')
     print(f'inserted the notebook module: {len(module)} chars')
 

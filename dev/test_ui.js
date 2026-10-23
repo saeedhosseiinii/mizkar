@@ -623,6 +623,45 @@ async function until(fn, ms = 3000) {
   ok('renaming the folder moves its notes', !!movedNote && !Object.keys(nb.ui.files()).some((k) => k.startsWith('سفرها/') && !nb.ui.files()[k].deleted), movedNote);
   ok('and the collection follows the folder', nb.ui.cfg().collections.some((c) => c.name === 'سفرها' && c.path.startsWith('سفر ها/')));
 
+  console.log('\n— a note is one page: read, double-click to edit in place —');
+  const viewOf = () => doc.getElementById('work').getAttribute('data-view');
+  doc.querySelector('[data-action="tab-new"]').click();
+  await sleep(30);
+  doc.getElementById('uiEdit').click();                       // a temp tab edits beside the preview
+  ok('a temp tab edits in two columns', viewOf() === 'split', viewOf());
+  nb.ui.write('ایده ها/یک صفحه.md', '# یک صفحه\n\nپاراگراف اول درباره چیزی.\n\nپاراگراف دوم با یک کلمهٔ خاص.\n\n- [ ] کار الف\n- [ ] کار ب\n');
+  nb.ui.open('ایده ها/یک صفحه.md');
+  await sleep(40);
+  ok('a note opens for reading', viewOf() === 'preview', viewOf());
+  ok('the page knows it is a note', doc.body.classList.contains('ip-on'));
+  const para2 = [...doc.querySelectorAll('#zoomWrap p')].find((x) => x.textContent.includes('پاراگراف دوم'));
+  para2.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100 }));
+  await sleep(30);
+  const taEl = doc.getElementById('input');
+  const caretLine = taEl.value.slice(0, taEl.selectionStart).split('\n').length - 1;
+  ok('a double-click edits in place (one column)', viewOf() === 'editor', viewOf());
+  ok('with the caret on the clicked line', taEl.value.split('\n')[caretLine].includes('پاراگراف دوم'), caretLine);
+  ok('the Markdown is tinted behind the text', doc.body.classList.contains('ip-tint') && !!doc.querySelector('.ta-md .mk-h'));
+  taEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(30);
+  ok('Esc goes back to reading', viewOf() === 'preview' && !doc.body.classList.contains('ip-tint'), viewOf());
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'e', code: 'KeyE', bubbles: true }));
+  await sleep(30);
+  ok('E edits too', viewOf() === 'editor', viewOf());
+  taEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(30);
+  const boxes = doc.querySelectorAll('#zoomWrap li.task > .box');
+  boxes[1].click();
+  await sleep(30);
+  ok('ticking ☐ while reading writes the note', /- \[ \] کار الف\n- \[x\] کار ب/.test(nb.ui.files()['ایده ها/یک صفحه.md'].text), nb.ui.files()['ایده ها/یک صفحه.md'].text);
+  ok('and the page shows it ticked', doc.querySelectorAll('#zoomWrap li.task > .box')[1].textContent === '☑');
+  const tempTab2 = [...doc.querySelectorAll('#tabsList .tab')].filter((t) => !t.classList.contains('nb-tab')).pop();
+  tempTab2.click();
+  await sleep(30);
+  ok('back on the temp tab, its two columns come back', viewOf() === 'split', viewOf());
+  doc.getElementById('uiEdit').click();
+  await sleep(20);
+
   console.log('\n— the token can be locked —');
   await until(() => !nb.ui.state().busy, 4000);
   nb.ui.state().tokenPass = 'lock-pass';
