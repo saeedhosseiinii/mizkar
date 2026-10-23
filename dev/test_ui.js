@@ -723,6 +723,153 @@ async function until(fn, ms = 3000) {
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
 
+  console.log('\n— §5: drag and drop —');
+  const s5Latin = (s) => s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06F0)).replace(/\//g, '-');
+  const pev = (type, x, y, extra = {}) => {
+    const e = new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+    Object.defineProperty(e, 'pointerType', { value: extra.pointerType || 'mouse' });
+    return e;
+  };
+  const showAllFolders = () => {
+    nb.ui.state().paths = nb.ui.state().paths || [];
+    Object.keys(nb.ui.files()).forEach((p) => {
+      const parts = p.split('/');
+      for (let i = 1; i < parts.length; i++) nb.ui.state().expanded[parts.slice(0, i).join('/')] = true;
+    });
+    nb.ui.section('notes');
+  };
+  const dragFrom = async (el, onto) => {
+    if (!el || !onto) return { ghostSeen: false, marked: false, skipped: true };
+    const oldHit = doc.elementFromPoint;
+    doc.elementFromPoint = () => onto || null;
+    el.dispatchEvent(pev('pointerdown', 20, 20, { pointerType: 'mouse' }));
+    doc.dispatchEvent(pev('pointermove', 40, 30, { pointerType: 'mouse' }));
+    doc.dispatchEvent(pev('pointermove', 60, 40, { pointerType: 'mouse' }));
+    await sleep(20);
+    const ghost = doc.querySelector('.nb-drag-ghost');
+    doc.dispatchEvent(pev('pointerup', 60, 40, { pointerType: 'mouse' }));
+    await sleep(60);
+    doc.elementFromPoint = oldHit;
+    return { ghostSeen: !!ghost, marked: !!(onto && onto.classList.contains('nb-drop')) };
+  };
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(60);
+  nb.ui.write('کشیدن/یادداشت الف.md', '# الف\n');
+  nb.ui.write('ایده ها/مقصد.md', '# مقصد\n');
+  nb.ui.section('notes');
+  await sleep(60);
+  // 1) a note onto a folder
+  const dragNoteRow = doc.querySelector('#nbList [data-nb-note="کشیدن/یادداشت الف.md"]');
+  const dragTarget = doc.querySelector('#nbList [data-nb-dir="ایده ها"]');
+  ok('the tree has the note and the folder to try it with', !!dragNoteRow && !!dragTarget, [!!dragNoteRow, !!dragTarget]);
+  let dragRes = await dragFrom(dragNoteRow, dragTarget);
+  ok('dragging shows a ghost along the way', dragRes.ghostSeen, dragRes);
+  ok('a note lands in the folder it was dropped on', !!nb.ui.files()['ایده ها/یادداشت الف.md'], Object.keys(nb.ui.files()));
+  const undoMove = doc.querySelector('.toast-act');
+  ok('and the move can be taken back', !!undoMove);
+  if (undoMove){ undoMove.click(); await sleep(60); }
+  ok('the note is back where it was', !!nb.ui.files()['کشیدن/یادداشت الف.md'], Object.keys(nb.ui.files()));
+
+  // 2) a note onto a collection's folder: the pattern renames it
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(50);
+  const col0 = nb.ui.cfg().collections[0];
+  const colFolder = nbFolderOf(col0.path);
+  function nbFolderOf(p){ return p.split('/').slice(0, -1).join('/'); }
+  const colRow = doc.querySelector('#nbList [data-nb-dir="' + colFolder + '"]') || doc.querySelector('#nbList [data-nb-dir]');
+  const droppedOn = colRow ? colRow.dataset.nbDir : '';
+  await dragFrom(doc.querySelector('#nbList [data-nb-note="کشیدن/یادداشت الف.md"]'), colRow);
+  ok('a note dropped on a collection folder lands under it', !!droppedOn && Object.keys(nb.ui.files()).some((p) => p.indexOf(droppedOn + '/') === 0 && !nb.ui.files()[p].deleted), [droppedOn, Object.keys(nb.ui.files())]);
+
+  // 3) a note onto empty space goes to the root
+  showAllFolders();
+  await sleep(60);
+  const listEl = doc.getElementById('nbList');
+  const someNested = Object.keys(nb.ui.files()).filter((p) => p.indexOf('/') !== -1 && !nb.ui.files()[p].deleted && p.endsWith('.md') && !p.startsWith('.'))[0];
+  const nestedName = someNested ? someNested.split('/').pop() : '';
+  const nestedRow = someNested ? [...doc.querySelectorAll('#nbList [data-nb-note]')].filter((r) => r.dataset.nbNote === someNested)[0] : null;
+  ok('a nested note is in the tree to try', !!nestedRow, [someNested, Object.keys(nb.ui.files()).length]);
+  if (nestedRow){
+    await dragFrom(nestedRow, listEl);
+    ok('dropping on empty space brings a note to the root', !!nb.ui.files()[nestedName], Object.keys(nb.ui.files()).slice(0, 4));
+  } else ok('dropping on empty space brings a note to the root', false, 'no nested note in the tree');
+
+  console.log('\n— a task onto a day, a note into the page —');
+  nb.ui.write('کشیدن/کارها.md', '# کارها\n- [ ] کاری برای کشیدن\n');
+  nb.ui.section('cal');
+  await sleep(60);
+  const dayCell = doc.querySelector('#nbBody .nb-cal-cell[data-nb-day]');
+  nb.ui.section('tasks');
+  await sleep(60);
+  const dragTask = [...doc.querySelectorAll('#nbBody [data-task-open]')].filter((b) => decodeURIComponent(b.dataset.taskOpen).indexOf('کشیدن/کارها.md') === 0)[0];
+  ok('the task is listed', !!dragTask && !!dayCell, [!!dragTask, !!dayCell]);
+  if (dragTask && dayCell){
+    await dragFrom(dragTask, dayCell);
+    await sleep(60);
+    const stampWanted = dayCell.dataset.nbDay;
+    ok('dropping a task on a day writes that due date', nb.ui.files()['کشیدن/کارها.md'].text.indexOf('📅') !== -1, nb.ui.files()['کشیدن/کارها.md'].text);
+    ok('with the Shamsi date of that day', (() => {
+      const got = (nb.ui.files()['کشیدن/کارها.md'].text.match(/📅\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/) || [])[1];
+      const want = s5Latin(nb.ui.shamsi(stampWanted));
+      return got === want;
+    })(), nb.ui.files()['کشیدن/کارها.md'].text);
+  } else ok('dropping a task on a day writes that due date', false, [!!dragTask, !!dayCell]);
+
+  nb.ui.open('ایده ها/مقصد.md');
+  await sleep(80);
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(50);
+  const srcRow = doc.querySelector('#nbList [data-nb-note="ایده ها/مقصد.md"]');
+  const editorEl = doc.getElementById('input');
+  ok('the editor is at hand', !!editorEl && !!srcRow);
+  if (editorEl && srcRow){
+    nb.ui.open('ایده ها/مقصد.md');
+    await sleep(60);
+    setViewSafe('editor');
+    const before5 = doc.getElementById('input').value;
+    await dragFrom(srcRow, doc.querySelector('#zoomWrap') || doc.getElementById('input'));
+    await sleep(60);
+    ok('dropping a note on the page leaves a link', doc.getElementById('input').value.indexOf('[[مقصد]]') !== -1, doc.getElementById('input').value.slice(-40));
+  }
+  function setViewSafe(v){ const w = doc.getElementById('work'); if (w) w.dataset.view = v; }
+
+  console.log('\n— files from the computer —');
+  nb.ui.section('notes');
+  await sleep(50);
+  const docPath = 'ایده ها/از رایانه.md';
+  const fakeFile = { name: 'از رایانه.md', type: 'text/markdown', size: 10 };
+  win.FileReader = class {
+    readAsText() { setTimeout(() => { this.result = '# از رایانه\nخط\n'; this.onload && this.onload(); }, 0); }
+    readAsDataURL() { setTimeout(() => { this.result = 'data:image/png;base64,AAAA'; this.onload && this.onload(); }, 0); }
+  };
+  win.nbDragFiles(fakeFile ? [fakeFile] : [], 'ایده ها', false);
+  await sleep(60);
+  ok('a dropped .md becomes a note in that folder', !!nb.ui.files()[docPath], Object.keys(nb.ui.files()).filter((p) => p.indexOf('از رایانه') !== -1));
+  const imgFile = { name: 'نمودار.png', type: 'image/png', size: 12 };
+  const attBefore = Object.keys(nb.ui.attachments()).length;
+  win.nbDragFiles([imgFile], 'ایده ها', false);
+  await sleep(60);
+  ok('a dropped image goes into attachments', Object.keys(nb.ui.attachments()).length === attBefore + 1, Object.keys(nb.ui.attachments()).slice(-2));
+
+  console.log('\n— Esc cancels a drag —');
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(50);
+  const cancelRow = doc.querySelector('#nbList [data-nb-note]');
+  cancelRow.dispatchEvent(pev('pointerdown', 20, 20, { pointerType: 'mouse' }));
+  doc.dispatchEvent(pev('pointermove', 40, 30, { pointerType: 'mouse' }));
+  doc.dispatchEvent(pev('pointermove', 60, 40, { pointerType: 'mouse' }));
+  await sleep(20);
+  ok('a drag is running', !!doc.querySelector('.nb-drag-ghost'));
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(30);
+  ok('Esc drops it', !doc.querySelector('.nb-drag-ghost'));
+  doc.dispatchEvent(pev('pointerup', 60, 40, { pointerType: 'mouse' }));
+  await sleep(20);
+
   console.log('\n— §4: the phone gets a bottom bar and sheets —');
   const nav = doc.getElementById('nbNav');
   ok('a bottom bar is there', !!nav && doc.body.classList.contains('nb-nav-on'));

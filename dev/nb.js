@@ -982,7 +982,8 @@ function nbCommitMessage(list){
   }
   function nbMoveNote(oldPath, newPath){
     if (!oldPath || !newPath || oldPath === newPath) return false;
-    if (NB.files[newPath]){ toast('یادداشتی با همین نام هست', 'x'); return false; }
+    if (NB.files[newPath] && !NB.files[newPath].deleted){ toast('یادداشتی با همین نام هست', 'x'); return false; }
+    if (NB.files[newPath]) delete NB.files[newPath];     // the placeholder left behind by the move that brought it here
     var f = NB.files[oldPath];
     if (!f) return false;
     var wasNew = !!f.isNew;
@@ -1567,6 +1568,20 @@ function nbCommitMessage(list){
     if (!files.length){ toast('چیزی برای خروجی نیست', 'x'); return; }
     downloadBlob(new Blob([nbZip(files)], { type: 'application/zip' }), (folder ? nbTitle(prefix) : 'دفترچه') + '.zip');
     toast(faNum(files.length) + ' یادداشت در zip', 'download');
+  }
+  /** «ذخیره در دفترچه» with the folder already decided (a drop on a folder). */
+  function nbSaveTabInFolder(tabId, folder){
+    var t = tabs.filter(function(x){ return x.id === tabId; })[0];
+    if (!t) return;
+    if (t.nb){ toast('این تب خودش یادداشت دفترچه است', 'check'); return; }
+    var text = t.text || '';
+    if (!text.trim()){ toast('تب خالی است', 'x'); return; }
+    var title = (text.match(/^\s{0,3}#{1,3}\s+(.+)$/m) || [])[1] || textTitle(text) || 'یادداشت';
+    var path = (folder ? folder.replace(/\/+$/, '') + '/' : '') + nbSlug(title) + '.md';
+    if (NB.files[path] && !NB.files[path].deleted){ toast('در آن پوشه یادداشتی با همین نام هست', 'x'); return; }
+    nbWrite(path, text);
+    nbOpen(path);
+    toast('در دفترچه ذخیره شد: ' + nbTitle(path), 'cloud');
   }
   function nbSaveTabDialog(tabId){
     var t = tabs.filter(function(x){ return x.id === tabId; })[0];
@@ -2972,10 +2987,11 @@ function nbCommitMessage(list){
     if (to === path){ toast('همین حالا در این مجموعه است', 'check'); return; }
     if (NB.files[to] && !NB.files[to].deleted){ toast('در آن مجموعه یادداشتی با همین نام هست', 'x'); return; }
     var was = path;
-    nbMoveNote(path, to);
+    if (!nbMoveNote(path, to)) return '';
     var dir = nbFolder(to);                          // the folder may be new: show it in the tree
     if (dir && NB.paths.indexOf(dir + '/') === -1) NB.paths.push(dir + '/');
     toast('به «' + col.name + '» منتقل شد', 'folder', { label: 'بازگشت', icon: 'undo', run: function(){ nbMoveNote(to, was); } });
+    return to;
   }
   /** The note in its own browser tab (side by side on a big screen). */
   function nbOpenInNewTab(path){
@@ -3253,7 +3269,7 @@ function nbCommitMessage(list){
       if (target.closest('#tabs, .mdbar, .status, #nbMenu')) return;   // those have their own long press
       var t0 = e.touches[0];
       x0 = t0.clientX; y0 = t0.clientY;
-      timer = setTimeout(function(){ timer = 0; nbLongPressAt(x0, y0); }, 450);
+      timer = setTimeout(function(){ timer = 0; if (typeof NBD === 'object' && NBD && NBD.on) return; nbLongPressAt(x0, y0); }, 450);
     }, { passive: true });
     document.addEventListener('touchmove', function(e){
       if (!timer) return;
