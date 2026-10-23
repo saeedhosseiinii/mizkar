@@ -11664,6 +11664,169 @@ var NB_CSS = [
   '/* the panel closes from its right edge, under the top bar\'s button that opens it */',
   '#nb .nb-head .nb-close{ order:-1; flex:none; }',
   '',
+  '/* === M3 (beta2 only): the Android skin — Material 3 colours, shapes and parts ===',
+  '   Inert unless the page is built with <html data-skin="m3"> (dev/beta.py --v2). The colours live on the',
+  '   root so the phone\'s own bar (theme-color) follows them; the parts hang off body.m3 (set by m3.js). */',
+  'html[data-skin="m3"]{',
+  '  color-scheme:light;',
+  '  --bg:#FDF7FF; --surface:#FDF7FF; --surface-2:#F3EDF7; --paper:#FDF7FF; --docbg:#FDF7FF;',
+  '  --soft:#ECE6F0; --code-bg:#F3EDF7; --code-ink:#1D1B20;',
+  '  --ink:#1D1B20; --ink-2:#49454F; --muted:#79747E;',
+  '  --border:#E7E0EC; --border-strong:#CAC4D0;',
+  '  --accent:#6750A4; --accent-2:#7D5260; --accent-ink:#FFFFFF;',
+  '  --m3-pc:#EADDFF; --m3-on-pc:#21005D;            /* primary container */',
+  '  --m3-sc:#E8DEF8; --m3-on-sc:#1D192B;            /* secondary container */',
+  '  --m3-hi:#E6E0E9;                                 /* surface-container-highest (fields) */',
+  '  --m3-inv:#322F35; --m3-on-inv:#F5EFF7;           /* snackbar */',
+  '  --shadow-sheet:0 1px 2px rgba(0,0,0,.1), 0 8px 24px -12px rgba(0,0,0,.25);',
+  '}',
+  'html[data-skin="m3"][data-theme="dark"]{',
+  '  color-scheme:dark;',
+  '  --bg:#141218; --surface:#141218; --surface-2:#211F26; --paper:#141218; --docbg:#141218;',
+  '  --soft:#2B2930; --code-bg:#211F26; --code-ink:#E6E0E9;',
+  '  --ink:#E6E0E9; --ink-2:#CAC5CD; --muted:#938F99;',
+  '  --border:#2B2930; --border-strong:#49454F;',
+  '  --accent:#D0BCFF; --accent-2:#CCC2DC; --accent-ink:#381E72;',
+  '  --m3-pc:#4F378B; --m3-on-pc:#EADDFF;',
+  '  --m3-sc:#4A4458; --m3-on-sc:#E8DEF8;',
+  '  --m3-hi:#36343B;',
+  '  --m3-inv:#E6E0E9; --m3-on-inv:#322F35;',
+  '  --shadow-sheet:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -10px rgba(0,0,0,.5);',
+  '}',
+  '',
+  '/* --- the ground: flat surfaces, no gradients, thin scrollbars --- */',
+  'body.m3.app{ background:var(--bg); }',
+  'body.m3 *{ scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }',
+  'body.m3 ::selection{ background:color-mix(in srgb, var(--accent) 30%, transparent); }',
+  '',
+  '/* --- top app bar --- */',
+  'body.m3 .bar{ background:var(--surface); border-bottom:0; backdrop-filter:none; -webkit-backdrop-filter:none; min-height:64px; }',
+  'body.m3 .bar .ib, body.m3 .ib{ border:0; background:transparent; border-radius:999px; }',
+  'body.m3 .ib:hover{ background:color-mix(in srgb, var(--ink) 8%, transparent); }',
+  'body.m3 .ib:active{ background:color-mix(in srgb, var(--ink) 12%, transparent); }',
+  'body.m3 .brand .logo{ color:var(--accent); }',
+  '',
+  '/* --- tabs: chips, the open one tonal --- */',
+  'body.m3 .tab{ border:0; border-radius:999px; height:36px; background:transparent; color:var(--muted); }',
+  'body.m3 .tab:hover{ background:color-mix(in srgb, var(--ink) 8%, transparent); color:var(--ink); }',
+  'body.m3 .tab[aria-selected="true"]{ background:var(--m3-sc); color:var(--m3-on-sc); font-weight:700; }',
+  'body.m3 .tab .nb-f{ background:color-mix(in srgb, var(--accent) 22%, transparent); }',
+  '',
+  '/* --- buttons --- */',
+  'body.m3 .btn-primary{ border-radius:999px; height:40px; box-shadow:none; border:0; font-weight:700; }',
+  'body.m3 .btn-soft, body.m3 .elbtn{ border:0; border-radius:999px; background:var(--m3-sc); color:var(--m3-on-sc); font-weight:600; }',
+  'body.m3 .btn-soft:hover, body.m3 .elbtn:hover{ background:color-mix(in srgb, var(--m3-on-sc) 10%, var(--m3-sc)); }',
+  'body.m3 .elbtn.xs{ height:30px; padding-inline:12px; }',
+  'body.m3 .hm-link{ font-weight:700; }',
+  '',
+  '/* --- fields: the filled Android text field --- */',
+  'body.m3 .nb-input, body.m3 select.nb-input, body.m3 #nbBody select, body.m3 #nbModalBody select{',
+  '  background:var(--m3-hi); border:0; border-bottom:1px solid var(--muted); border-radius:10px 10px 0 0;',
+  '  color:var(--ink); min-height:40px;',
+  '}',
+  'body.m3 .nb-input:focus{ outline:0; border-bottom:2px solid var(--accent); }',
+  'body.m3 .nb-datebtn{ background:var(--m3-hi); border:0; border-bottom:1px solid var(--muted); border-radius:10px 10px 0 0; }',
+  'body.m3 input[type="checkbox"], body.m3 input[type="radio"]{ accent-color:var(--accent); }',
+  '',
+  '/* --- the switch, drawn like Android\'s --- */',
+  'body.m3 .sw-ui{ width:52px; height:32px; margin-top:0; background:var(--m3-hi); border:2px solid var(--muted); box-sizing:border-box; }',
+  'body.m3 .sw-ui::after{ width:16px; height:16px; top:6px; right:6px; background:var(--muted); box-shadow:none; transition:transform .18s, width .18s, height .18s, top .18s, background .18s; }',
+  'body.m3 .sw input:checked+.sw-ui{ background:var(--accent); border-color:var(--accent); }',
+  'body.m3 .sw input:checked+.sw-ui::after{ width:24px; height:24px; top:2px; transform:translateX(-18px); background:var(--accent-ink); }',
+  '',
+  '/* --- the notebook panel: a Material card (desktop), flat page (phone) --- */',
+  '@media (min-width:1100px){',
+  '  body.m3 #nb{ border:0; border-radius:16px; background:var(--surface-2); box-shadow:none; }',
+  '}',
+  'body.m3 #nb .nb-head{ background:transparent; border-bottom:0; }',
+  'body.m3 #nb .nb-head .nb-tab.on{ background:var(--m3-sc); color:var(--m3-on-sc); }',
+  'body.m3 .nb-head-sync{ border:0; background:var(--m3-hi); height:32px; }',
+  'body.m3 .nb-row{ border-radius:999px; min-height:44px; }',
+  'body.m3 .nb-row:hover, body.m3 .nb-hist-row:hover, body.m3 .hm-note:hover{ background:color-mix(in srgb, var(--ink) 8%, transparent); }',
+  'body.m3 .nb-row.active, body.m3 #nbBody .nb-note-row.active{ background:var(--m3-sc); color:var(--m3-on-sc); }',
+  'body.m3 .nb-tree-q .nb-input{ border-radius:999px; border-bottom:0; background:var(--m3-hi); padding-inline:16px; }',
+  'body.m3 .nb-empty-box{ border:0; background:var(--surface-2); border-radius:16px; }',
+  '',
+  '/* --- bottom navigation (phone): taller, pill behind the active icon, label always --- */',
+  'body.m3.nb-nav-on{ --nb-nav-h:64px; }',
+  'body.m3 #nbNav{ background:var(--surface-2); border-top:0; }',
+  'body.m3 .nb-nav-b{ font-size:.7rem; gap:4px; color:var(--ink-2); }',
+  'body.m3 .nb-nav-b .i{ width:24px; height:24px; padding:3px 16px; box-sizing:content-box; border-radius:999px; transition:background .15s; }',
+  'body.m3 .nb-nav-b[aria-pressed="true"]{ color:var(--ink); font-weight:800; }',
+  'body.m3 .nb-nav-b[aria-pressed="true"] .i{ background:var(--m3-sc); color:var(--m3-on-sc); padding:3px 16px; width:24px; }',
+  '',
+  '/* --- FAB (phone): bottom end, above the bar --- */',
+  '#m3Fab{ display:none; }',
+  'body.m3[data-nb-size="phone"] #m3Fab{',
+  '  display:flex; position:fixed; z-index:calc(var(--z-nav) + 1);',
+  '  left:16px; bottom:calc(var(--nb-nav-h, 64px) + 16px + env(safe-area-inset-bottom, 0px));',
+  '  width:56px; height:56px; border-radius:16px; border:0; cursor:pointer;',
+  '  align-items:center; justify-content:center; background:var(--m3-pc); color:var(--m3-on-pc);',
+  '  box-shadow:0 4px 8px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.22); transition:transform .15s;',
+  '}',
+  'body.m3[data-nb-size="phone"] #m3Fab:active{ transform:scale(.94); }',
+  '#m3Fab .i{ width:24px; height:24px; }',
+  'body.m3.ip-tint #m3Fab, body.m3.readmode #m3Fab, body.m3:has(textarea#input:focus) #m3Fab,',
+  'body.m3:has(#deck:not([hidden])) #m3Fab{ display:none !important; }',
+  '',
+  '/* --- menus and sheets --- */',
+  'body.m3 #nbMenu{ border:0; border-radius:16px; background:var(--surface-2); box-shadow:var(--shadow-sheet); padding:8px 0; }',
+  'body.m3 #nbMenu .mi{ min-height:48px; border-radius:0; padding-inline:16px; font-size:.9rem; }',
+  'body.m3 #nbMenu .mi:hover{ background:color-mix(in srgb, var(--ink) 8%, transparent); }',
+  'body.m3 .mi-sep{ background:var(--border-strong); opacity:.5; }',
+  '@media (max-width:760px){',
+  '  body.m3 #nbMenu{ border-radius:28px 28px 0 0; padding-top:18px; }',
+  '  body.m3 #nbMenu::before{',
+  '    content:""; position:absolute; top:8px; left:50%; transform:translateX(-50%);',
+  '    width:32px; height:4px; border-radius:99px; background:var(--border-strong);',
+  '  }',
+  '}',
+  '',
+  '/* --- dialogs: the Android dialog --- */',
+  'body.m3 .modal-box, body.m3 .nb-mini-box{ border:0; border-radius:28px; background:var(--surface-2); box-shadow:var(--shadow-sheet); }',
+  '@media (max-width:760px){ body.m3 #nbMini .modal-box, body.m3 #nbMini2 .modal-box{ border-radius:28px 28px 0 0; } }',
+  'body.m3 .modal-head{ background:transparent; border-bottom:0; }',
+  'body.m3 #nbModal .nb-set-box{ border-radius:28px; }',
+  'body.m3 .nb-set-nav{ background:transparent; border:0; }',
+  'body.m3 .nb-set-item{ border-radius:999px; min-height:56px; }',
+  'body.m3 .nb-set-item[aria-current="page"]{ background:var(--m3-sc); }',
+  'body.m3 .nb-set-item[aria-current="page"] .i, body.m3 .nb-set-item[aria-current="page"] b{ color:var(--m3-on-sc); }',
+  '',
+  '/* --- the toast is a snackbar --- */',
+  'body.m3 .toast{',
+  '  background:var(--m3-inv); color:var(--m3-on-inv); border-radius:8px; font-weight:500;',
+  '  padding:12px 16px; min-height:48px; box-shadow:0 3px 8px rgba(0,0,0,.3); max-width:calc(100vw - 32px);',
+  '}',
+  '@media (max-width:760px){ body.m3 .toast{ width:calc(100vw - 32px); justify-content:flex-start; } }',
+  '',
+  '/* --- the page itself --- */',
+  'body.m3 .pane{ border:0; background:var(--surface-2); box-shadow:none; border-radius:16px; }',
+  '@media (max-width:760px){ body.m3.nb-nav-on .pane{ border-radius:0; background:var(--surface); } }',
+  'body.m3 .pane-head{ background:transparent; border-bottom:0; }',
+  'body.m3 .status{ background:var(--surface-2); border-top:0; }',
+  'body.m3 #nbTop{ border-bottom:0; background:var(--surface); }',
+  'body.m3 .hm-grid section{ border:0; border-radius:16px; background:var(--surface-2); }',
+  'body.m3 .hm-head h1{ font-weight:600; font-size:1.7rem; }',
+  'body.m3 .hm-actions .btn-soft{ border-radius:999px; }',
+  'body.m3 .fmprops{ background:var(--surface-2); border:0; border-radius:12px; }',
+  'body.m3 .nb-pull-hint{ background:var(--m3-inv); color:var(--m3-on-inv); }',
+  'body.m3 .nb-drag-ghost{ background:var(--m3-inv); color:var(--m3-on-inv); border-radius:12px; }',
+  'body.m3 .nb-share-opt, body.m3 .nb-colrow{ border-radius:16px; }',
+  'body.m3 .nb-share-opt:has(input:checked){ border-color:transparent; background:var(--m3-sc); }',
+  '',
+  '/* --- the ripple --- */',
+  'body.m3 .ib, body.m3 .btn-soft, body.m3 .btn-primary, body.m3 .elbtn, body.m3 .mi, body.m3 .nb-row,',
+  'body.m3 .nb-nav-b, body.m3 .tab, body.m3 .hm-note, body.m3 .nb-set-item, body.m3 .nb-tab, body.m3 #m3Fab{',
+  '  position:relative; overflow:hidden;',
+  '}',
+  '.m3-ripple{',
+  '  position:absolute; border-radius:50%; pointer-events:none; transform:scale(0);',
+  '  background:color-mix(in srgb, currentColor 22%, transparent);',
+  '  animation:m3-ripple .5s ease-out forwards;',
+  '}',
+  '@keyframes m3-ripple{ to{ transform:scale(2.6); opacity:0; } }',
+  '/* === /M3 === */',
+  '',
 ].join('\n');
 
 /* === NOTEBOOK (Git) — Mizkar ===
@@ -17319,6 +17482,44 @@ function nbCommitMessage(list){
   window.nbDragFiles = nbdDropFiles;
   window.nbDrag = { note: nbdDropNoteIn, folder: nbdDropFolder, taskDay: nbdDropTaskOnDay, files: nbdDropFiles, link: nbdDropLink, hit: nbdHit, cancel: nbdEnd };
   /* === /DRAG === */
+
+  /* === M3 (beta2 only): the Android behaviours — the FAB and the ripple — Mizkar ===
+     Does nothing unless the page was built with <html data-skin="m3"> (dev/beta.py --v2). */
+  (function(){
+    if ((document.documentElement.dataset.skin || '') !== 'm3') return;
+    body.classList.add('m3');
+
+    /* the FAB: the one «تازه» button of an Android app, bottom end on the phone */
+    var fab = document.createElement('button');
+    fab.id = 'm3Fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', 'تازه');
+    fab.setAttribute('aria-haspopup', 'menu');
+    fab.innerHTML = icon('plus');
+    document.body.appendChild(fab);
+    fab.addEventListener('click', function(e){
+      e.stopPropagation();
+      var r = fab.getBoundingClientRect();
+      nbMenu(r.left, Math.max(8, r.top - 300), nbPlusItems());
+    });
+
+    /* the ripple: a touch answers where it lands */
+    var RIPPLY = '.ib, .btn-soft, .btn-primary, .elbtn, .mi, .nb-row, .nb-nav-b, .tab, .hm-note, .nb-set-item, .nb-tab, #m3Fab';
+    document.addEventListener('pointerdown', function(e){
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      var el = e.target.closest && e.target.closest(RIPPLY);
+      if (!el || el.disabled) return;
+      var r = el.getBoundingClientRect(), d = Math.max(r.width, r.height);
+      var dot = document.createElement('span');
+      dot.className = 'm3-ripple';
+      dot.style.width = dot.style.height = d + 'px';
+      dot.style.left = (e.clientX - r.left - d / 2) + 'px';
+      dot.style.top = (e.clientY - r.top - d / 2) + 'px';
+      el.appendChild(dot);
+      setTimeout(function(){ dot.remove(); }, 520);
+    }, { passive: true });
+  })();
+  /* === /M3 === */
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;

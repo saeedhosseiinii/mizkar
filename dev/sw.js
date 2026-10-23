@@ -53,6 +53,8 @@ self.addEventListener('fetch', function(event){
     return;
   }
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  // the betas (/beta/, /beta2/) have their own workers and caches: never answer for them from here
+  if (/\/beta2?\//.test(new URL(request.url).pathname) && !/\/beta2?\//.test(self.location.pathname)) return;
   // the update check must always see the live version
   if (/\/version\.json$/.test(new URL(request.url).pathname)) return;
   if (request.mode === 'navigate'){

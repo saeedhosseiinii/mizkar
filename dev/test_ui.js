@@ -7,6 +7,9 @@ const { JSDOM } = require('jsdom');
 
 const HTML = process.env.MIZKAR_HTML || require('path').join(__dirname, '..', 'index.html');
 let html = fs.readFileSync(HTML, 'utf8');
+// a beta build renames the storage keys and may wear the Android skin; the same suite covers them
+const KEYPFX = html.includes("'mz2-") ? 'mz2-' : html.includes("'mzb-") ? 'mzb-' : 'fs2-';
+const IS_M3 = html.slice(0, 300).includes('data-skin="m3"');
 // strip the two big vendored libraries and the CDN tag: the notebook needs none of them
 html = html.replace(/<script id="mermaidLib">[\s\S]*?<\/script>/, '<script id="mermaidLib"></script>');
 html = html.replace(/<script id="katexLib">[\s\S]*?<\/script>/, '<script id="katexLib"></script>');
@@ -474,7 +477,7 @@ async function until(fn, ms = 3000) {
   await sleep(1700);                                 // the typing save
   win.dispatchEvent(new win.Event('pagehide'));       // the app saves its state and remembers the text here
   await sleep(50);
-  const savedTabs = JSON.parse(win.localStorage.getItem('fs2-state') || '{}').tabs || [];
+  const savedTabs = JSON.parse(win.localStorage.getItem(KEYPFX + 'state') || '{}').tabs || [];
   ok('its tab is saved as secret, without text', savedTabs.some((t) => t.nb === 'ایده ها/راز.md' && t.secret && !t.text), savedTabs.map((t) => [t.nb, t.secret, (t.text || '').length]));
   ok('IndexedDB and browser storage hold no plaintext of it', !/متن خصوصی من|خط تازهٔ محرمانه/.test(allStored()));
   ok('the unsent text is kept, encrypted', /localCipher/.test(allStored()));
@@ -1417,9 +1420,9 @@ async function until(fn, ms = 3000) {
   nbBtn.click();
   eq('the notebook button opens the panel', doc.body.classList.contains('nb-open'), true);
   eq('and shows it is pressed', nbBtn.getAttribute('aria-pressed'), 'true');
-  eq('the state is remembered', win.localStorage.getItem('fs2-nbopen'), '1');
+  eq('the state is remembered', win.localStorage.getItem(KEYPFX + 'nbopen'), '1');
   nb.ui.sidebar(false);
-  eq('closing remembers that too', win.localStorage.getItem('fs2-nbopen'), '0');
+  eq('closing remembers that too', win.localStorage.getItem(KEYPFX + 'nbopen'), '0');
 
   console.log('\n— a phone: a note is a page with its own top bar —');
   const wideW2 = win.innerWidth;
@@ -1761,6 +1764,24 @@ async function until(fn, ms = 3000) {
   await sleep(40);
   ok('a temp tab gets its own head back', !ph.dataset.crumbs && !ph.querySelector('.nb-crumb'));
   nb.ui.sidebar(false);
+
+  if (IS_M3){
+    console.log('\n— نسخهٔ ۲: پوستهٔ اندرویدی (M3) —');
+    ok('the skin is awake', doc.documentElement.dataset.skin === 'm3' && doc.body.classList.contains('m3'));
+    ok('the M3 colours replace the app palette', /html\[data-skin="m3"\]\[data-theme="dark"\]/.test(doc.getElementById('appStyle').textContent));
+    const fab = doc.getElementById('m3Fab');
+    ok('the FAB is there and opens «تازه»', !!fab && fab.getAttribute('aria-haspopup') === 'menu');
+    fab.click();
+    await sleep(20);
+    ok('with the new-note actions', [...doc.querySelectorAll('#nbMenu .mi')].some((b) => b.textContent.indexOf('یادداشت جدید') !== -1));
+    doc.getElementById('nbMenu').hidden = true;
+    const navBtn = doc.querySelector('#nbNav .nb-nav-b');
+    const pdown = new win.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 });
+    navBtn.dispatchEvent(pdown);
+    ok('a press answers with a ripple', !!navBtn.querySelector('.m3-ripple'));
+  } else {
+    ok('the Android skin stays asleep outside beta2', !doc.body.classList.contains('m3') && !doc.getElementById('m3Fab'));
+  }
 
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
