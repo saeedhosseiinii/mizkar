@@ -1,0 +1,63 @@
+/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */
+body.ui-calm #fmtChips{display:none;}
+body.ui-calm #viewSeg{display:none;}
+body.ui-calm .bar-end > [data-action="open"],
+body.ui-calm .bar-end > [data-action="theme"],
+body.ui-calm .bar-end > #btnDir,
+body.ui-calm .bar-end > [data-action="toolbox"],
+body.ui-calm .bar-end > [data-action="net-calc"],
+body.ui-calm .bar-end > [data-action="compare"],
+body.ui-calm .bar-end > #btnInstall{display:none !important;}
+body.ui-calm .bar{justify-content:space-between;}
+body.ui-calm .bar-end{margin-inline-start:auto;}
+.ui-edit,.ui-tools{width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;font-size:.8rem;font-weight:600;}
+.ui-edit[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}
+.ui-tools .chev{width:14px;height:14px;opacity:.7;}
+body.ui-calm .pane.out .ph-actions > [data-action^="zoom"],
+body.ui-calm .pane.out .ph-actions > #zLvl,
+body.ui-calm .pane.out .ph-actions > [data-action="fa-edit"],
+body.ui-calm .pane.out .ph-actions > [data-action="convert"],
+body.ui-calm .pane.out .ph-actions > #btnWidth,
+body.ui-calm .pane.out .ph-actions > #btnHand,
+body.ui-calm .pane.out .ph-actions > [data-action="present"],
+body.ui-calm .pane.out .ph-actions > [data-action="read"],
+body.ui-calm .pane.out .ph-actions > [data-action="fs"],
+body.ui-calm .pane.out .ph-actions > .sep{display:none !important;}
+.ui-dots{font-size:1.15rem;line-height:1;font-weight:800;letter-spacing:1px;}
+.ui-fmt{cursor:pointer;border-radius:7px;padding:2px 8px;border:1px solid var(--border);}
+.ui-fmt::after{content:" ▾";opacity:.6;}
+.ui-fmt:hover{background:var(--surface-2);color:var(--ink);}
+@media(max-width:700px){.ui-edit span,.ui-tools span{display:none;}.ui-edit,.ui-tools{padding:0;width:36px;justify-content:center;}}
+/* --- «امروز» and tasks (home.js) --- */
+#zoomWrap.is-empty .hm{max-width:880px;margin:0 auto;}
+.hm{padding:8px 4px 24px;}
+.hm-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.hm-head h1{margin:0;font-size:1.9rem;background:none;padding:0;}
+.hm-head span{color:var(--muted);font-size:.95rem;}
+.hm-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+.hm-actions .btn-soft{height:36px;font-size:.84rem;}
+.hm-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+.hm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+.hm-grid section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;}
+.hm-grid h3{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:1rem;}
+.hm-grid h3 .i{color:var(--accent);}
+.hm-group{margin-bottom:10px;}
+.hm-group h5{margin:6px 0;font-size:.78rem;color:var(--muted);font-weight:800;}
+.hm-group h5 b{color:var(--accent);margin-inline-start:4px;}
+.hm-task{display:flex;align-items:flex-start;gap:8px;padding:5px 2px;border-bottom:1px dashed var(--border);flex-wrap:wrap;}
+.hm-task input{margin-top:5px;accent-color:var(--accent);flex:none;}
+.hm-task-text{flex:1;min-width:0;border:0;background:none;padding:0;text-align:start;font:inherit;font-size:.9rem;color:var(--ink);cursor:pointer;}
+.hm-task-text:hover{color:var(--accent);}
+.hm-task.done .hm-task-text{text-decoration:line-through;color:var(--muted);}
+.hm-task small{flex-basis:100%;padding-inline-start:24px;color:var(--muted);font-size:.72rem;}
+.hm-due{font-weight:700;color:var(--ink-2);}
+.hm-due.late{color:#dc2626;}
+.hm-more,.hm-empty{color:var(--muted);font-size:.8rem;}
+.hm-link{border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;font-size:.82rem;padding:4px 0;}
+.hm-note{display:block;width:100%;text-align:start;border:0;background:none;padding:7px 8px;border-radius:10px;cursor:pointer;color:var(--ink);font:inherit;}
+.hm-note:hover{background:var(--surface-2);}
+.hm-note b{display:block;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hm-note small{display:block;color:var(--muted);font-size:.72rem;}
+.hm-hint{margin-top:18px;color:var(--muted);font-size:.8rem;text-align:center;}
+#nbBody .hm-task{padding:6px 4px;}
+#nbBody .hm-group h5{padding:0 4px;}

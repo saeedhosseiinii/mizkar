@@ -111,6 +111,19 @@ PATCHES = [
         "    if ((tab && tab.secret) || (curTab && curTab.secret && text === ta.value) || tabs.some(function(x){ return x.secret && x.text === text; })) return;",
         "recent texts: no secret text",
     ),
+    # «امروز» in place of the empty page once the notebook is in use (dev/home.js)
+    (
+        "    zoomWrap.innerHTML = html || EMPTY_HTML;\n",
+        "    zoomWrap.innerHTML = html || (typeof nbHomeHtml === 'function' && nbHomeHtml()) || EMPTY_HTML;\n",
+        "home page",
+    ),
+    # notes in the command palette: the quick way to jump to any of them
+    (
+        "      list.push({ label: 'تب: ' + tabLabel(t), icon: 'file', kw: 'tab switch', run: function(){ switchTab(t.id); } });\n    });\n",
+        "      list.push({ label: 'تب: ' + tabLabel(t), icon: 'file', kw: 'tab switch', run: function(){ switchTab(t.id); } });\n    });\n"
+        "    if (typeof nbPaletteItems === 'function') list.push.apply(list, nbPaletteItems());\n",
+        "palette notes",
+    ),
     # every tab switch has to fix up secret notes and read-only ones
     (
         "    body.classList.remove('drawer-open');\n    ta.scrollTop = 0;\n    out.scrollTop = 0;\n    setFormat(t.fmt || 'auto');\n    saveState();\n  }",
@@ -209,8 +222,10 @@ def main():
     html = replace_once(html, '<button id="btnExitRead"', m['sidebar'] + '<button id="btnExitRead"', 'sidebar + dialogs')
     print('inserted markup: icon, toolbar, status, sidebar')
 
-    module = js_string_array((DEV / 'nb.css').read_text(encoding='utf-8').split('\n')) + '\n' + \
-             (DEV / 'nb.js').read_text(encoding='utf-8')
+    css = (DEV / 'nb.css').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.css').read_text(encoding='utf-8')
+    module = js_string_array(css.split('\n')) + '\n' + (DEV / 'nb.js').read_text(encoding='utf-8')
+    # the home page and the calmer layout share the notebook's scope (dev/home.js, dev/ui.js)
+    module = module.replace('  /* --- init --- */', (DEV / 'home.js').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.js').read_text(encoding='utf-8') + '\n  /* --- init --- */', 1)
     html = replace_once(html, '  /* --- init --- */', module + '\n  /* --- init --- */', 'init marker')
     print(f'inserted the notebook module: {len(module)} chars')
 

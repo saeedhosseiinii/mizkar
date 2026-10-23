@@ -161,6 +161,7 @@ const dom = new JSDOM(html, {
     win.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     win.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
     win.scrollTo = () => {};
+    win.HTMLElement.prototype.scrollIntoView = function () {};   // jsdom has no layout
     win.URL.createObjectURL = () => 'blob:test';
     win.URL.revokeObjectURL = () => {};
     win.fetch = (url, init) => {
@@ -485,6 +486,19 @@ async function until(fn, ms = 3000) {
   ok('the page says so', doc.body.classList.contains('nb-ro'));
   nb.ui.open('ایده ها/جستجو.md');
   ok('a normal note is editable again', doc.getElementById('input').readOnly === false);
+  // switching by the tab bar (not through the notebook) has to lock and unlock the editor too
+  nb.ui.open('Claude Sessions/2026-10-23 گفتگو.md');
+  doc.querySelector('[data-action="tab-new"]').click();
+  await sleep(30);
+  ok('a new temp tab after a read-only note is editable', doc.getElementById('input').readOnly === false);
+  const roTab = [...doc.querySelectorAll('#tabsList .tab')].find((t) => (t.querySelector('.tab-t') || {}).textContent === '2026-10-23 گفتگو');
+  roTab.click();
+  await sleep(30);
+  ok('clicking the read-only note in the tab bar locks the editor', doc.getElementById('input').readOnly === true);
+  const tempTab = [...doc.querySelectorAll('#tabsList .tab')].find((t) => !t.classList.contains('nb-tab'));
+  tempTab.click();
+  await sleep(30);
+  ok('and a temp tab clicked after it is editable again', doc.getElementById('input').readOnly === false);
 
   console.log('\n— more than one notebook —');
   nb.ui.cfg({ repo: 'me/notes', token: 'fake-token', provider: 'github' });
@@ -497,6 +511,61 @@ async function until(fn, ms = 3000) {
   await until(() => Object.keys(nb.ui.files()).length === personal, 3000);
   eq('switching back brings the first notebook notes', Object.keys(nb.ui.files()).length, personal);
   ok('the profile was kept', nb.ui.profiles().some((p) => p.name === 'شخصی' && p.repo === 'me/notes'), nb.ui.profiles());
+
+  console.log('\n— the calm layout —');
+  ok('the page is in the calm layout', doc.body.classList.contains('ui-calm'));
+  ok('one «ویرایش» switch stands in for the three view buttons', !!doc.getElementById('uiEdit'));
+  const viewBefore = doc.getElementById('work').getAttribute('data-view');
+  doc.getElementById('uiEdit').click();
+  const viewAfter = doc.getElementById('work').getAttribute('data-view');
+  ok('the switch moves between reading and editing', viewBefore !== viewAfter && (viewBefore === 'preview' || viewAfter === 'preview'), [viewBefore, viewAfter]);
+  ok('and says which one comes next', /خواندن|ویرایش/.test(doc.getElementById('uiEdit').textContent));
+  doc.getElementById('uiEdit').click();
+  doc.getElementById('uiTools').click();
+  const toolItems = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent);
+  ok('«ابزارها» lists the tools', ['جعبه‌ابزار', 'ماشین‌حساب شبکه', 'تبدیل زمان', 'مقایسه', 'باز کردن فایل'].every((w) => toolItems.some((t) => t.includes(w))), toolItems);
+  doc.querySelector('#nbMenu .mi').click();
+  doc.querySelector('.pane.out .ui-more').click();
+  const moreItems = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent);
+  ok('the preview «⋯» holds zoom, width, reading mode and the rest', ['بزرگ‌نمایی', 'عرض صفحه', 'حالت مطالعه', 'تمام‌صفحه'].every((w) => moreItems.some((t) => t.includes(w))), moreItems);
+  doc.getElementById('nbMenu').hidden = true;
+  doc.getElementById('stFmt').click();
+  const fmtItems = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent);
+  ok('the format label opens the list of formats', fmtItems.some((t) => t.includes('تشخیص خودکار')) && fmtItems.some((t) => t.includes('JSON')), fmtItems.length);
+  doc.getElementById('nbMenu').hidden = true;
+
+  console.log('\n— tasks and «امروز» —');
+  const now0 = new Date(), jt = nb.pure.nbGToJ(now0.getFullYear(), now0.getMonth() + 1, now0.getDate());
+  const todayJ = jt.jy + '-' + String(jt.jm).padStart(2, '0') + '-' + String(jt.jd).padStart(2, '0');
+  nb.ui.write('کارها/فهرست.md', '# فهرست کارها\n- [ ] تماس با پشتیبانی 📅 ' + todayJ + '\n- [ ] کار عقب افتاده 📅 1400-01-01\n- [x] کار تمام شده\n- [ ] کار بی تاریخ\n');
+  nb.ui.section('tasks');
+  await sleep(20);
+  const taskTexts = [...doc.querySelectorAll('#nbBody .hm-task-text')].map((b) => b.textContent);
+  ok('«کارها» gathers the open tasks of the notes', ['تماس با پشتیبانی', 'کار عقب افتاده', 'کار بی تاریخ'].every((w) => taskTexts.includes(w)) && !taskTexts.includes('کار تمام شده'), taskTexts);
+  const groups = [...doc.querySelectorAll('#nbBody .hm-group h5')].map((h) => h.textContent);
+  ok('grouped by due date: late, today, no date', groups.some((g) => g.includes('عقب افتاده')) && groups.some((g) => g.includes('امروز')) && groups.some((g) => g.includes('بدون تاریخ')), groups);
+  ok('a Shamsi due date is read', !!doc.querySelector('#nbBody .hm-due'));
+  const box = [...doc.querySelectorAll('#nbBody .hm-task')].find((r) => r.textContent.includes('تماس با پشتیبانی')).querySelector('input');
+  box.click();
+  await sleep(20);
+  ok('ticking it writes «- [x]» into the note', /- \[x\] تماس با پشتیبانی/.test(nb.ui.files()['کارها/فهرست.md'].text), nb.ui.files()['کارها/فهرست.md'].text);
+  ok('and it is a pending change', nb.ui.files()['کارها/فهرست.md'].dirty === true);
+  doc.querySelector('[data-action="tab-new"]').click();
+  await sleep(50);
+  ok('an empty tab shows «امروز»', !!doc.querySelector('#zoomWrap .hm') && /امروز/.test(doc.querySelector('#zoomWrap .hm-head').textContent));
+  ok('with the late task on it', doc.querySelector('#zoomWrap .hm').textContent.includes('کار عقب افتاده'));
+  ok('and the recent notes', [...doc.querySelectorAll('#zoomWrap .hm-note b')].some((b) => b.textContent === 'فهرست'));
+  [...doc.querySelectorAll('#zoomWrap .hm-note')].find((b) => b.textContent.includes('فهرست')).click();
+  await sleep(30);
+  ok('a recent note opens from there', doc.getElementById('input').value.startsWith('# فهرست کارها'));
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true }));
+  await sleep(20);
+  const palIn = doc.getElementById('palInput');
+  palIn.value = 'فهرست';
+  palIn.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(20);
+  ok('Ctrl+K finds notes by name', [...doc.querySelectorAll('#palList *')].some((el) => /یادداشت: فهرست/.test(el.textContent)));
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
 
   console.log('\n— the token can be locked —');
   await until(() => !nb.ui.state().busy, 4000);

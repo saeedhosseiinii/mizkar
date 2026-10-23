@@ -8271,7 +8271,7 @@ if (typeof document !== 'undefined'){
       html = jsonBar() + (treeData !== undefined ? '<div class="jq-meta">' + jq.meta + '</div><div class="jtree" dir="ltr"></div>' : '<div class="jq-out">' + (jq.html || html) + '</div>');
     }
     zoomWrap.classList.toggle('is-empty', !html);
-    zoomWrap.innerHTML = html || EMPTY_HTML;
+    zoomWrap.innerHTML = html || (typeof nbHomeHtml === 'function' && nbHomeHtml()) || EMPTY_HTML;
     if (treeData !== undefined) jtRender(zoomWrap.querySelector('.jtree'), [{ key: null, val: treeData, path: '', depth: 0 }]);
     updateStatus(value);
     decorateCode();
@@ -10384,6 +10384,7 @@ if (typeof document !== 'undefined'){
       if (t.id === activeTab) return;
       list.push({ label: 'تب: ' + tabLabel(t), icon: 'file', kw: 'tab switch', run: function(){ switchTab(t.id); } });
     });
+    if (typeof nbPaletteItems === 'function') list.push.apply(list, nbPaletteItems());
     historyLoad().forEach(function(h, k){
       if (h.t === ta.value) return;
       list.push({ label: 'متن اخیر: ' + h.title, icon: 'clock', kw: 'history recent', run: function(){ openHistoryItem(k); } });
@@ -11229,6 +11230,70 @@ var NB_CSS = [
   '  .nb-sug{ max-height: 34vh; }',
   '}',
   '@keyframes nb-sheet{ from{ transform: translateY(14px); opacity: .6; } to{ transform: none; opacity: 1; } }',
+  '',
+  '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
+  'body.ui-calm #fmtChips{display:none;}',
+  'body.ui-calm #viewSeg{display:none;}',
+  'body.ui-calm .bar-end > [data-action="open"],',
+  'body.ui-calm .bar-end > [data-action="theme"],',
+  'body.ui-calm .bar-end > #btnDir,',
+  'body.ui-calm .bar-end > [data-action="toolbox"],',
+  'body.ui-calm .bar-end > [data-action="net-calc"],',
+  'body.ui-calm .bar-end > [data-action="compare"],',
+  'body.ui-calm .bar-end > #btnInstall{display:none !important;}',
+  'body.ui-calm .bar{justify-content:space-between;}',
+  'body.ui-calm .bar-end{margin-inline-start:auto;}',
+  '.ui-edit,.ui-tools{width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;font-size:.8rem;font-weight:600;}',
+  '.ui-edit[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}',
+  '.ui-tools .chev{width:14px;height:14px;opacity:.7;}',
+  'body.ui-calm .pane.out .ph-actions > [data-action^="zoom"],',
+  'body.ui-calm .pane.out .ph-actions > #zLvl,',
+  'body.ui-calm .pane.out .ph-actions > [data-action="fa-edit"],',
+  'body.ui-calm .pane.out .ph-actions > [data-action="convert"],',
+  'body.ui-calm .pane.out .ph-actions > #btnWidth,',
+  'body.ui-calm .pane.out .ph-actions > #btnHand,',
+  'body.ui-calm .pane.out .ph-actions > [data-action="present"],',
+  'body.ui-calm .pane.out .ph-actions > [data-action="read"],',
+  'body.ui-calm .pane.out .ph-actions > [data-action="fs"],',
+  'body.ui-calm .pane.out .ph-actions > .sep{display:none !important;}',
+  '.ui-dots{font-size:1.15rem;line-height:1;font-weight:800;letter-spacing:1px;}',
+  '.ui-fmt{cursor:pointer;border-radius:7px;padding:2px 8px;border:1px solid var(--border);}',
+  '.ui-fmt::after{content:" ▾";opacity:.6;}',
+  '.ui-fmt:hover{background:var(--surface-2);color:var(--ink);}',
+  '@media(max-width:700px){.ui-edit span,.ui-tools span{display:none;}.ui-edit,.ui-tools{padding:0;width:36px;justify-content:center;}}',
+  '/* --- «امروز» and tasks (home.js) --- */',
+  '#zoomWrap.is-empty .hm{max-width:880px;margin:0 auto;}',
+  '.hm{padding:8px 4px 24px;}',
+  '.hm-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px;}',
+  '.hm-head h1{margin:0;font-size:1.9rem;background:none;padding:0;}',
+  '.hm-head span{color:var(--muted);font-size:.95rem;}',
+  '.hm-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}',
+  '.hm-actions .btn-soft{height:36px;font-size:.84rem;}',
+  '.hm-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}',
+  '.hm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}',
+  '.hm-grid section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;}',
+  '.hm-grid h3{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:1rem;}',
+  '.hm-grid h3 .i{color:var(--accent);}',
+  '.hm-group{margin-bottom:10px;}',
+  '.hm-group h5{margin:6px 0;font-size:.78rem;color:var(--muted);font-weight:800;}',
+  '.hm-group h5 b{color:var(--accent);margin-inline-start:4px;}',
+  '.hm-task{display:flex;align-items:flex-start;gap:8px;padding:5px 2px;border-bottom:1px dashed var(--border);flex-wrap:wrap;}',
+  '.hm-task input{margin-top:5px;accent-color:var(--accent);flex:none;}',
+  '.hm-task-text{flex:1;min-width:0;border:0;background:none;padding:0;text-align:start;font:inherit;font-size:.9rem;color:var(--ink);cursor:pointer;}',
+  '.hm-task-text:hover{color:var(--accent);}',
+  '.hm-task.done .hm-task-text{text-decoration:line-through;color:var(--muted);}',
+  '.hm-task small{flex-basis:100%;padding-inline-start:24px;color:var(--muted);font-size:.72rem;}',
+  '.hm-due{font-weight:700;color:var(--ink-2);}',
+  '.hm-due.late{color:#dc2626;}',
+  '.hm-more,.hm-empty{color:var(--muted);font-size:.8rem;}',
+  '.hm-link{border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;font-size:.82rem;padding:4px 0;}',
+  '.hm-note{display:block;width:100%;text-align:start;border:0;background:none;padding:7px 8px;border-radius:10px;cursor:pointer;color:var(--ink);font:inherit;}',
+  '.hm-note:hover{background:var(--surface-2);}',
+  '.hm-note b{display:block;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+  '.hm-note small{display:block;color:var(--muted);font-size:.72rem;}',
+  '.hm-hint{margin-top:18px;color:var(--muted);font-size:.8rem;text-align:center;}',
+  '#nbBody .hm-task{padding:6px 4px;}',
+  '#nbBody .hm-group h5{padding:0 4px;}',
   '',
 ].join('\n');
 
@@ -12482,6 +12547,7 @@ function nbCommitMessage(list){
       + nbTabBtn('temps', 'file', 'موقت', tabs.length)
       + nbTabBtn('search', 'search', 'جستجو', 0)
       + nbTabBtn('cal', 'clock', 'تقویم', 0)
+      + nbTabBtn('tasks', 'check', 'کارها', typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0)
       + nbTabBtn('tags', 'hash', 'برچسب', 0)
       + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
       + '</div><div class="nb-list" id="nbList">';
@@ -12518,6 +12584,8 @@ function nbCommitMessage(list){
         + '<div class="nb-res" id="nbRes">' + nbSearchHtml() + '</div></div>';
     } else if (NB.section === 'cal'){
       html += nbCalHtml();
+    } else if (NB.section === 'tasks'){
+      html += nbTasksHtml();
     } else if (NB.section === 'tags'){
       var tags = nbTagCounts();
       html += tags.length ? '<div class="nb-tags">' + tags.map(function(x){
@@ -13838,9 +13906,278 @@ function nbCommitMessage(list){
     nbKb();
   }
 
+  /* === HOME: «امروز», tasks, recent notes, notes in the palette — Mizkar === */
+  var HOME_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+  /** A due date written in a task: 📅 1405-08-05 (Shamsi) or 📅 2026-10-27, also «due: …». */
+  var HOME_DUE_RE = /(?:📅|⏳|\bdue:)\s*([0-9۰-۹]{4})[-\/.]([0-9۰-۹]{1,2})[-\/.]([0-9۰-۹]{1,2})/;
+  var HOME_TASK_RE = /^(\s*)[-*+] \[( |x|X)\] (.*)$/;
+
+  function homeDigits(s){ return String(s).replace(/[۰-۹]/g, function(d){ return String(d.charCodeAt(0) - 0x06F0); }); }
+  function homeStamp(gy, gm, gd){ return gy + '-' + nbPad2(gm) + '-' + nbPad2(gd); }
+  function homeToday(){ var d = new Date(); return homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
+  function homeAddDays(stamp, n){
+    var p = stamp.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2] + n);
+    return homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+  /** «۵ آبان» for a Gregorian stamp. */
+  function homeDayLabel(stamp){
+    var p = stamp.split('-'), j = nbGToJ(+p[0], +p[1], +p[2]);
+    return faNum(j.jd) + ' ' + HOME_MONTHS[j.jm - 1];
+  }
+  /** Every checkbox line of every readable note: {path, line, done, text, due}. Locked secret notes are skipped. */
+  function homeTasks(){
+    var out = [];
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (!f || f.deleted || p.slice(-1) === '/' || !nbIsNote(p) || (f.enc && f.plain == null)) return;
+      nbTextOf(f).split('\n').forEach(function(line, i){
+        var m = HOME_TASK_RE.exec(line);
+        if (!m) return;
+        var due = null, dm = HOME_DUE_RE.exec(m[3]);
+        if (dm){
+          var y = +homeDigits(dm[1]), mo = +homeDigits(dm[2]), d = +homeDigits(dm[3]);
+          if (y < 1700){ var g = nbJToG(y, mo, d); due = homeStamp(g.gy, g.gm, g.gd); } else due = homeStamp(y, mo, d);
+        }
+        out.push({ path: p, line: i, done: m[2] !== ' ', text: m[3].replace(HOME_DUE_RE, '').trim(), due: due, ro: NB_READONLY.test(p) });
+      });
+    });
+    return out;
+  }
+  function homeGroups(tasks){
+    var today = homeToday(), week = homeAddDays(today, 7), g = { late: [], today: [], week: [], later: [], none: [] };
+    tasks.filter(function(t){ return !t.done; }).forEach(function(t){
+      if (!t.due) g.none.push(t);
+      else if (t.due < today) g.late.push(t);
+      else if (t.due === today) g.today.push(t);
+      else if (t.due <= week) g.week.push(t);
+      else g.later.push(t);
+    });
+    ['late', 'today', 'week', 'later'].forEach(function(k){ g[k].sort(function(a, b){ return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; }); });
+    return g;
+  }
+  function homeTaskRow(t){
+    var id = encodeURIComponent(t.path) + ':' + t.line;
+    return '<div class="hm-task' + (t.done ? ' done' : '') + '">'
+      + '<input type="checkbox" data-task-toggle="' + escapeHtml(id) + '"' + (t.done ? ' checked' : '') + (t.ro ? ' disabled title="این پوشه فقط خواندنی است"' : '') + ' aria-label="انجام شد">'
+      + '<button type="button" class="hm-task-text" data-task-open="' + escapeHtml(id) + '" dir="auto">' + escapeHtml(t.text || '—') + '</button>'
+      + '<small>' + (t.due ? '<b class="hm-due' + (t.due < homeToday() ? ' late' : '') + '">' + escapeHtml(homeDayLabel(t.due)) + '</b> · ' : '')
+      + escapeHtml(nbTitle(t.path)) + '</small></div>';
+  }
+  function homeTaskSection(title, list, max){
+    if (!list.length) return '';
+    return '<div class="hm-group"><h5>' + escapeHtml(title) + ' <b>' + faNum(list.length) + '</b></h5>'
+      + list.slice(0, max).map(homeTaskRow).join('')
+      + (list.length > max ? '<div class="hm-more">و ' + faNum(list.length - max) + ' کار دیگر</div>' : '') + '</div>';
+  }
+  /** The sidebar section «کارها». */
+  function nbTasksHtml(){
+    var tasks = homeTasks(), g = homeGroups(tasks), done = tasks.filter(function(t){ return t.done; }).length;
+    var html = homeTaskSection('عقب افتاده', g.late, 50) + homeTaskSection('امروز', g.today, 50) + homeTaskSection('هفت روز آینده', g.week, 50)
+      + homeTaskSection('بعدا', g.later, 50) + homeTaskSection('بدون تاریخ', g.none, 80);
+    return (html || '<div class="nb-empty">کار بازی نیست.<br>هر خط «- [ ] …» در یادداشت ها یک کار است؛ تاریخ سررسید را با «📅 1405-08-05» کنارش بنویس.</div>')
+      + (done ? '<div class="nb-hint">' + faNum(done) + ' کار انجام شده</div>' : '');
+  }
+  function homeOpenNotes(){
+    return NB.paths.map(function(p){ return NB.files[p]; }).filter(function(f){ return f && !f.deleted && f.path.slice(-1) !== '/' && nbIsNote(f.path); });
+  }
+  /** «امروز»: what the empty page shows once the notebook is in use. */
+  function nbHomeHtml(){
+    if (!NB.loaded || !C || !(C.repo || NB.paths.length)) return '';
+    var ctx = nbCtx(new Date(), '', C.weekStart), g = homeGroups(homeTasks());
+    var cals = C.collections.filter(function(c){ return c.calendar; });
+    var recent = homeOpenNotes().sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 8);
+    var due = g.late.concat(g.today, g.week);
+    return '<div class="hm" data-ui>'
+      + '<div class="hm-head"><h1>امروز</h1><span>' + escapeHtml(ctx.weekday + ' ' + faNum(+ctx.jd) + ' ' + HOME_MONTHS[+ctx.jm - 1] + ' ' + faNum(+ctx.jy).replace(/٬/g, '')) + '</span></div>'
+      + '<div class="hm-actions">'
+      + cals.map(function(c){
+        var label = c.calendar === 'day' ? c.name + ' امروز' : c.calendar === 'week' ? c.name + ' این هفته' : c.name + ' — تازه';
+        return '<button type="button" class="btn-soft" data-home="cal" data-col="' + escapeHtml(c.id) + '"><i class="hm-dot" style="background:' + escapeHtml(c.color || 'var(--accent)') + '"></i>' + escapeHtml(label) + '</button>';
+      }).join('')
+      + '<button type="button" class="btn-soft" data-home="new">' + icon('plus') + 'یادداشت جدید</button>'
+      + '<button type="button" class="btn-soft" data-home="quick">' + icon('pen') + 'ثبت سریع</button>'
+      + '</div><div class="hm-grid">'
+      + '<section><h3>' + icon('check') + 'کارها</h3>'
+      + (due.length ? homeTaskSection('عقب افتاده', g.late, 6) + homeTaskSection('امروز', g.today, 8) + homeTaskSection('هفت روز آینده', g.week, 6)
+        : '<p class="hm-empty">برای امروز و این هفته کاری با تاریخ نیست' + (g.none.length ? ' — ' + faNum(g.none.length) + ' کار بدون تاریخ هست' : '') + '.</p>')
+      + '<button type="button" class="hm-link" data-home="tasks">همهٔ کارها ←</button></section>'
+      + '<section><h3>' + icon('clock') + 'یادداشت های اخیر</h3>'
+      + (recent.length ? recent.map(function(f){
+        return '<button type="button" class="hm-note" data-home="open" data-path="' + escapeHtml(f.path) + '"><b dir="auto">' + escapeHtml(nbTitle(f.path)) + '</b>'
+          + '<small dir="auto">' + escapeHtml(nbFolder(f.path) || '—') + (f.at ? ' · ' + escapeHtml(relTime((f.at - Date.now()) / 1000)) : '') + '</small></button>';
+      }).join('') : '<p class="hm-empty">هنوز یادداشتی نیست.</p>')
+      + '</section></div>'
+      + '<p class="hm-hint">برای دیدن سریع یک متن، همین‌جا بچسبان (Ctrl+V) — در یک تب موقت باز می شود و به دفترچه نمی رود.</p>'
+      + '</div>';
+  }
+  /** Notes in the command palette, most recent first: a quick way to jump to any of them. */
+  function nbPaletteItems(){
+    if (!NB.loaded) return [];
+    return homeOpenNotes().sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 400).map(function(f){
+      return { label: 'یادداشت: ' + nbTitle(f.path), icon: 'file', kw: 'note ' + f.path, run: function(){ nbOpen(f.path); } };
+    });
+  }
+  function homeTaskAt(id){
+    var cut = id.lastIndexOf(':');
+    return { path: decodeURIComponent(id.slice(0, cut)), line: +id.slice(cut + 1) };
+  }
+  /** Ticks or unticks a task in its note (secret notes stay secret: the plaintext copy is what changes). */
+  function homeToggleTask(id, done){
+    var at = homeTaskAt(id), f = NB.files[at.path];
+    if (!f || NB_READONLY.test(at.path) || (f.enc && f.plain == null)) return;
+    var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
+    if (!m) return;
+    lines[at.line] = m[1] + '- [' + (done ? 'x' : ' ') + '] ' + m[3];
+    var text = lines.join('\n');
+    nbStoreText(f, text);
+    var t = nbTabFor(at.path);
+    if (t){ t.text = text; if (t.id === activeTab){ ta.value = text; } }
+    nbCountDirty(); nbStatus(); nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+    render(); if (NB.open) nbRender();
+  }
+  function homeOpenTask(id){
+    var at = homeTaskAt(id), f = NB.files[at.path];
+    if (!f) return;
+    var lines = nbTextOf(f).split('\n'), pos = 0;
+    for (var i = 0; i < at.line && i < lines.length; i++) pos += lines[i].length + 1;
+    nbOpen(at.path, pos);
+  }
+  function homeClick(e){
+    var tg = e.target.closest('[data-task-toggle]');
+    if (tg){ homeToggleTask(tg.dataset.taskToggle, tg.checked); return true; }
+    var op = e.target.closest('[data-task-open]');
+    if (op){ homeOpenTask(op.dataset.taskOpen); return true; }
+    var h = e.target.closest('[data-home]');
+    if (!h) return false;
+    var what = h.dataset.home;
+    if (what === 'open') nbOpen(h.dataset.path);
+    else if (what === 'new') nbNewDialog(C.collections[0] && C.collections[0].id, null, new Date());
+    else if (what === 'quick') nbQuickInbox();
+    else if (what === 'tasks'){ NB.section = 'tasks'; nbSidebar(true); nbRender(); }
+    else if (what === 'cal'){
+      var col = C.collections.filter(function(c){ return c.id === h.dataset.col; })[0];
+      if (col) nbMakeOnDate(col, new Date());
+    }
+    return true;
+  }
+  zoomWrap.addEventListener('click', function(e){ if (e.target.closest('.hm')) homeClick(e); });
+  $('nbBody').addEventListener('click', function(e){ if (e.target.closest('[data-task-toggle],[data-task-open]')) homeClick(e); });
+  /* === /HOME === */
+
+  /* === UI: a quieter layout for the notebook — Mizkar ===
+     Nothing is removed: buttons move into menus (and every action stays in Ctrl+K and its shortcut). */
+  (function(){
+    var bar = document.querySelector('.bar-end');
+    if (!bar) return;
+    body.classList.add('ui-calm');
+
+    // one «ویرایش» switch instead of the three view buttons (Alt+1/2/3 still work)
+    var edit = document.createElement('button');
+    edit.className = 'ib ui-edit';
+    edit.type = 'button';
+    edit.id = 'uiEdit';
+    edit.setAttribute('aria-label', 'ویرایش');
+    edit.setAttribute('data-tip', 'ویرایش ↔ خواندن (Alt+2 / Alt+3)');
+    edit.innerHTML = icon('pen') + '<span>ویرایش</span>';
+    edit.addEventListener('click', function(e){
+      e.stopPropagation();
+      setView(state.view === 'preview' ? 'split' : 'preview');
+      saveState();
+      if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
+    });
+    var nbBtn = $('btnNotebook');
+    bar.insertBefore(edit, nbBtn ? nbBtn.nextSibling : bar.firstChild);
+    function syncEdit(){
+      var on = state.view !== 'preview';
+      edit.setAttribute('aria-pressed', String(on));
+      edit.querySelector('span').textContent = on ? 'خواندن' : 'ویرایش';
+    }
+    new MutationObserver(syncEdit).observe(work, { attributes: true, attributeFilter: ['data-view'] });
+    syncEdit();
+
+    // «ابزارها»: the occasional tools, out of sight until needed
+    var tools = document.createElement('button');
+    tools.className = 'ib ui-tools';
+    tools.type = 'button';
+    tools.id = 'uiTools';
+    tools.setAttribute('aria-label', 'ابزارها');
+    tools.setAttribute('aria-haspopup', 'menu');
+    tools.setAttribute('data-tip', 'ابزارها');
+    tools.innerHTML = icon('tool') + '<span>ابزارها</span>' + '<svg class="i chev"><use href="#i-chev"/></svg>';
+    var pal = bar.querySelector('[data-action="palette"]');
+    bar.insertBefore(tools, pal || null);
+    var TOOL_ITEMS = [
+      ['open', 'باز کردن فایل…'], ['toolbox', 'جعبه‌ابزار (Base64، URL، Hash، UUID…)'], ['net-calc', 'ماشین‌حساب شبکه'],
+      ['time-convert', 'تبدیل زمان و تاریخ شمسی'], ['compare', 'مقایسهٔ دو متن یا JSON'], ['fa-edit', 'ویراستار فارسی'],
+      ['convert', 'تبدیل فرمت'], ['present', 'ارائه (اسلاید)'], null,
+      ['theme', 'تم روشن / تیره'], ['dir', 'جهت پایه: راست‌به‌چپ / چپ‌به‌راست'], ['install', 'نصب به‌عنوان برنامه']
+    ];
+    function menuAt(btn, items){
+      var r = btn.getBoundingClientRect();
+      nbMenu(r.left, r.bottom + 6, items.filter(Boolean).filter(function(it){ return !it.hide; }));
+    }
+    function act(id){ return function(){ runAction(id); }; }
+    tools.addEventListener('click', function(e){
+      e.stopPropagation();
+      closePops();
+      menuAt(tools, TOOL_ITEMS.map(function(it){
+        if (!it) return null;
+        return { label: it[1], act: act(it[0]), hide: it[0] === 'install' && $('btnInstall') && $('btnInstall').hidden };
+      }));
+    });
+
+    // the preview header keeps the outline; the rest goes under «⋯»
+    var head = document.querySelector('.pane.out .ph-actions');
+    if (head){
+      var more = document.createElement('button');
+      more.className = 'ib sm ui-more';
+      more.type = 'button';
+      more.setAttribute('aria-label', 'گزینه‌های نمایش');
+      more.setAttribute('data-tip', 'گزینه‌های نمایش');
+      more.innerHTML = '<span class="ui-dots">⋯</span>';
+      head.appendChild(more);
+      more.addEventListener('click', function(e){
+        e.stopPropagation();
+        closePops();
+        menuAt(more, [
+          { label: 'بزرگ‌نمایی (' + $('zLvl').textContent + ')', act: act('zoom-in') },
+          { label: 'کوچک‌نمایی', act: act('zoom-out') },
+          { label: 'اندازهٔ اصلی', act: act('zoom-reset') },
+          { label: 'عرض صفحه: ' + ($('btnWidth').getAttribute('data-tip') || '').replace(/^عرض صفحه:\s*/, ''), act: act('width') },
+          { label: 'حالت دست (جابه‌جایی با کشیدن)', act: act('hand') },
+          { label: 'حالت مطالعه', act: act('read') },
+          { label: 'تمام‌صفحه', act: act('fs') },
+          { label: 'ارائه (اسلاید)', act: act('present') }
+        ]);
+      });
+    }
+
+    // the format: a small label in the status bar opens the list (the chips row is gone)
+    var fmt = $('stFmt');
+    if (fmt){
+      fmt.classList.add('ui-fmt');
+      fmt.setAttribute('role', 'button');
+      fmt.setAttribute('tabindex', '0');
+      fmt.title = 'تغییر فرمت (معمولاً خودکار درست است)';
+      var openFmt = function(e){
+        e.stopPropagation();
+        var r = fmt.getBoundingClientRect();
+        var items = [{ label: (state.fmt === 'auto' ? '✓ ' : '') + 'تشخیص خودکار', act: function(){ setFormat('auto'); saveState(); } }]
+          .concat(Object.keys(FMT_LABELS).map(function(k){
+            return { label: (state.fmt === k ? '✓ ' : '') + FMT_LABELS[k], act: function(){ setFormat(k); saveState(); } };
+          }));
+        nbMenu(r.left, Math.max(8, r.top - Math.min(items.length * 34 + 16, innerHeight * 0.7)), items);
+      };
+      fmt.addEventListener('click', openFmt);
+      fmt.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openFmt(e); } });
+    }
+  })();
+  /* === /UI === */
+
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
-  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); });
+  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); if (!ta.value.trim()) render(); });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
     open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,
@@ -13860,6 +14197,10 @@ function nbCommitMessage(list){
     unlock: nbUnlock, load: nbLoad
   };
   window.mizkarNotebook = NB;
+  // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
+  window.nbAfterSwitch = nbAfterSwitch;
+  window.nbHomeHtml = nbHomeHtml;
+  window.nbPaletteItems = nbPaletteItems;
 })();
 
   /* --- init --- */

@@ -1248,6 +1248,7 @@ function nbCommitMessage(list){
       + nbTabBtn('temps', 'file', 'موقت', tabs.length)
       + nbTabBtn('search', 'search', 'جستجو', 0)
       + nbTabBtn('cal', 'clock', 'تقویم', 0)
+      + nbTabBtn('tasks', 'check', 'کارها', typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0)
       + nbTabBtn('tags', 'hash', 'برچسب', 0)
       + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
       + '</div><div class="nb-list" id="nbList">';
@@ -1284,6 +1285,8 @@ function nbCommitMessage(list){
         + '<div class="nb-res" id="nbRes">' + nbSearchHtml() + '</div></div>';
     } else if (NB.section === 'cal'){
       html += nbCalHtml();
+    } else if (NB.section === 'tasks'){
+      html += nbTasksHtml();
     } else if (NB.section === 'tags'){
       var tags = nbTagCounts();
       html += tags.length ? '<div class="nb-tags">' + tags.map(function(x){
@@ -2606,7 +2609,7 @@ function nbCommitMessage(list){
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
-  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); });
+  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); if (!ta.value.trim()) render(); });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
     open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,
@@ -2626,4 +2629,8 @@ function nbCommitMessage(list){
     unlock: nbUnlock, load: nbLoad
   };
   window.mizkarNotebook = NB;
+  // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
+  window.nbAfterSwitch = nbAfterSwitch;
+  window.nbHomeHtml = nbHomeHtml;
+  window.nbPaletteItems = nbPaletteItems;
 })();
