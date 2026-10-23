@@ -3984,7 +3984,7 @@ if (typeof document !== 'undefined'){
   document.getElementById('appStyle').textContent = CSS + '\n' + APP_CSS;
   var $ = function(id){ return document.getElementById(id); };
   var root = document.documentElement, body = document.body;
-  /* beta: its own storage; the first run copies the main site's tabs, settings and recent texts (read only) */
+  /* First run: adopt tabs/settings from the previous root build (fs2-*) when mz2-* is empty. */
   (function(){
     try {
       if (!localStorage.getItem('mz2-state')) ['state', 'theme', 'zoom'].forEach(function(k){
@@ -3992,21 +3992,7 @@ if (typeof document !== 'undefined'){
         if (v != null) localStorage.setItem('mz2-' + k, v);
       });
     } catch(e){}
-    window.__mzbHistory = (window.indexedDB && indexedDB.databases ? indexedDB.databases() : Promise.resolve([])).then(function(list){
-      if (!list.some(function(d){ return d.name === 'mizkar'; })) return null;
-      return new Promise(function(resolve){
-        var rq = indexedDB.open('mizkar');          // no version: the main site's database is never upgraded
-        rq.onupgradeneeded = function(){ rq.transaction.abort(); };
-        rq.onerror = function(){ resolve(null); };
-        rq.onsuccess = function(){
-          var db = rq.result;
-          if (!db.objectStoreNames.contains('kv')){ db.close(); return resolve(null); }
-          var g = db.transaction('kv').objectStore('kv').get('history');
-          g.onsuccess = function(){ db.close(); resolve(Array.isArray(g.result) ? g.result : null); };
-          g.onerror = function(){ db.close(); resolve(null); };
-        };
-      });
-    }).catch(function(){ return null; });
+    window.__mzbHistory = Promise.resolve(null);
   })();
   var APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || '', upd = { state: 'idle', remote: '', changes: [], checkedAt: 0, error: '' };
   var ta = $('input'), out = $('preview'), zoomWrap = $('zoomWrap'), work = $('work'), divider = $('divider');
@@ -5013,7 +4999,7 @@ if (typeof document !== 'undefined'){
   function idb(){
     if (!idbOpen) idbOpen = new Promise(function(resolve, reject){
       if (!window.indexedDB){ reject(new Error('no IndexedDB')); return; }
-      var rq = indexedDB.open('mizkar-beta2', 2);
+      var rq = indexedDB.open('mizkar', 2);
       rq.onupgradeneeded = function(){
         var db = rq.result;
         ['kv', 'notes', 'queue', 'search', 'meta'].forEach(function(n){ if (!db.objectStoreNames.contains(n)) db.createObjectStore(n); });
@@ -6370,9 +6356,9 @@ if (typeof document !== 'undefined'){
     'tab-list': { label: 'فهرست همهٔ تب‌ها', icon: 'list', kw: 'tabs list all', run: function(){ drawTabList(); togglePop('popTabs'); } },
     'tab-move-next': { label: 'جابه‌جایی تب فعلی یکی به بعد', icon: 'swap', kbd: 'Alt Shift ]', kw: 'tab move reorder next', run: function(){ moveCurrentTab(1); } },
     'tab-move-prev': { label: 'جابه‌جایی تب فعلی یکی به قبل', icon: 'swap', kbd: 'Alt Shift [', kw: 'tab move reorder previous', run: function(){ moveCurrentTab(-1); } },
-    'update-panel': { label: 'نسخه و به‌روزرسانی', icon: 'redo', hidden: true, run: function(){ togglePop('popUpd'); drawUpd(); } },
-    'update-check': { label: 'بررسی به‌روزرسانی میزکار', icon: 'redo', kw: 'update version new check', run: function(){ if (!$('popUpd').classList.contains('open')) togglePop('popUpd'); checkUpdate(true); drawUpd(); } },
-    'update-apply': { label: 'به‌روزرسانی به نسخهٔ جدید', icon: 'redo', hidden: true, run: applyUpdate },
+    'update-panel': { label: 'نسخه و بروزرسانی', icon: 'redo', hidden: true, run: function(){ togglePop('popUpd'); drawUpd(); } },
+    'update-check': { label: 'بررسی بروزرسانی میزکار', icon: 'redo', kw: 'update version new check', run: function(){ if (!$('popUpd').classList.contains('open')) togglePop('popUpd'); checkUpdate(true); drawUpd(); } },
+    'update-apply': { label: 'بروزرسانی به نسخهٔ جدید', icon: 'redo', hidden: true, run: applyUpdate },
     'update-reload': { label: 'تازه‌سازی', icon: 'redo', hidden: true, run: function(){ saveState(); location.reload(); } },
     'tab-pin': { label: 'سنجاق کردن / برداشتن سنجاق تب فعلی', icon: 'pin', kbd: 'Alt Shift P', kw: 'tab pin unpin sticky', run: function(){ togglePin(activeTab); } },
     'tab-rename': { label: 'تغییر نام تب فعلی', icon: 'pen', kbd: 'F2', kw: 'tab rename name title', run: function(){ renameTab(activeTab); } },
@@ -7032,16 +7018,16 @@ if (typeof document !== 'undefined'){
   function drawUpd(){
     var s = upd.state, dot = $('updDot'), txt = $('updText');
     dot.className = 'upd-dot' + ({ latest: ' ok', available: ' new', ready: ' new', checking: ' busy', downloading: ' busy', error: ' bad' }[s] || '');
-    txt.textContent = { latest: 'به‌روز', available: 'نسخهٔ جدید هست', ready: 'آمادهٔ تازه‌سازی', checking: 'بررسی…', downloading: 'در حال به‌روزرسانی…', error: 'بررسی نشد', offline: 'آفلاین' }[s] || 'نسخه';
+    txt.textContent = { latest: 'به‌روز', available: 'نسخهٔ جدید هست', ready: 'آمادهٔ تازه‌سازی', checking: 'بررسی…', downloading: 'در حال بروزرسانی…', error: 'بررسی نشد', offline: 'آفلاین' }[s] || 'نسخه';
     $('btnUpd').title = 'نسخهٔ فعلی: ' + updLabel(APP_VERSION);
     if (!$('popUpd').classList.contains('open')) return;
     var msg = {
       latest: ['ok', 'میزکار به‌روز است.'],
-      available: ['new', 'نسخهٔ جدیدی منتشر شده. «به‌روزرسانی» آن را می‌گیرد و صفحه را تازه می‌کند — متن‌ها و تب‌ها سر جایشان می‌مانند.'],
+      available: ['new', 'نسخهٔ جدیدی منتشر شده. «بروزرسانی» آن را می‌گیرد و صفحه را تازه می‌کند — متن‌ها و تب‌ها سر جایشان می‌مانند.'],
       ready: ['new', 'نسخهٔ جدید دریافت شده؛ با تازه‌سازی صفحه فعال می‌شود.'],
       checking: ['', 'در حال بررسی…'],
       downloading: ['', 'در حال دریافت نسخهٔ جدید…'],
-      error: ['bad', upd.error || 'بررسی به‌روزرسانی ممکن نشد.'],
+      error: ['bad', upd.error || 'بررسی بروزرسانی ممکن نشد.'],
       offline: ['', 'اینترنت وصل نیست؛ میزکار آفلاین کار می‌کند و وقتی وصل شوی دوباره بررسی می‌کند.']
     }[s] || ['', 'هنوز بررسی نشده.'];
     var newer = upd.changes.filter(function(c){ return APP_VERSION && verNewer(c.v, APP_VERSION); });
@@ -7053,12 +7039,12 @@ if (typeof document !== 'undefined'){
       }).join('');
     };
     var busy = s === 'checking' || s === 'downloading';
-    $('popUpd').innerHTML = '<div class="pop-title">نسخه و به‌روزرسانی</div>'
+    $('popUpd').innerHTML = '<div class="pop-title">نسخه و بروزرسانی</div>'
       + '<div class="upd-row"><span>نسخهٔ فعلی</span><b>' + escapeHtml(updLabel(APP_VERSION)) + '</b></div>'
       + (upd.remote && upd.remote !== APP_VERSION ? '<div class="upd-row"><span>آخرین نسخه</span><b>' + escapeHtml(updLabel(upd.remote)) + '</b></div>' : '')
       + '<div class="upd-state ' + msg[0] + '">' + escapeHtml(msg[1]) + '</div>'
       + '<div class="upd-actions">'
-      + (s === 'available' ? '<button class="btn-primary" type="button" data-action="update-apply">به‌روزرسانی</button>' : '')
+      + (s === 'available' ? '<button class="btn-primary" type="button" data-action="update-apply">بروزرسانی</button>' : '')
       + (s === 'ready' ? '<button class="btn-primary" type="button" data-action="update-reload">تازه‌سازی</button>' : '')
       + '<button class="btn-soft" type="button" data-action="update-check"' + (busy ? ' disabled' : '') + '>بررسی دوباره</button></div>'
       + (newer.length || older.length ? '<div class="upd-notes">' + (newer.length ? notes(newer, true) : '<h5>تغییرات اخیر</h5>') + notes(older, false) + '</div>' : '')
@@ -7082,7 +7068,7 @@ if (typeof document !== 'undefined'){
       var newer = !!APP_VERSION && updIsNewer(v, APP_VERSION);
       upd.state = !newer ? 'latest' : was === 'ready' ? 'ready' : 'available';
       drawUpd();
-      if (newer && was !== 'available' && was !== 'ready' && !manual) toast('نسخهٔ جدید میزکار منتشر شده', 'redo', { label: 'به‌روزرسانی', icon: 'redo', run: applyUpdate });
+      if (newer && was !== 'available' && was !== 'ready' && !manual) toast('نسخهٔ جدید میزکار منتشر شده', 'redo', { label: 'بروزرسانی', icon: 'redo', run: applyUpdate });
     }).catch(function(){
       upd.state = was === 'ready' ? 'ready' : 'error';
       upd.error = 'به سرور میزکار دسترسی نشد؛ بعداً دوباره امتحان کن.';
@@ -7833,8 +7819,8 @@ var NB_CSS = [
   '/* the panel closes from its right edge, under the top bar\'s button that opens it */',
   '#nb .nb-head .nb-close{ order:-1; flex:none; }',
   '',
-  '/* === M3 (beta2 only): the Android skin — Material 3 colours, shapes and parts ===',
-  '   Inert unless the page is built with <html data-skin="m3"> (dev/beta.py --v2). The colours live on the',
+  '/* === M3: the Android skin — Material 3 colours, shapes and parts ===',
+  '   Inert unless the page has <html data-skin="m3">. The colours live on the',
   '   root so the phone\'s own bar (theme-color) follows them; the parts hang off body.m3 (set by m3.js). */',
   'html[data-skin="m3"]{',
   '  color-scheme:light;',
@@ -13378,7 +13364,7 @@ function nbCommitMessage(list){
       });
     }).catch(function(e){ toast(e.message || 'ساختن لینک ممکن نشد', 'x'); return null; });
   }
-  /** «به‌روزرسانی»: the note's current text goes into the same gist, so the same link shows it. */
+  /** «بروزرسانی»: the note's current text goes into the same gist, so the same link shows it. */
   function nbShareUpdate(rec){
     var f = NB.files[rec.path];
     if (!f || f.deleted){ toast('یادداشتِ این اشتراک دیگر نیست', 'x'); return Promise.resolve(false); }
@@ -13469,7 +13455,7 @@ function nbCommitMessage(list){
           + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
           + '<span class="nb-hist-btns">'
           + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
-          + (r.path ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">به‌روزرسانی</button>' : '')
+          + (r.path ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
           + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
       }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست کلیکِ یک یادداشت «اشتراک‌گذاری…» را بزن.') + '</p>';
     });
@@ -14061,8 +14047,8 @@ function nbCommitMessage(list){
   window.nbDrag = { note: nbdDropNoteIn, folder: nbdDropFolder, taskDay: nbdDropTaskOnDay, files: nbdDropFiles, link: nbdDropLink, hit: nbdHit, cancel: nbdEnd };
   /* === /DRAG === */
 
-  /* === M3 (beta2 only): the Android behaviours — the FAB and the ripple — Mizkar ===
-     Does nothing unless the page was built with <html data-skin="m3"> (dev/beta.py --v2). */
+  /* === M3: the Android behaviours — the FAB and the ripple — Mizkar ===
+     Does nothing unless the page has <html data-skin="m3">. */
   (function(){
     /** The FAB: the one «تازه» button of an Android app, bottom end on the phone. */
     function m3Fab(){
