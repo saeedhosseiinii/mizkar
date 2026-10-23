@@ -1,7 +1,7 @@
   /* === DRAG: کشیدن و رها کردن — Mizkar ===
      Mouse drags right away; a finger has to hold first (like the tab bar). Every move can be taken back
      with the toast, and Esc cancels a drag in flight. */
-  var NBD = { item: null, ghost: null, target: null, armed: false, on: false, x0: 0, y0: 0, hold: 0, taskId: '' };
+  var NBD = { item: null, ghost: null, target: null, armed: false, ready: false, on: false, x0: 0, y0: 0, hold: 0, taskId: '' };
 
   function nbdEl(sel, from){ return (from || document).querySelector(sel); }
   /** What is under the pointer, and what that means for the thing being dragged. */
@@ -51,7 +51,7 @@
     if (NBD.ghost){ NBD.ghost.hidden = true; NBD.ghost.remove(); NBD.ghost = null; }
     if (NBD.target && NBD.target.el) NBD.target.el.classList.remove('nb-drop');
     body.classList.remove('nb-dragging');
-    NBD.item = null; NBD.target = null; NBD.armed = false; NBD.on = false; NBD.taskId = '';
+    NBD.item = null; NBD.target = null; NBD.armed = false; NBD.ready = false; NBD.on = false; NBD.taskId = '';
     if (NBD.hold){ clearTimeout(NBD.hold); NBD.hold = 0; }
   }
   /** Drops a note (or a whole folder) into a folder. */
@@ -195,25 +195,29 @@
     if (!c) return;
     NBD.item = c; NBD.armed = true; NBD.x0 = e.clientX; NBD.y0 = e.clientY;
     if (e.pointerType === 'mouse') return;                       // a mouse drag starts on the first move
-    NBD.hold = setTimeout(function(){                            // a finger has to hold first
+    // a finger: holding first opens the menu (see the long-press in nb.js); moving after the hold drags
+    NBD.hold = setTimeout(function(){
       NBD.hold = 0;
       if (!NBD.armed) return;
-      NBD.on = true;
-      nbdGhost(c.label);
-      nbdGhostAt(NBD.x0, NBD.y0);
-      body.classList.add('nb-dragging');
+      NBD.ready = true;
       try { if (navigator.vibrate) navigator.vibrate(12); } catch(err){}
-    }, 420);
+    }, 620);
   }, true);
   document.addEventListener('pointermove', function(e){
     if (!NBD.armed) return;
     var dx = Math.abs(e.clientX - NBD.x0), dy = Math.abs(e.clientY - NBD.y0);
     if (!NBD.on){
       if (dx < 6 && dy < 6) return;
-      if (NBD.item.kind === 'note' && e.pointerType !== 'mouse') return;   // on touch a move is a scroll
+      // with a finger the drag only starts after the hold, and after the menu had its chance
+      if (e.pointerType !== 'mouse'){
+        if (!NBD.ready) return;                 // a plain move is a scroll
+        if (dx < 12 && dy < 12) return;
+      }
       if (NBD.hold){ clearTimeout(NBD.hold); NBD.hold = 0; }
       NBD.on = true;
+      if (typeof nbMenuClose === 'function') nbMenuClose();     // holding opened the menu: moving takes over
       nbdGhost(NBD.item.label);
+      nbdGhostAt(e.clientX, e.clientY);
       body.classList.add('nb-dragging');
     }
     e.preventDefault();

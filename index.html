@@ -11398,6 +11398,64 @@ var NB_CSS = [
   '.nb-key-row span{flex:1;min-width:0;font-size:.82rem;}',
   '.nb-key-row kbd{flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:1px 7px;font-size:.7rem;}',
   '',
+  '/* ================= بازبینی موبایل: اصلاح های اندازه گیری شده (۳۶۰x۷۴۰) ================= */',
+  '@media (max-width:760px){',
+  '  /* ۱) نوار پایین روی نوار وضعیت می افتاد: body خودش .app است، پس پدینگ باید روی body بنشیند */',
+  '  body.nb-nav-on{',
+  '    --nb-nav-h:56px;',
+  '    padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;',
+  '    box-sizing:border-box; overflow:hidden;',
+  '  }',
+  '  /* ۲) نوار بالا در دو ردیف می شکست (۱۰۲ پیکسل): یک ردیف، بی نام برند */',
+  '  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; align-items:center; }',
+  '  body.ui-calm .brand{ flex:none; }',
+  '  body.ui-calm .brand-name{ display:none; }',
+  '  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }',
+  '  body.ui-calm .ui-export{ margin-inline-start:auto; }',
+  '  body.ui-calm .ui-export .ib{ padding:0 8px; }',
+  '  /* ۳) نوار بخش ها در کشو جا نمی شد: می لغزد */',
+  '  #nb .nb-tabs{ overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }',
+  '  #nb .nb-tabs::-webkit-scrollbar{ height:0; display:none; }',
+  '  #nb .nb-tab{ flex:none; padding-inline:10px; }',
+  '  /* ۴) کشوی بسته به پهلو می رفت ولی چیدمانش شیت پایین است: پایین برود */',
+  '  body:not(.nb-open) #nb{ transform:translateY(110%); }',
+  '  /* ۵) انتخابگر تاریخ هم مثل بقیه پنجره ها شیت پایین شود */',
+  '  #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); }',
+  '  #nbMini2 .modal-box{ width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:88vh; }',
+  '  /* ۶) هدف های لمسی کوچک */',
+  '  #nb .ib.sm, #nbBody .ib.sm, .status .ib.sm{ min-width:40px; min-height:40px; }',
+  '  #nbNav .nb-nav-b{ min-height:48px; }',
+  '  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:38px; }',
+  '  .nb-rail-b{ width:40px; height:40px; }',
+  '  #tabsList .tab-x{ width:26px; height:26px; }',
+  '  .status{ min-height:44px; height:auto; }',
+  '}',
+  '',
+  '@media (max-width:760px){',
+  '  /* هدف لمسی ۴۰ پیکسل برای همهٔ دکمه های کوچک، از جمله نوار وضعیت */',
+  '  .ib.sm{ min-width:40px; min-height:40px; }',
+  '  .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }',
+  '  #tabsList .tab-x{ width:30px; height:30px; line-height:30px; }',
+  '  .pane-head .ph-actions .ib{ min-height:40px; }',
+  '  #nbMini .modal-head .ib, #nbModal .modal-head .ib, #nbMini2 .modal-head .ib{ min-width:40px; min-height:40px; }',
+  '}',
+  '',
+  '@media (max-width:760px){',
+  '  /* هنگام ویرایش، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */',
+  '  body.ip-on #nbNav{ display:none; }',
+  '  body.ip-on #work[data-view="editor"] .pane.editor .mdbar{ bottom:calc(var(--nb-kb, 0px) + env(safe-area-inset-bottom, 0px)); }',
+  '}',
+  '',
+  '@media (max-width:760px){',
+  '  /* نوار وضعیت در حالت ویرایش می شکست و ۱۳۳ پیکسل می شد و صفحه را افقی می برد: یک خط و لغزان */',
+  '  .status{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }',
+  '  .status::-webkit-scrollbar{ height:0; display:none; }',
+  '  .status > *{ flex:none; }',
+  '  .status .st-nb, .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }',
+  '  /* نوار ابزار Markdown: دکمه های بلندتر برای انگشت */',
+  '  .mdbar .mdb{ min-width:34px; min-height:34px; }',
+  '}',
+  '',
   '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
   'body.ui-calm #fmtChips{display:none;}',
   'body.ui-calm #viewSeg{display:none;}',
@@ -15520,7 +15578,9 @@ function nbCommitMessage(list){
     edit.addEventListener('click', function(e){
       e.stopPropagation();
       // a notebook note is edited in place (one column); a temp tab gets the source next to the preview
-      setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview');
+      // on a phone there is no room for two columns: it is always read ↔ edit
+      var narrow = innerWidth <= 760, isNote = !!(currentTab() && currentTab().nb);
+      setView(state.view === 'preview' ? ((narrow || isNote) ? 'editor' : 'split') : 'preview');
       saveState();
       if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
     });
@@ -15934,7 +15994,7 @@ function nbCommitMessage(list){
   /* === DRAG: کشیدن و رها کردن — Mizkar ===
      Mouse drags right away; a finger has to hold first (like the tab bar). Every move can be taken back
      with the toast, and Esc cancels a drag in flight. */
-  var NBD = { item: null, ghost: null, target: null, armed: false, on: false, x0: 0, y0: 0, hold: 0, taskId: '' };
+  var NBD = { item: null, ghost: null, target: null, armed: false, ready: false, on: false, x0: 0, y0: 0, hold: 0, taskId: '' };
 
   function nbdEl(sel, from){ return (from || document).querySelector(sel); }
   /** What is under the pointer, and what that means for the thing being dragged. */
@@ -15984,7 +16044,7 @@ function nbCommitMessage(list){
     if (NBD.ghost){ NBD.ghost.hidden = true; NBD.ghost.remove(); NBD.ghost = null; }
     if (NBD.target && NBD.target.el) NBD.target.el.classList.remove('nb-drop');
     body.classList.remove('nb-dragging');
-    NBD.item = null; NBD.target = null; NBD.armed = false; NBD.on = false; NBD.taskId = '';
+    NBD.item = null; NBD.target = null; NBD.armed = false; NBD.ready = false; NBD.on = false; NBD.taskId = '';
     if (NBD.hold){ clearTimeout(NBD.hold); NBD.hold = 0; }
   }
   /** Drops a note (or a whole folder) into a folder. */
@@ -16128,25 +16188,29 @@ function nbCommitMessage(list){
     if (!c) return;
     NBD.item = c; NBD.armed = true; NBD.x0 = e.clientX; NBD.y0 = e.clientY;
     if (e.pointerType === 'mouse') return;                       // a mouse drag starts on the first move
-    NBD.hold = setTimeout(function(){                            // a finger has to hold first
+    // a finger: holding first opens the menu (see the long-press in nb.js); moving after the hold drags
+    NBD.hold = setTimeout(function(){
       NBD.hold = 0;
       if (!NBD.armed) return;
-      NBD.on = true;
-      nbdGhost(c.label);
-      nbdGhostAt(NBD.x0, NBD.y0);
-      body.classList.add('nb-dragging');
+      NBD.ready = true;
       try { if (navigator.vibrate) navigator.vibrate(12); } catch(err){}
-    }, 420);
+    }, 620);
   }, true);
   document.addEventListener('pointermove', function(e){
     if (!NBD.armed) return;
     var dx = Math.abs(e.clientX - NBD.x0), dy = Math.abs(e.clientY - NBD.y0);
     if (!NBD.on){
       if (dx < 6 && dy < 6) return;
-      if (NBD.item.kind === 'note' && e.pointerType !== 'mouse') return;   // on touch a move is a scroll
+      // with a finger the drag only starts after the hold, and after the menu had its chance
+      if (e.pointerType !== 'mouse'){
+        if (!NBD.ready) return;                 // a plain move is a scroll
+        if (dx < 12 && dy < 12) return;
+      }
       if (NBD.hold){ clearTimeout(NBD.hold); NBD.hold = 0; }
       NBD.on = true;
+      if (typeof nbMenuClose === 'function') nbMenuClose();     // holding opened the menu: moving takes over
       nbdGhost(NBD.item.label);
+      nbdGhostAt(e.clientX, e.clientY);
       body.classList.add('nb-dragging');
     }
     e.preventDefault();

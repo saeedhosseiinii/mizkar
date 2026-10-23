@@ -341,3 +341,61 @@ body.nb-dragging #nbBody,body.nb-dragging #zoomWrap{user-select:none;}
 .nb-key-row{display:flex;align-items:center;gap:10px;padding:5px 6px;border-bottom:1px dashed var(--border);}
 .nb-key-row span{flex:1;min-width:0;font-size:.82rem;}
 .nb-key-row kbd{flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:1px 7px;font-size:.7rem;}
+
+/* ================= بازبینی موبایل: اصلاح های اندازه گیری شده (۳۶۰x۷۴۰) ================= */
+@media (max-width:760px){
+  /* ۱) نوار پایین روی نوار وضعیت می افتاد: body خودش .app است، پس پدینگ باید روی body بنشیند */
+  body.nb-nav-on{
+    --nb-nav-h:56px;
+    padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing:border-box; overflow:hidden;
+  }
+  /* ۲) نوار بالا در دو ردیف می شکست (۱۰۲ پیکسل): یک ردیف، بی نام برند */
+  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; align-items:center; }
+  body.ui-calm .brand{ flex:none; }
+  body.ui-calm .brand-name{ display:none; }
+  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }
+  body.ui-calm .ui-export{ margin-inline-start:auto; }
+  body.ui-calm .ui-export .ib{ padding:0 8px; }
+  /* ۳) نوار بخش ها در کشو جا نمی شد: می لغزد */
+  #nb .nb-tabs{ overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  #nb .nb-tabs::-webkit-scrollbar{ height:0; display:none; }
+  #nb .nb-tab{ flex:none; padding-inline:10px; }
+  /* ۴) کشوی بسته به پهلو می رفت ولی چیدمانش شیت پایین است: پایین برود */
+  body:not(.nb-open) #nb{ transform:translateY(110%); }
+  /* ۵) انتخابگر تاریخ هم مثل بقیه پنجره ها شیت پایین شود */
+  #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); }
+  #nbMini2 .modal-box{ width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:88vh; }
+  /* ۶) هدف های لمسی کوچک */
+  #nb .ib.sm, #nbBody .ib.sm, .status .ib.sm{ min-width:40px; min-height:40px; }
+  #nbNav .nb-nav-b{ min-height:48px; }
+  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:38px; }
+  .nb-rail-b{ width:40px; height:40px; }
+  #tabsList .tab-x{ width:26px; height:26px; }
+  .status{ min-height:44px; height:auto; }
+}
+
+@media (max-width:760px){
+  /* هدف لمسی ۴۰ پیکسل برای همهٔ دکمه های کوچک، از جمله نوار وضعیت */
+  .ib.sm{ min-width:40px; min-height:40px; }
+  .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }
+  #tabsList .tab-x{ width:30px; height:30px; line-height:30px; }
+  .pane-head .ph-actions .ib{ min-height:40px; }
+  #nbMini .modal-head .ib, #nbModal .modal-head .ib, #nbMini2 .modal-head .ib{ min-width:40px; min-height:40px; }
+}
+
+@media (max-width:760px){
+  /* هنگام ویرایش، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */
+  body.ip-on #nbNav{ display:none; }
+  body.ip-on #work[data-view="editor"] .pane.editor .mdbar{ bottom:calc(var(--nb-kb, 0px) + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (max-width:760px){
+  /* نوار وضعیت در حالت ویرایش می شکست و ۱۳۳ پیکسل می شد و صفحه را افقی می برد: یک خط و لغزان */
+  .status{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .status::-webkit-scrollbar{ height:0; display:none; }
+  .status > *{ flex:none; }
+  .status .st-nb, .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }
+  /* نوار ابزار Markdown: دکمه های بلندتر برای انگشت */
+  .mdbar .mdb{ min-width:34px; min-height:34px; }
+}

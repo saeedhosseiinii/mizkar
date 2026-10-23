@@ -16,7 +16,9 @@
     edit.addEventListener('click', function(e){
       e.stopPropagation();
       // a notebook note is edited in place (one column); a temp tab gets the source next to the preview
-      setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview');
+      // on a phone there is no room for two columns: it is always read ↔ edit
+      var narrow = innerWidth <= 760, isNote = !!(currentTab() && currentTab().nb);
+      setView(state.view === 'preview' ? ((narrow || isNote) ? 'editor' : 'split') : 'preview');
       saveState();
       if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
     });
