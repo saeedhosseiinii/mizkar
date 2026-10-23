@@ -1508,6 +1508,34 @@ async function until(fn, ms = 3000) {
   const pulledFix = await nb.ui.pull({ loud: true });
   ok('«گرفتن» repairs the queue even when the branch did not move', pulledFix === true && !nb.ui.files()['ارسال/شبح2.md'], pulledFix);
 
+  console.log('\n— «جایگزینی با نسخهٔ مخزن» —');
+  await until(() => !nb.ui.state().busy, 4000);
+  putRemote('بازنشانی/الف.md', '# نسخهٔ مخزن\n');
+  repo.commits.push({ sha: 'd'.repeat(40), message: 'remote edit', tree: 'x', parents: [], treeBody: { tree: [] } });
+  nb.ui.write('بازنشانی/الف.md', '# نسخهٔ این دستگاه\n');
+  nb.ui.write('بازنشانی/فقط اینجا.md', '# فقط اینجا\n');
+  let zipped = 0;
+  const origCreate = win.URL.createObjectURL;
+  win.URL.createObjectURL = () => { zipped++; return 'blob:test'; };
+  nb.ui.resetFromRepo();
+  await sleep(20);
+  ok('it asks first, and says what will happen', !doc.getElementById('nbMini').hidden && /zip/.test(doc.getElementById('nbMini').textContent));
+  doc.getElementById('nbMiniOk').click();
+  await until(() => !nb.ui.state().busy && nb.ui.files()['بازنشانی/الف.md'], 4000);
+  await sleep(60);
+  ok('the unsent changes went into a zip first', zipped >= 1);
+  eq('the note is the repository\'s version', nb.ui.files()['بازنشانی/الف.md'].text, '# نسخهٔ مخزن\n');
+  ok('a note only this device had is gone', !nb.ui.files()['بازنشانی/فقط اینجا.md']);
+  eq('nothing waits to be sent', nb.ui.dirty().length, 0);
+  win.URL.createObjectURL = origCreate;
+
+  console.log('\n— the open temp tabs have a menu too —');
+  nb.ui.goHome();
+  await sleep(40);
+  const tempTabId = [...doc.querySelectorAll('#tabsList .tab')].filter((t) => !t.classList.contains('nb-tab')).map((t) => t.dataset.tab)[0];
+  const tempItems = tempTabId ? nb.ui.tempMenu(tempTabId).filter(Boolean).map((x) => x.label) : [];
+  ok('close, save, pin, rename and copy are there', ['ذخیره در دفترچه…', 'تغییر نام', 'تکثیر', 'کپی متن', 'بستن'].every((x) => tempItems.indexOf(x) !== -1), tempItems);
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

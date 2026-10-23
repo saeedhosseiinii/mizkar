@@ -712,6 +712,7 @@ function nbCommitMessage(list){
     if (NB.busy) return Promise.resolve(false);
     if (!C || !C.repo){ nbSay('off'); if (opts.loud) toast('اول مخزن را در تنظیمات دفترچه بگذار', 'x'); return Promise.resolve(false); }
     NB.busy = true; nbSay('sync');
+    var firstSync = !NB.lastCommit;
     return nbRemoteTree(!!opts.loud).then(function(tree){
       if (tree.unchanged){ NB.busy = false; nbSay(); if (opts.loud) toast('چیز تازه ای نیست', 'check'); return false; }
       var remote = {};
@@ -821,7 +822,11 @@ function nbCommitMessage(list){
         var n = pulled + gone.length;
         nbIdxInvalidate();
         nbCountDirty(); nbRender(); NB.busy = false;
-        if (NB.conflicts.length){ nbSay('conflict'); nbShowConflicts(); }
+        if (NB.conflicts.length){
+          nbSay('conflict'); nbShowConflicts();
+          // a device meeting this repository for the first time: taking the repository's notes is usually what is meant
+          if (firstSync) nbResetFromRepo('این دستگاه اولین بار است که با این مخزن همگام می شود و ' + faNum(NB.conflicts.length) + ' یادداشت با نسخهٔ مخزن فرق دارد.');
+        }
         else {
           nbSay();
           if (merged && !opts.quiet) toast(faNum(merged) + ' یادداشت خودکار ادغام شد', 'swap');
@@ -1400,6 +1405,8 @@ function nbCommitMessage(list){
           + '<button type="button" class="btn-soft sm" data-nb-resolve="auto" data-nb-ci="' + i + '">ادغام خودکار</button>'
           + '</div></div>';
       }).join('') || '<div class="nb-empty">تعارضی نیست</div>';
+      if (NB.conflicts.length) html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-act="reset">همه با نسخهٔ مخزن جایگزین شود…</button></div>';
+      if (NB.conflicts.length) html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-act="reset">همه با نسخهٔ مخزن جایگزین شود…</button></div>';
     }
     html += '</div><div class="nb-foot" id="nbFoot">'
       + (nbCountDirty() ? faNum(nbCountDirty()) + ' تغییر منتظر ارسال'
@@ -1440,6 +1447,7 @@ function nbCommitMessage(list){
         else if (a === 'quick') nbQuickInbox('');
         else if (a === 'pull') nbPull({ loud: true });
         else if (a === 'push') nbPush({ loud: true });
+        else if (a === 'reset') nbResetFromRepo();
         return;
       }
       var att = e.target.closest('[data-nb-att]');
@@ -1500,6 +1508,8 @@ function nbCommitMessage(list){
       if (q){ q.focus(); try { q.setSelectionRange(at, at); } catch(err){} }
     });
     box.addEventListener('contextmenu', function(e){
+      var tr = e.target.closest('.nb-temp-row');
+      if (tr){ e.preventDefault(); nbMenu(e.clientX, e.clientY, nbTempTabMenuItems(tr.dataset.nbTemp)); return; }
       var hi = e.target.closest('.nb-hist-row');
       if (hi){ e.preventDefault(); nbHistMenu(+hi.dataset.nbHistItem, e.clientX, e.clientY); return; }
       var note = e.target.closest('[data-nb-note]'), dir = e.target.closest('[data-nb-dir]'), att = e.target.closest('[data-nb-att]');
@@ -1549,6 +1559,26 @@ function nbCommitMessage(list){
     });
   }
 
+  /** An open temp tab in «موقت»: the same things the tab bar offers, which a phone does not show. */
+  function nbTempTabMenuItems(id){
+    var t = tabs.filter(function(x){ return x.id === id; })[0];
+    if (!t) return [];
+    var after = function(fn){ return function(){ fn(); nbRender(); }; };
+    var others = tabs.filter(function(x){ return !x.nb && x.id !== id && !x.pinned; });
+    return [
+      { label: 'باز کردن', act: function(){ nbPhoneLeavePanel(); switchTab(id); } },
+      { label: 'ذخیره در دفترچه…', act: function(){ nbSaveTabDialog(id); } },
+      { label: 'تغییر نام', act: function(){ nbPrompt('نام تب', tabLabel(t), function(v){ t.name = String(v || '').slice(0, 80); drawTabs(); saveState(); nbRender(); }); } },
+      { label: t.pinned ? 'برداشتن سنجاق' : 'سنجاق', act: after(function(){ togglePin(id); }) },
+      { label: 'تکثیر', act: after(function(){ duplicateTab(id); }) },
+      { label: 'کپی متن', act: function(){ copyToClipboard('متن', t.id === activeTab ? ta.value : t.text).then(function(ok){ toast(ok ? 'کپی شد' : 'کپی نشد', ok ? 'copy' : 'x'); }); } },
+      null,
+      others.length ? { label: 'بستن بقیهٔ تب های موقت (' + faNum(others.length) + ')', act: after(function(){
+        closeManyTabs(false, tabs.filter(function(x){ return x.nb || x.id === id; }).map(function(x){ return x.id; }), id);
+      }) } : null,
+      { label: 'بستن', danger: true, act: after(function(){ closeTab(id); }) }
+    ];
+  }
   /** Everything that can be done to one note: the tree's right-click, the note page's ⋯ on a phone. */
   function nbNoteMenuItems(path){
     return [
@@ -1761,6 +1791,43 @@ function nbCommitMessage(list){
     NB.conflicts = NB.conflicts.filter(function(x){ return x !== c; });
     nbCountDirty(); nbRender(); nbSaveFiles(); nbSay();
     if (!NB.conflicts.length){ toast('تعارض حل شد', 'check'); if (how !== 'both') nbPush({}); }
+  }
+  /**
+   * «جایگزینی با نسخهٔ مخزن»: this device's working copy is thrown away and read again from the repository.
+   * What was not sent yet goes into a zip first (secret notes only as ciphertext), and nothing happens without a yes.
+   */
+  function nbResetFromRepo(why){
+    if (!C || !C.repo){ toast('اول مخزن را وصل کن', 'x'); return; }
+    var dirty = nbDirtyList(), atts = Object.keys(NB.attach || {}).filter(function(k){ return NB.attach[k].dirty; });
+    var n = dirty.length + atts.length;
+    var text = (why ? why + ' ' : '')
+      + (n ? faNum(n) + ' تغییرِ ارسال نشدهٔ این دستگاه کنار گذاشته می شود (قبلش در یک zip دانلود می شود) و ' : '')
+      + 'همهٔ یادداشت ها از نو از مخزن گرفته می شوند. ادامه بدهم؟';
+    nbConfirm('جایگزینی با نسخهٔ مخزن', text, function(){
+      if (n) nbBackupZip(dirty);
+      NB.files = {}; NB.paths = []; NB.attach = {}; NB.conflicts = []; NB.lastCommit = ''; NB.error = '';
+      nbIdxInvalidate();
+      return Promise.all([nbSaveFiles(), nbSaveAttach(), idbSet('nb-last' + nbStoreSuffix(), { commit: '', at: 0 }, 'meta')]).then(function(){
+        return nbPull({ quiet: true });
+      }).then(function(ok){
+        tabs.filter(function(t){ return t.nb; }).forEach(function(t){
+          if (NB.files[t.nb]) nbRefreshOpenTab(t.nb, true); else nbMoveTabOutOf(t.nb);
+        });
+        nbCountDirty(); nbRender(); nbSay();
+        if (ok) toast('دفترچه با نسخهٔ مخزن یکی شد — ' + faNum(NB.paths.filter(function(p){ return p.slice(-1) !== '/'; }).length) + ' فایل', 'check');
+        return ok;
+      });
+    });
+  }
+  /** The unsent changes as a zip: what this device had and the repository did not get. */
+  function nbBackupZip(list){
+    var files = list.filter(function(f){ return !f.deleted; }).map(function(f){
+      if (f.enc) return nbIsEncrypted(f.localCipher || '') ? { path: f.path, text: f.localCipher } : nbIsEncrypted(f.text || '') ? { path: f.path, text: f.text } : null;
+      return { path: f.path, text: f.text };
+    }).filter(Boolean);
+    if (!files.length) return;
+    var stamp = nbCtx(new Date(), '', C.weekStart).jdateDash;
+    downloadBlob(new Blob([nbZip(files)], { type: 'application/zip' }), 'تغییرهای این دستگاه ' + stamp + '.zip');
   }
   function nbShowConflicts(){
     NB.section = 'conflicts';
@@ -2054,6 +2121,8 @@ function nbCommitMessage(list){
       + nbField('ثانیه تا ارسال خودکار', '<input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '">')
       + nbSw('nbSyncOnline', C.syncOnline !== false, 'همگام سازی وقتی اینترنت برگشت', 'اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود')
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="pull">گرفتن الان</button><button class="btn-soft sm" type="button" data-nb-cfg="push">ارسال الان</button></div>'
+      + '<h5>شروع دوباره از مخزن</h5><p class="nb-mini-text">وقتی این دستگاه با مخزن جور نیست (مثلاً دستگاه تازه یا تعارض های زیاد): تغییرهای ارسال نشده در یک zip دانلود می شوند و همه چیز از نو از مخزن گرفته می شود.</p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="reset">جایگزینی با نسخهٔ مخزن…</button></div>'
       + '<h5>پشتیبان</h5><div class="nb-actions">'
       + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
       + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label></div>';
@@ -2165,6 +2234,7 @@ function nbCommitMessage(list){
       if (what === 'addcol'){ nbCollectionDialog(-1, ''); return; }
       if (what === 'pull'){ nbPull({ loud: true }); return; }
       if (what === 'push'){ nbPush({ loud: true }); return; }
+      if (what === 'reset'){ nbCloseSettings(); nbResetFromRepo(); return; }
       if (what === 'forget'){ NB.pass = ''; nbDrawSettings(); toast('گذرواژهٔ یادداشت های رمزدار از حافظه پاک شد', 'lock'); return; }
       if (what === 'test'){
         nbSettingsApply();
@@ -4117,7 +4187,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    menu: nbMenu, goHome: function(){ nbGoHome(); }, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
+    menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
