@@ -7541,8 +7541,10 @@ var NB_CSS = [
   '  body.nb-nav-on.ip-tint, body.nb-nav-on:has(textarea#input:focus){ --nb-nav-h:56px; }',
   '  body.ip-tint #nbNav, body:has(textarea#input:focus) #nbNav{ display:none !important; }',
   '  #ipDone{ display:none; }',
+  '  /* sit on the keyboard (or the home indicator): under the soft keyboard it was unreachable */',
   '  body.nb-nav-on.ip-tint #ipDone, body.nb-nav-on:has(textarea#input:focus) #ipDone{',
-  '    display:flex; position:fixed; z-index:var(--z-nav); left:0; right:0; bottom:0;',
+  '    display:flex; position:fixed; z-index:var(--z-nav); left:0; right:0;',
+  '    bottom:var(--nb-kb, 0px);',
   '    align-items:center; justify-content:center; gap:10px;',
   '    height:calc(56px + env(safe-area-inset-bottom, 0px));',
   '    padding:8px 16px calc(8px + env(safe-area-inset-bottom, 0px));',
@@ -7551,6 +7553,10 @@ var NB_CSS = [
   '    box-shadow:0 -10px 28px -18px rgba(15,23,42,.4);',
   '  }',
   '  body.nb-nav-on.ip-tint #ipDone .i, body.nb-nav-on:has(textarea#input:focus) #ipDone .i{ width:22px; height:22px; }',
+  '  #nbTop [data-nb-top="edit"][data-for="read"]{',
+  '    background:var(--accent); color:#fff; min-width:auto; padding:0 12px; gap:6px; font-weight:800; font-size:.92rem;',
+  '  }',
+  '  #nbTop [data-nb-top="edit"][data-for="read"] .i{ width:18px; height:18px; }',
   '',
   '  /* the page: one column filling the space between the top bar and the bottom bar */',
   '  .tabs, .status, #btnNotebook{ display:none !important; }',
@@ -7887,7 +7893,7 @@ var NB_CSS = [
   '',
   '/* --- bottom navigation (phone): taller, pill behind the active icon, label always --- */',
   'body.m3.nb-nav-on{ --nb-nav-h:64px; }',
-  'body.m3.nb-nav-on.ip-tint{ --nb-nav-h:56px; }      /* room for the «خواندن» done bar */',
+  'body.m3.nb-nav-on.ip-tint{ --nb-nav-h:56px; }      /* room for the «تمام» done bar */',
   'body.m3 #nbNav{ background:var(--surface-2); border-top:0; }',
   'body.m3 .nb-nav-b{ font-size:.7rem; gap:4px; color:var(--ink-2); }',
   'body.m3 .nb-nav-b .i{ width:24px; height:24px; padding:3px 16px; box-sizing:content-box; border-radius:999px; transition:background .15s; }',
@@ -12941,8 +12947,8 @@ function nbCommitMessage(list){
       var done = document.createElement('button');
       done.type = 'button';
       done.id = 'ipDone';
-      done.setAttribute('aria-label', 'پایان ویرایش و بازگشت به خواندن');
-      done.innerHTML = icon('book') + '<span>خواندن</span>';
+      done.setAttribute('aria-label', 'تمام — بازگشت به خواندن');
+      done.innerHTML = icon('check') + '<span>تمام</span>';
       done.addEventListener('click', function(e){
         e.stopPropagation();
         if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function') ipRead();
@@ -12990,6 +12996,11 @@ function nbCommitMessage(list){
       var t = currentTab(), path = t && t.nb;
       var w = b.dataset.nbTop;
       if (w === 'back'){
+        /* ← while typing = finish edit first (same as system Back), not leave the note */
+        if (state.view !== 'preview' && typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){
+          ipRead();
+          return;
+        }
         if (NB.cameFrom && NB.cameFrom !== 'home'){ NB.section = NB.cameFrom; nbSidebar(true); }
         else nbGoHome();
       } else if (w === 'edit'){
@@ -13089,12 +13100,14 @@ function nbCommitMessage(list){
       }
       var editBtn = top.querySelector('[data-nb-top="edit"]'), editing = state.view !== 'preview';
       editBtn.setAttribute('aria-pressed', String(editing));
-      /* the button says what it does next: a pen while reading, a book while writing */
-      editBtn.setAttribute('aria-label', editing ? 'خواندن' : 'ویرایش');
-      editBtn.title = editing ? 'خواندن (پایان ویرایش)' : 'ویرایش';
+      /* pen while reading; a labelled «تمام» check while writing — easy to hit above the keyboard */
+      editBtn.setAttribute('aria-label', editing ? 'تمام — بازگشت به خواندن' : 'ویرایش');
+      editBtn.title = editing ? 'تمام (بازگشت به خواندن)' : 'ویرایش';
       if (editBtn.dataset.for !== (editing ? 'read' : 'edit')){
         editBtn.dataset.for = editing ? 'read' : 'edit';
-        editBtn.innerHTML = '<svg class="i"><use href="#i-' + (editing ? 'book' : 'pen') + '"/></svg>';
+        editBtn.innerHTML = editing
+          ? '<svg class="i"><use href="#i-check"/></svg><span>تمام</span>'
+          : '<svg class="i"><use href="#i-pen"/></svg>';
       }
       var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal', temps: 'temps' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
       if (on === 'cal' || on === 'temps') on = 'more';
@@ -14032,10 +14045,10 @@ function nbCommitMessage(list){
     if (NB.openOnLoad){ var on = NB.openOnLoad; NB.openOnLoad = ''; if (NB.files[on]) nbOpen(on); }
     if (typeof nbShellSync === 'function') nbShellSync();
     if (typeof syncInputDir === 'function') syncInputDir();
-    // once per device: how to enter edit on a phone (double-tap used to look broken)
-    if (!storeGet('mz2-tip-edit') && nbSize() === 'phone'){
-      storeSet('mz2-tip-edit', '1');
-      setTimeout(function(){ toast('ویرایش: مداد بالا · برگشت: «خواندن» پایین', 'pen'); }, 900);
+    // once per device: how to enter / leave edit on a phone
+    if (!storeGet('mz2-tip-edit2') && nbSize() === 'phone'){
+      storeSet('mz2-tip-edit2', '1');
+      setTimeout(function(){ toast('ویرایش: دو ضربه · خروج: «تمام» یا ←', 'pen'); }, 900);
     }
   });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
@@ -14073,9 +14086,8 @@ function nbCommitMessage(list){
      not still guessing whether the second tap meant a zoom; the notebook reads the two taps itself and hands the
      app the dblclick it expects. */
   (function(){
-    /* Deliberate double-tap: min gap filters bounce, max gap + small radius filters scroll taps,
-       short open delay lets a fling cancel the pending edit. */
-    var TAP_MIN = 200, TAP_MAX = 520, TAP_DIST = 30, TAP_OPEN = 280, TAP_COOL = 1400;
+    /* Deliberate double-tap: slower than a bounce, roomy second tap, open delay lets a fling cancel. */
+    var TAP_MIN = 340, TAP_MAX = 780, TAP_DIST = 22, TAP_OPEN = 480, TAP_COOL = 2000;
     var last = 0, lx = 0, ly = 0, done = 0, pending = 0;
     function cancelPending(){ if (pending){ clearTimeout(pending); pending = 0; } }
     document.addEventListener('touchmove', function(){ cancelPending(); }, { passive: true });
