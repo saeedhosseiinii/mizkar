@@ -151,6 +151,9 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
   textarea#input{ padding-bottom:64px; font-size:16px; }     /* 16px: the phone does not zoom into the field */
   .nb-input, #nbBody input, #nbBody select{ font-size:16px; }
 
+  /* the app's own floating buttons (چسباندن، ویرایش سریع) clear the bottom bar */
+  body.nb-nav-on .fabs{ bottom:calc(var(--nb-nav-h, 56px) + 14px + env(safe-area-inset-bottom, 0px)); left:16px; }
+
   /* what has no use without a mouse */
   #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],
   [data-action="present"], [data-action="fs"], #btnOutline, .split{ display:none !important; }
