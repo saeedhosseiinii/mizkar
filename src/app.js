@@ -12423,7 +12423,8 @@ function nbCommitMessage(list){
     var L = nbLayerTop(true);
     if (L){ L.close(); return true; }
     if (nbEditingLayer()){
-      if (typeof ipRead === 'function') ipRead();
+      if (typeof ipGoRead === 'function') ipGoRead();
+      else if (typeof ipRead === 'function') ipRead();
       else { setView('preview'); saveState(); }
       return true;
     }
@@ -12956,11 +12957,19 @@ function nbCommitMessage(list){
       done.id = 'ipDone';
       done.setAttribute('aria-label', 'تمام — بازگشت به خواندن');
       done.innerHTML = icon('check') + '<span>تمام</span>';
-      done.addEventListener('click', function(e){
-        e.stopPropagation();
-        if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function') ipRead();
-        else { setView('preview'); saveState(); }
-      });
+      /* touchend: with the keyboard open, iOS often eats the first tap (only blurs) and never fires click */
+      var doneAt = 0;
+      function doneGo(e){
+        if (e){ e.preventDefault(); e.stopPropagation(); }
+        var now = Date.now();
+        if (now - doneAt < 500) return;
+        doneAt = now;
+        if (typeof ipGoRead === 'function') ipGoRead();
+        else if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function') ipRead();
+        else { setView('preview'); saveState(); try { ta.blur(); } catch(err){} }
+      }
+      done.addEventListener('touchend', doneGo, { passive: false });
+      done.addEventListener('click', doneGo);
       document.body.appendChild(done);
     }
     nav.addEventListener('click', function(e){
@@ -13004,9 +13013,9 @@ function nbCommitMessage(list){
       var w = b.dataset.nbTop;
       if (w === 'back'){
         /* ← while typing = finish edit first (same as system Back), not leave the note */
-        if (state.view !== 'preview' && typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){
-          ipRead();
-          return;
+        if (state.view !== 'preview'){
+          if (typeof ipGoRead === 'function'){ ipGoRead(); return; }
+          if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){ ipRead(); return; }
         }
         if (NB.cameFrom && NB.cameFrom !== 'home'){ NB.section = NB.cameFrom; nbSidebar(true); }
         else nbGoHome();
@@ -13014,6 +13023,8 @@ function nbCommitMessage(list){
         if (state.view === 'preview'){
           if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function') ipEdit(0, '');
           else { setView('editor'); saveState(); setTimeout(function(){ ta.focus(); }, 0); }
+        } else if (typeof ipGoRead === 'function'){
+          ipGoRead();
         } else if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){
           ipRead();
         } else {
@@ -13600,8 +13611,24 @@ function nbCommitMessage(list){
     setView('preview');
     saveState();
     render();
+    try { ta.blur(); } catch(e){}
     var block = ipBlockOfLine(line);
     if (block) block.scrollIntoView({ block: 'center' });
+  }
+  /** Phone «تمام» / ← / system Back: always leave the editor for reading (notebook or temp tab). */
+  function ipGoRead(){
+    if (state.view === 'preview'){
+      try { ta.blur(); } catch(e){}
+      return;
+    }
+    if (ipTab()) ipRead();
+    else {
+      setView('preview');
+      saveState();
+      try { ta.blur(); } catch(e){}
+    }
+    if (typeof nbShellSync === 'function') nbShellSync();
+    if (typeof nbBackSync === 'function') nbBackSync();
   }
   zoomWrap.addEventListener('dblclick', function(e){
     if (!ipTab() || state.view !== 'preview' || e.target.closest('a,button,input,[data-ui],.mermaid,.katex,time')) return;
@@ -13637,7 +13664,7 @@ function nbCommitMessage(list){
   });
   // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
   // judged where it starts, so a selection dragged out of the text never counts
-  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
+  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, #ipDone, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (Date.now() < (ip.outsideUntil || 0)) return;
