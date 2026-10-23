@@ -438,7 +438,7 @@ var APP_CSS = [
   '.tp-cell{width:18px;height:18px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);cursor:pointer;padding:0;}',
   '.tp-cell.on{background:color-mix(in srgb,var(--accent) 35%,transparent);border-color:var(--accent);}',
   '.tp-size{margin-top:8px;font-size:.76rem;color:var(--muted);text-align:center;}',
-  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);}',
+  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);unicode-bidi:plaintext;text-align:start;}',
   'textarea#input::placeholder{color:var(--muted);opacity:.7;}',
   '.divider{position:relative;cursor:col-resize;touch-action:none;}',
   '.divider::before{content:"";position:absolute;top:50%;left:4px;right:4px;height:56px;transform:translateY(-50%);border-radius:4px;background:var(--border-strong);transition:background .15s,height .15s;}',
@@ -4461,7 +4461,9 @@ if (typeof document !== 'undefined'){
     else {
       var fmt = (typeof effectiveFormat === 'function' ? effectiveFormat() : state.fmt) || 'auto';
       var codeLike = /^(json|yaml|yml|toml|ini|xml|sql|csv|log|diff|jwt|cron|js|ts|css|html|code)$/i.test(fmt);
-      var sample = (ta.value || '').slice(0, 4000);
+      var sample = (ta.value || '').slice(0, 8000);
+      // whole-buffer dir is only the fallback: CSS unicode-bidi:plaintext gives each line its own
+      // direction from the first strong character, so a SQL fence stays LTR inside a Persian note.
       dir = (codeLike && typeof hasRTL === 'function' && !hasRTL(sample)) ? 'ltr' : 'rtl';
     }
     ta.setAttribute('dir', dir);
@@ -7470,7 +7472,7 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
   'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}',
   'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);}',
+  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[hidden]{display:none;}',
   '.ta-md .mk-h{color:var(--accent);}',
   '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
@@ -13624,9 +13626,14 @@ function nbCommitMessage(list){
     ip.md.style.width = ta.clientWidth + 'px'; ip.md.style.height = ta.clientHeight + 'px';
     var st = { fence: false, fm: false }, lines = ta.value.split('\n');
     ip.md.innerHTML = lines.map(function(line, i){
-      if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm">---</span>'; }
-      if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm">---</span>'; }
-      return ipTintLine(line, st);
+      if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
+      if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
+      var html = ipTintLine(line, st);
+      // mirror plaintext: code fences and Latin-only lines stay LTR in the tint layer too
+      if (st.fence || /^\s*(```|~~~)/.test(line) || (/[A-Za-z]/.test(line) && typeof hasRTL === 'function' && !hasRTL(line))){
+        return '<span dir="ltr">' + html + '</span>';
+      }
+      return html;
     }).join('\n') + '\n ';
     ip.md.hidden = false;
     ip.md.scrollTop = ta.scrollTop;
