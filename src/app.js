@@ -7479,8 +7479,19 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
-  /* Markdown tint overlay disabled while editing (was doubling/garbling RTL selection). Keep hooks for a later editor. */
-  '.ta-md{display:none!important;}',
+  /* tint behind transparent glyphs; selection keeps glyphs transparent so colours stay and text does not double */
+  'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);overflow-anchor:none;}',
+  'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
+  'body.ip-tint textarea#input::selection{color:transparent!important;-webkit-text-fill-color:transparent!important;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint textarea#input::-moz-selection{color:transparent!important;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
+  '.ta-md[hidden]{display:none;}',
+  '.ta-md .mk-h{color:var(--accent);}',
+  '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
+  '.ta-md .mk-c{color:var(--tok-str,#047857);background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:3px;}',
+  '.ta-md .mk-l{color:var(--tok-fn,#0369a1);}',
+  '.ta-md .mk-t{color:#d97706;}',
+  '.ta-md .mk-fm{color:var(--muted);}',
   'body.ip-on #zoomWrap li.task > .box{cursor:pointer;}',
   'body.ip-on #zoomWrap{cursor:text;}',
   '',
@@ -13588,8 +13599,12 @@ function nbCommitMessage(list){
     ta.focus();
     // after dir/tint: changing dir can clear the selection, so set it last
     ta.setSelectionRange(selStart, selEnd);
-    var paneTop = ta.getBoundingClientRect().top;
-    ta.scrollTop = Math.max(0, ipCaretTop(selStart) - (typeof screenY === 'number' ? screenY - paneTop : ta.clientHeight / 3));
+    /* only realign scroll when we came from a click on the preview — avoid jump on every caret click */
+    if (typeof screenY === 'number'){
+      var paneTop = ta.getBoundingClientRect().top;
+      var want = Math.max(0, ipCaretTop(selStart) - (screenY - paneTop));
+      if (Math.abs(ta.scrollTop - want) > 8) ta.scrollTop = want;
+    }
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
@@ -13607,7 +13622,7 @@ function nbCommitMessage(list){
     render();
     try { ta.blur(); } catch(e){}
     var block = ipBlockOfLine(line);
-    if (block) block.scrollIntoView({ block: 'center' });
+    if (block) block.scrollIntoView({ block: 'nearest' });
   }
   /** Phone «تمام» / ← / system Back: always leave the editor for reading (notebook or temp tab). */
   function ipGoRead(){
@@ -13699,12 +13714,35 @@ function nbCommitMessage(list){
     });
   }
   function ipTint(){
-    /* Keep ip-tint for phone chrome (تمام bar, nav); never draw the markdown overlay — it broke RTL select. */
     var on = !!ipTab() && state.view === 'editor';
     body.classList.toggle('ip-tint', on);
     body.classList.remove('ip-has-sel');
-    if (ip.md) ip.md.hidden = true;
+    if (!on){ if (ip.md) ip.md.hidden = true; return; }
+    if (!ip.md){
+      ip.md = document.createElement('div');
+      ip.md.className = 'ta-md';
+      ip.md.setAttribute('aria-hidden', 'true');
+      ta.parentNode.insertBefore(ip.md, ta);
+    }
+    var cs = getComputedStyle(ta);
+    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+      'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'].forEach(function(k){ ip.md.style[k] = cs[k]; });
+    ip.md.style.top = ta.offsetTop + 'px'; ip.md.style.left = ta.offsetLeft + 'px';
+    ip.md.style.width = ta.clientWidth + 'px'; ip.md.style.height = ta.clientHeight + 'px';
+    var st = { fence: false, fm: false }, lines = ta.value.split('\n');
+    ip.md.innerHTML = lines.map(function(line, i){
+      if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
+      if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
+      var html = ipTintLine(line, st);
+      if (st.fence || /^\s*(```|~~~)/.test(line)) return '<span dir="ltr">' + html + '</span>';
+      return html;
+    }).join('\n') + '\n ';
+    ip.md.hidden = false;
+    ip.md.scrollTop = ta.scrollTop;
   }
+  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } });
+  ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
+  if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
   /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
   function ipArm(){
     var t = ipTab();
