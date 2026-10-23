@@ -986,7 +986,7 @@ function nbCommitMessage(list){
     var f = NB.files[oldPath];
     if (!f) return false;
     var wasNew = !!f.isNew;
-    var copy = Object.assign({}, f, { path: newPath, dirty: true, isNew: wasNew, deleted: false, at: Date.now() });
+    var copy = Object.assign({}, f, { path: newPath, dirty: true, isNew: wasNew, deleted: false, at: Date.now(), movedFrom: wasNew ? '' : oldPath });
     NB.files[newPath] = copy;
     if (NB.paths.indexOf(newPath) === -1) NB.paths.push(newPath);
     if (wasNew){ delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
@@ -1186,6 +1186,8 @@ function nbCommitMessage(list){
   }
   function nbRenderKeep(){
     if (NB.open) nbRender(); else nbStatus();
+    var pop = $('nbSyncPop');
+    if (pop && !pop.hidden && !pop.querySelector('.nb-diff')){ pop.innerHTML = nbSyncPopHtml(); nbSyncPopWire(); }
   }
   function nbTree(){
     var root = { name: '', folders: {}, notes: [] };
@@ -2056,26 +2058,8 @@ function nbCommitMessage(list){
     var m = $('nbSyncPop');
     m.hidden = !m.hidden;
     if (m.hidden) return;
-    var n = nbCountDirty();
-    m.innerHTML = '<div class="pop-title">دفترچه</div>'
-      + '<div class="nb-sync-info">' + (NB_STATES[NB.state] || NB_STATES.off).t
-      + (NB.error ? '<br><span class="nb-warn">' + escapeHtml(NB.error) + '</span>' : '')
-      + '<br><small dir="ltr">' + (C && C.repo ? escapeHtml(C.repo) + ' · ' + escapeHtml(C.branch) : 'no repository')
-      + (n ? ' · ' + faNum(n) + ' pending' : '') + '</small></div>'
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="push">ارسال</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات دفترچه</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>';
-    m.onclick = function(ev){
-      var b = ev.target.closest('[data-nb-pop]');
-      if (!b) return;
-      var w = b.dataset.nbPop;
-      m.hidden = true;
-      if (w === 'settings') nbOpenSettings();
-      else if (w === 'pull') nbPull({ loud: true });
-      else if (w === 'push') nbPush({ loud: true });
-      else nbSidebar();
-    };
+    m.innerHTML = nbSyncPopHtml();
+    nbSyncPopWire();
   });
   document.addEventListener('click', function(e){
     if (!e.target.closest('#nbSyncPop') && !e.target.closest('#nbSync')){
@@ -3280,6 +3264,216 @@ function nbCommitMessage(list){
     var m = /[?&]note=([^&]+)/.exec(location.search);
     if (m) NB.openOnLoad = decodeURIComponent(m[1].replace(/\+/g, ' '));
   })();
+  /* ================= چه چیزی منتظر ارسال است ================= */
+  /** Every pending change, one row each: a moved note is one row, not a delete plus a new file. */
+  function nbPendingRows(){
+    var files = NB.paths.map(function(p){ return NB.files[p]; }).filter(function(x){ return x && (x.dirty || x.deleted); });
+    var deleted = {}, moved = {};
+    files.filter(function(x){ return x.deleted; }).forEach(function(x){ deleted[x.path] = x; });
+    var out = [];
+    files.filter(function(x){ return !x.deleted; }).forEach(function(x){
+      var from = x.movedFrom && deleted[x.movedFrom] ? x.movedFrom : Object.keys(deleted).filter(function(p){ return deleted[p].sha && deleted[p].sha === x.sha; })[0];
+      if (from){
+        delete deleted[from];
+        out.push({ kind: 'move', path: x.path, from: from, label: nbTitle(x.path), folder: nbFolder(x.path) });
+      } else {
+        out.push({ kind: (x.isNew || !x.remote) ? 'new' : 'edit', path: x.path, label: nbTitle(x.path), folder: nbFolder(x.path) });
+      }
+    });
+    Object.keys(deleted).forEach(function(p){
+      out.push({ kind: 'del', path: p, label: nbTitle(p), folder: nbFolder(p), gone: true });
+    });
+    Object.keys(NB.attach || {}).filter(function(k){ return NB.attach[k].dirty; }).forEach(function(k){
+      var a = NB.attach[k];
+      out.push({ kind: a.deleted ? 'del' : 'attach', path: k, label: a.path.split('/').pop(), folder: a.path.split('/').slice(0, -1).join('/'), att: true });
+    });
+    return out;
+  }
+  /** The rows that are not notes read as what they are. */
+  function nbPendLabel(row){
+    var p = row.path;
+    if (p === '.mizkar/config.json') return { label: 'تنظیمات مجموعه ها', folder: 'دفترچه' };
+    if (p.indexOf('templates/') === 0) return { label: 'قالب: ' + row.label, folder: 'templates' };
+    if (row.att || nbIsAttachment(p)) return { label: row.label, folder: row.folder || C.attachments || 'attachments', att: true };
+    return { label: row.label, folder: row.folder };
+  }
+  var NB_KIND = { new: 'تازه', edit: 'ویرایش', del: 'حذف', move: 'جابه جا', attach: 'پیوست تازه' };
+  function nbPendHtml(){
+    var rows = nbPendingRows();
+    if (!rows.length) return '<div class="nb-empty">چیزی منتظر ارسال نیست.</div>';
+    return '<div class="nb-pend">' + rows.map(function(r, i){
+      var info = nbPendLabel(r);
+      return '<div class="nb-pend-row" data-nb-pend="' + i + '">'
+        + '<button type="button" class="nb-pend-open" data-nb-pend-open="' + i + '">'
+        + '<b dir="auto">' + escapeHtml(info.label) + '</b>'
+        + '<small dir="auto">' + escapeHtml(info.folder || '—')
+        + (r.kind === 'move' ? ' · از ' + escapeHtml(nbFolder(r.from) || 'ریشه') : '')
+        + ' · ' + NB_KIND[r.kind] + '</small></button>'
+        + '<span class="nb-pend-btns">'
+        + (info.att ? '' : '<button type="button" class="elbtn xs" data-nb-pend-diff="' + i + '" title="چه چیزی عوض شده">تفاوت</button>')
+        + '<button type="button" class="elbtn xs" data-nb-pend-drop="' + i + '" title="برگرداندن به نسخهٔ مخزن">دور انداختن</button>'
+        + '</span></div>';
+    }).join('') + '</div>';
+  }
+  /** Why sending cannot start right now, in one line, with the button that fixes it. */
+  function nbPushBlocked(){
+    if (!navigator.onLine) return { text: 'اینترنت نیست', btn: 'تلاش دوباره', act: function(){ nbPush({ loud: true }); } };
+    if (NB.locked) return { text: 'قفل توکن بسته است', btn: 'باز کردن قفل', act: function(){ nbUnlock(); } };
+    if (!C || !C.repo || !C.token) return { text: 'مخزن یا توکن ندارد', btn: 'تنظیمات دفترچه', act: function(){ nbOpenSettings(); } };
+    if (NB.conflicts.length) return { text: faNum(NB.conflicts.length) + ' تعارض حل نشده', btn: 'حل تعارض', act: function(){ NB.section = 'conflicts'; nbSidebar(true); nbRender(); } };
+    return null;
+  }
+  function nbPendRefresh(){
+    var pop = $('nbSyncPop');
+    if (pop && !pop.hidden){ pop.innerHTML = nbSyncPopHtml(); nbSyncPopWire(); }
+    if (NB.open) nbRender();
+  }
+  function nbPendDiff(i){
+    var row = nbPendingRows()[i];
+    if (!row) return;
+    var f = NB.files[row.path];
+    var base = (row.from && NB.files[row.from] ? nbTextOf(NB.files[row.from]) : '') || (f && f.base) || '';
+    var now = f ? (f.deleted ? '' : nbTextOf(f)) : '';
+    var label = nbPendLabel(row).label;
+    if (!base && row.kind === 'new'){ base = ''; }
+    var diffs = nbDiffLines(base, now);
+    var html = diffs.map(function(d){
+      var sign = d.op === 'add' ? '+' : d.op === 'del' ? '−' : ' ';
+      return '<div class="nb-diff-line nb-diff-' + d.op + '"><span>' + sign + '</span><code dir="auto">' + escapeHtml(d.text || ' ') + '</code></div>';
+    }).join('') || '<p class="nb-mini-text">تفاوتی نیست.</p>';
+    nbModalBox('چه چیزی عوض شده: ' + label,
+      '<div class="nb-diff">' + html + '</div>'
+      + (row.kind !== 'new' && base ? '' : '<p class="nb-mini-text">نسخهٔ مخزن برای مقایسه نبود؛ همهٔ متن «تازه» شمرده می شود.</p>'),
+      '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'compare');
+  }
+  /** Throw a change away: the pulled version comes back, a new note goes, a deleted one returns. */
+  function nbPendDrop(i){
+    var row = nbPendingRows()[i];
+    if (!row) return;
+    var info = nbPendLabel(row);
+    var what = row.kind === 'new' ? 'این یادداشت تازه برداشته شود؟ (به مخزن نرفته)' : row.kind === 'del' ? 'این یادداشت برگردد؟' : 'تغییرها به نسخهٔ مخزن برگردند؟';
+    nbConfirm('دور انداختن: ' + info.label, what, function(){
+      var f = NB.files[row.path];
+      if (row.att){
+        var a = NB.attach[row.path];
+        if (a){ a.dirty = false; a.deleted = false; }
+        nbSaveFiles(); nbPendRefresh(); toast('پیوست دور انداخته شد', 'undo');
+        return;
+      }
+      if (row.kind === 'new'){
+        var keep = f ? Object.assign({}, f) : null;
+        delete NB.files[row.path];
+        NB.paths = NB.paths.filter(function(p){ return p !== row.path; });
+        nbMoveTabOutOf(row.path);
+        nbSaveFiles(); nbPendRefresh();
+        toast('یادداشت تازه برداشته شد', 'undo', { label: 'بازگشت', icon: 'undo', run: function(){
+          if (!keep) return;
+          NB.files[keep.path] = Object.assign({}, keep, { dirty: true, isNew: true, deleted: false });
+          if (NB.paths.indexOf(keep.path) === -1) NB.paths.push(keep.path);
+          nbSaveFiles(); nbPendRefresh();
+        } });
+        return;
+      }
+      if (row.kind === 'del'){
+        if (f){ f.deleted = false; f.dirty = false; }
+        nbCountDirty(); nbSaveFiles(); nbPendRefresh();
+        toast('یادداشت برگشت', 'undo');
+        return;
+      }
+      if (row.kind === 'move'){
+        var back = row.from;
+        nbMoveNote(row.path, back);
+        nbPendRefresh();
+        toast('جابه جایی برگشت', 'undo');
+        return;
+      }
+      var restore = function(){
+        if (f && f.base){ nbStoreText(f, f.base); f.dirty = false; f.enc = false; f.plain = null; }
+        if (f && nbIsEncrypted && nbIsEncrypted(f.base)) f.enc = true;
+        nbRetargetText(row.path);
+        nbCountDirty(); nbSaveFiles(); nbPendRefresh();
+        toast('به نسخهٔ مخزن برگشت', 'undo');
+      };
+      if (f && f.base) restore();
+      else {
+        nbFileText(row.path).then(function(old){
+          if (f){ nbStoreText(f, old); f.dirty = false; }
+          nbRetargetText(row.path);
+          nbCountDirty(); nbSaveFiles(); nbPendRefresh();
+          toast('به نسخهٔ مخزن برگشت', 'undo');
+        }, function(){ toast('نسخهٔ مخزن خوانده نشد', 'x'); });
+      }
+    });
+  }
+  /** The editor shows the file, so it has to follow what just happened to it. */
+  function nbRetargetText(path){
+    var t = nbTabFor(path), f = NB.files[path];
+    if (!t || !f) return;
+    t.text = f.deleted ? '' : nbTextOf(f);
+    if (t.id === activeTab){ ta.value = t.text; render(); }
+    else drawTabs();
+  }
+  function nbMoveTabOutOf(path){
+    var t = nbTabFor(path);
+    if (!t) return;
+    delete t.nb;
+    t.name = nbTitle(path) + ' (بسته شد)';
+    drawTabs();
+  }
+  function nbSyncPopHtml(){
+    var rows = nbPendingRows();
+    var n = nbCountDirty();
+    var blocked = nbPushBlocked();
+    var head = '<div class="pop-title">دفترچه</div>'
+      + '<div class="nb-sync-info">' + (NB_STATES[NB.state] || NB_STATES.off).t
+      + (NB.error ? '<br><span class="nb-warn">' + escapeHtml(NB.error) + '</span>' : '')
+      + '<br><small dir="ltr">' + (C && C.repo ? escapeHtml(C.repo) + ' · ' + escapeHtml(C.branch) : 'no repository') + '</small></div>';
+    var why = blocked ? '<div class="nb-pend-why">' + escapeHtml(blocked.text)
+      + ' <button type="button" class="elbtn xs" data-nb-pop="fix">' + escapeHtml(blocked.btn) + '</button></div>' : '';
+    var body = '<div class="nb-pend-head">' + (n ? faNum(n) + ' تغییر منتظر ارسال' : 'همه چیز فرستاده شده') + '</div>' + nbPendHtml();
+    return head + why + body
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
+      + '<button class="btn-primary sm" type="button" data-nb-pop="push">ارسال همه</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>';
+  }
+  function nbSyncPopWire(){
+    var m = $('nbSyncPop');
+    if (!m) return;
+    m.onclick = function(ev){
+      var diff = ev.target.closest('[data-nb-pend-diff]');
+      if (diff){ nbPendDiff(+diff.dataset.nbPendDiff); return; }
+      var drop = ev.target.closest('[data-nb-pend-drop]');
+      if (drop){ nbPendDrop(+drop.dataset.nbPendDrop); return; }
+      var open = ev.target.closest('[data-nb-pend-open]');
+      if (open){
+        var row = nbPendingRows()[+open.dataset.nbPendOpen];
+        if (!row) return;
+        m.hidden = true;
+        if (row.att) nbDownloadAttachment(row.path);
+        else if (NB.files[row.path]) nbOpen(row.path);
+        else toast('این یادداشت حذف شده — با «دور انداختن» برمی گردد', 'x');
+        return;
+      }
+      var b = ev.target.closest('[data-nb-pop]');
+      if (!b) return;
+      var w = b.dataset.nbPop;
+      if (w === 'fix'){ var bl = nbPushBlocked(); m.hidden = true; if (bl) bl.act(); return; }
+      m.hidden = true;
+      if (w === 'settings') nbOpenSettings();
+      else if (w === 'pull') nbPull({ loud: true });
+      else if (w === 'push') nbPush({ loud: true });
+      else if (w === 'open') nbSidebar(true);
+    };
+  }
+  /** The sidebar footer opens the very same list. */
+  document.addEventListener('click', function(e){
+    var foot = e.target.closest('#nbFoot');
+    if (!foot) return;
+    var chip = $('nbSync');
+    if (chip) chip.click();
+  });
+
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
   nbSlot();
@@ -3307,6 +3501,7 @@ function nbCommitMessage(list){
     newDialog: nbNewDialog, dateDialog: nbDateDialog, shamsi: nbShamsiLabel, stampToDate: nbStampToDate,
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
+    pending: nbPendingRows, syncPop: function(){ return $('nbSyncPop'); },
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
     attach: nbAddAttachment, attachments: function(){ return NB.attach; }, downloadAttachment: nbDownloadAttachment,
     profiles: nbProfiles, useProfile: nbUseProfile, saveProfile: nbSaveProfile, reload: nbReloadFiles,
