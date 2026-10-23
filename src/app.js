@@ -7183,7 +7183,8 @@ var NB_CSS = [
   '.nb-sync-wrap{ position:relative; }',
   '/* dialogs */',
   '.nb-mini-box{ width:min(560px,100%); }',
-  '.nb-mini-body{ padding:12px 14px; max-height:60vh; overflow:auto; }',
+  /* block, not the PDF modal\'s two-column .modal-body grid — that crushed the date picker */
+  '.nb-mini-body{ display:block; padding:12px 14px; max-height:60vh; overflow:auto; }',
   '.nb-mini-text{ color:var(--ink-2); font-size:13px; line-height:1.9; margin:4px 0 8px; }',
   '.nb-input{',
   '  width:100%; border:1px solid var(--border); background:var(--background, #fff); color:var(--ink); border-radius:8px;',
@@ -7288,14 +7289,20 @@ var NB_CSS = [
   'details.nb-adv h5{margin:12px 0 6px;font-size:.78rem;color:var(--muted);}',
   '#nbColColor{width:52px;height:32px;border:1px solid var(--border);border-radius:8px;background:none;padding:2px;}',
   '',
-  '/* --- انتخابگر تاریخ شمسی (nbDateDialog) --- */',
+  '/* --- انتخابگر تاریخ شمسی (nbDateDialog in #nbMini2 — must not rely on #nb calendar CSS) --- */',
   '.nb-dp{display:flex;flex-direction:column;gap:10px;}',
   '.nb-dp .nb-dp-in{text-align:center;font-weight:700;letter-spacing:1px;}',
   '.nb-dp .nb-cal-head{display:flex;align-items:center;gap:6px;justify-content:center;}',
-  '.nb-dp .nb-cal-head b{flex:1;text-align:center;}',
+  '.nb-dp .nb-cal-head b{flex:1;text-align:center;font-size:13.5px;}',
+  '.nb-dp .nb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}',
+  '.nb-dp .nb-cal-wd{text-align:center;font-size:11px;color:var(--muted);padding-bottom:2px;}',
+  '.nb-dp .nb-cal-cell{position:relative;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;',
+  '  border-radius:9px;font-size:12px;color:var(--ink-2);border:1px solid transparent;user-select:none;}',
+  '.nb-dp .nb-cal-cell.empty{cursor:default;}',
+  '.nb-dp .nb-cal-cell.today{border-color:var(--accent);color:var(--ink);}',
   '.nb-dp-day{cursor:pointer;}',
-  '.nb-dp-day:hover{background:var(--soft);}',
-  '.nb-dp-day.sel{background:var(--accent);color:#fff;font-weight:800;}',
+  '.nb-dp-day:hover{background:var(--soft);border-color:var(--border);}',
+  '.nb-dp-day.sel{background:var(--accent);color:#fff;font-weight:800;border-color:var(--accent);}',
   '.nb-datebtn{text-align:start;cursor:pointer;display:block;width:100%;background:var(--soft);}',
   '.nb-datebtn:hover{border-color:var(--border-strong);}',
   '.nb-cal-g{position:absolute;top:2px;inset-inline-start:4px;font-size:.6rem;font-style:normal;color:var(--muted);opacity:.8;}',
@@ -7667,6 +7674,7 @@ var NB_CSS = [
   '    animation:nb-sheet .2s cubic-bezier(.2,.9,.3,1.1);',
   '  }',
   '  #nbMini .nb-mini-body{ max-height:46vh; }',
+  '  #nbMini2 .nb-mini-body{ max-height:min(70dvh, 520px); }',   /* date picker needs the month grid */
   '  .nb-sug{ max-height:34vh; }',
   '  .toast{ bottom:calc(var(--nb-nav-h) + 12px + env(safe-area-inset-bottom, 0px)); }',
   '',
@@ -11459,6 +11467,7 @@ function nbCommitMessage(list){
   /** The Shamsi date picker: a Persian month grid, and typing «1405/08/05» or «۱۴۰۵/۰۸/۰۵» works. */
   function nbDateDialog(opts){
     opts = opts || {};
+    try { if (ta && document.activeElement === ta) ta.blur(); } catch(e){}   // free the keyboard so the sheet fits
     var chosen = nbShamsiStamp(opts.value) || nbShamsiStamp(new Date());
     var view = { jy: +chosen.split('-')[0], jm: +chosen.split('-')[1] };
     nbModalBox(opts.title || 'تاریخ',
