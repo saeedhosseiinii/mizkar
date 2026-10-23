@@ -7477,6 +7477,9 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
   'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}',
   'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
+  /* transparent fill hid the selected glyphs; restore ink only for the selection highlight */
+  'body.ip-tint textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 32%,transparent);}',
+  'body.ip-tint textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 32%,transparent);}',
   '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:isolate;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[dir="ltr"]{unicode-bidi:plaintext;}',
   '.ta-md[hidden]{display:none;}',
@@ -13555,7 +13558,7 @@ function nbCommitMessage(list){
     m.remove();
     return top;
   }
-  /** Reading → editing, with the caret on `line` (and on `word` in it), the line kept where the block was. */
+  /** Reading → editing, with the caret on `line` (and `word` selected when known), the line kept where the block was. */
   function ipEdit(line, word, screenY){
     var t = ipTab();
     if (!t) return;
@@ -13564,18 +13567,24 @@ function nbCommitMessage(list){
     var lines = ta.value.split('\n'), pos = 0;
     line = Math.max(0, Math.min(line, lines.length - 1));
     for (var i = 0; i < line; i++) pos += lines[i].length + 1;
-    var inLine = word ? lines[line].indexOf(word) : -1;
-    if (inLine > 0) pos += inLine;
+    var selStart = pos, selEnd = pos;
+    word = word ? String(word).trim() : '';
+    if (word){
+      var row = lines[line], inLine = row.indexOf(word);
+      if (inLine < 0) inLine = row.toLowerCase().indexOf(word.toLowerCase());
+      if (inLine >= 0){ selStart = pos + inLine; selEnd = selStart + word.length; }
+    }
     // a phone's second tap also fires a compatibility mousedown on the preview; ignore it or we bounce back to reading
     ip.outsideUntil = Date.now() + 800;
     setView('editor');
     saveState();
-    ta.focus();
-    ta.setSelectionRange(pos, pos);
-    var paneTop = ta.getBoundingClientRect().top;
-    ta.scrollTop = Math.max(0, ipCaretTop(pos) - (typeof screenY === 'number' ? screenY - paneTop : ta.clientHeight / 3));
-    ipTint();
     if (typeof syncInputDir === 'function') syncInputDir();
+    ipTint();
+    ta.focus();
+    // after dir/tint: changing dir can clear the selection, so set it last
+    ta.setSelectionRange(selStart, selEnd);
+    var paneTop = ta.getBoundingClientRect().top;
+    ta.scrollTop = Math.max(0, ipCaretTop(selStart) - (typeof screenY === 'number' ? screenY - paneTop : ta.clientHeight / 3));
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
@@ -13596,7 +13605,13 @@ function nbCommitMessage(list){
   }
   zoomWrap.addEventListener('dblclick', function(e){
     if (!ipTab() || state.view !== 'preview' || e.target.closest('a,button,input,[data-ui],.mermaid,.katex,time')) return;
-    var word = String(window.getSelection ? window.getSelection() : '').trim();
+    var sel = window.getSelection ? window.getSelection() : null;
+    var word = sel ? String(sel).trim() : '';
+    // some browsers clear the selection before dblclick; fall back to the clicked token
+    if (!word && e.target && e.target.nodeType === 1){
+      var tok = (e.target.textContent || '').trim().split(/\s+/)[0] || '';
+      if (tok.length > 1 && tok.length < 60) word = tok;
+    }
     var block = e.target.closest(IP_BLOCKS);
     ipEdit(block ? ipLineOf(block) : 0, word.length > 1 && word.length < 60 ? word : '', block ? block.getBoundingClientRect().top : e.clientY);
   });
