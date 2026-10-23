@@ -1,0 +1,159 @@
+# Mizkar notebook — next round of changes (plan for the implementer)
+
+This plan is for the model that implements the next round on the `notebook` branch. Read `dev/README.md`
+first: it explains the build (`dev/apply.py`), the beta (`dev/beta.py`) and the tests.
+
+## Ground rules
+
+- **Never edit `index.html` by hand.** Change `dev/*.js|css|html` and rebuild with `python3 dev/apply.py`.
+  New modules go in the same scope as `nb.js` (see how `home.js`, `ui.js`, `inplace.js` are inserted).
+  Anything the app (outside the notebook closure) must call is published on `window` (see the end of `nb.js`).
+- **The main site stays untouched.** Ship only to `/beta/` with `python3 dev/beta.py <main-worktree>/beta "note" …`,
+  committed on `main` as the `beta/` folder. `beta.py` gives the beta its own storage; keep it that way.
+- **Every item gets tests** in `dev/test_ui.js` (jsdom + fake GitHub) or `dev/test_nb.js` (pure engine). The full
+  suites must stay green (`node dev/test_nb.js`, `node dev/test_ui.js`; jsdom from `npm i jsdom`).
+- **One commit per item**, message says what the user gets. No mention of AI tools in commits.
+- **RTL first.** The UI is Persian and right-to-left. Strings are Persian; follow the existing tone (short,
+  plain, no jargon). Check every new piece at 360px wide and at 1440px wide.
+- **Nothing silently loses data.** Moves, deletes and drops of notes are undoable (toast with «بازگشت») or
+  confirmed; a secret (encrypted) note never gets its plaintext written anywhere (see `nbPersistable`).
+
+## Priorities
+
+1. Layout regroup + sidebar toggle (§1), right-click map (§2), all-Shamsi dates (§3)
+2. Mobile app feel (§4)
+3. Drag and drop (§5)
+4. Polish and extras (§6)
+
+---
+
+## 1. Layout: the app shell
+
+**Today:** the top bar is brand (right) … then `.bar-end` on the left with: notebook toggle, «ویرایش»,
+recent texts, Ctrl+K, «ابزارها», settings, export. The notebook sidebar (`#nb`) is a drawer that slides in
+from the right, under the tab strip; its toggle lives in the top bar far from it.
+
+**Wanted:**
+
+1. **Every control except «خروجی» moves to the right side** of the top bar (next to the brand, in this order
+   from the right): sidebar toggle · «ویرایش/خواندن» · recent texts · «ابزارها» · Ctrl+K · settings.
+   «خروجی» (export) stays alone on the left. Keep the same buttons/actions; only the placement changes
+   (do it in `ui.js`/`ui.css`, not by editing the base markup).
+2. **The sidebar toggle sits on the sidebar's own edge**, on the right: a slim handle/button attached to
+   the drawer that opens and closes it in place (`nbSidebar()`), visible when the drawer is closed too
+   (a small tab on the right edge of the window). The top-bar notebook button can then go.
+3. **Docked on wide screens:** at ≥1100px the open sidebar pushes the page instead of covering it (the preview
+   and the outline shift left; `nb.css` already has a ≥1100px block to start from). Below that it overlays.
+   The open/closed state and its width (it already has a grip) are remembered.
+4. **Collapsed rail (optional, desktop):** when closed, a 44px icon rail on the right with: دفترچه · امروز ·
+   جستجو · تقویم · کارها · موقت. Clicking an icon opens the drawer on that section.
+
+**Accept:** at 1440px the top bar shows everything but export on the right; the drawer opens/closes from its
+own edge handle; at ≥1100px the open drawer does not hide the text; state survives a reload.
+
+## 2. Right-click (and long-press) map
+
+A long press (≈450ms, finger still) opens the same menu on touch screens. Use one menu component (`nbMenu`
+or the tab `ctx-menu`) so all menus look and behave alike (keyboard: arrows, Enter, Esc).
+
+| Where | Menu |
+|---|---|
+| Notebook tree — empty space | ✅ exists: new note / folder / collection / quick capture / pull / push |
+| Notebook tree — folder | ✅ exists; add «یادداشت از قالب…» (pick a template) and «باز کردن همه در تب» |
+| Notebook tree — note | ✅ exists; add «انتقال به مجموعه…» (§5.2), «سنجاق در تب» , «باز کردن در تب تازه» |
+| Calendar — a day | **new:** one item per collection with a calendar: «روزانه — باز/ساختن», «جلسه ها — یادداشت تازه…»; then «یادداشت های این روز» (list) and «کارهای این روز» |
+| Calendar — month header | **new:** «فقط مجموعهٔ …» (filter the dots to one collection), «همهٔ مجموعه ها», «برو به امروز» |
+| Calendar — a collection dot/legend | **new:** «یادداشت های این مجموعه» → switches the sidebar to the notes of that collection (tree scrolled to its folder, or search filtered by it) |
+| «کارها» — a task | **new:** «تاریخ سررسید…» (Shamsi picker, writes 📅), «امروز» / «فردا» / «بدون تاریخ», «باز کردن یادداشت», «انجام شد» |
+| «امروز» page — a note or a task | **new:** same as the tree note / task menus |
+| Preview (reading a note) | **new:** «ویرایش اینجا» (in-place edit at that block — `ipEdit`), «کپی پیوند این سرتیتر» (for headings: `[[note#heading]]`), «کپی متن بلوک» |
+| Editor (in-place, a selection) | **new:** «پیوند به یادداشت…» (wraps the selection in `[[ ]]` with the suggest list), «یادداشت تازه از انتخاب» (moves the selection into a new note and leaves a link), «کار کن» (prefix `- [ ] `) |
+| Tab | ✅ exists; add «ذخیره در دفترچه…» for temp tabs, «نمایش در درخت» for note tabs |
+| Search result | **new:** open / open in new tab / copy link |
+| Attachments | ✅ exists |
+
+Keep the browser's own menu where it matters: inside text fields when nothing is selected, and on links in
+the preview (or add «باز کردن پیوند» / «کپی نشانی» to ours).
+
+**Accept:** every row above opens its menu by right-click and by long-press; each item works and is tested.
+
+## 3. Dates: Shamsi everywhere
+
+**Today:** the calendar grid is Shamsi, but the new-note dialog uses `<input type="date">` (Gregorian,
+`nbPanelDate`), templates write `date: {{gdate}}` and `{{date}}` falls back to the Gregorian date, a new note
+from `nbWikiOpen` writes a Gregorian `date:`.
+
+**Wanted:**
+
+1. **A Shamsi date picker** component (month grid in Persian, week from `C.weekStart`, today marked, typing
+   `1405/08/05` or Persian digits works) replacing every `<input type="date">`; reuse it for task due dates (§2).
+2. **Templates speak Shamsi:** `{{date}}` becomes the Shamsi date (`1405-08-05`); the samples in
+   `NB_TEMPLATES` use `{{date}}` for both the title and the front matter. `{{gdate}}` stays available.
+3. **Front matter:** write `date: 1405-08-05` (Shamsi) and also `created: 2026-10-27` (ISO) so tools that
+   need a Gregorian date (Obsidian's calendar plugins, Dataview) still work. Reading accepts either.
+4. **Everywhere the UI shows a date** (history, recent notes, «امروز», task due labels, sync times, commit
+   times in note history) it is Shamsi with Persian digits.
+5. The calendar shows Persian month and weekday names only; an optional small Gregorian day number in the
+   corner of each cell (setting «نمایش تاریخ میلادی کنار روزها», default off).
+
+**Accept:** no Gregorian date is visible anywhere in the notebook with default settings; a note made today has
+`date: <Shamsi>` and `created: <ISO>`; the picker accepts typed Persian digits.
+
+## 4. Mobile: feel like an app
+
+1. **Bottom navigation** (≤760px): «امروز» · «دفترچه» · «جستجو» · «تقویم» · «+» (new note / quick capture
+   sheet). The top bar shrinks to: title of the current note, «ویرایش/خواندن», «⋯» (everything else).
+2. **Sheets, not drawers:** sidebar sections, dialogs and menus open as bottom sheets with a grab handle,
+   swipe down to close, and the Android/iOS back button closes the top sheet (push a history state when a
+   sheet opens, `popstate` closes it).
+3. **Touch targets** ≥44px; no hover-only controls (tab ✎/pin, row actions): show them always or via long-press.
+4. **Long-press = right-click** everywhere (§2); light haptic (`navigator.vibrate(10)`) when a menu opens.
+5. **Editing on a phone:** the Markdown toolbar sits above the soft keyboard (`visualViewport`, the notebook
+   already tracks `--nb-kb`); the in-place editor keeps the caret line visible while typing.
+6. **Pull to refresh** on the notes list and «امروز» runs a pull (`nbPull({loud:true})`).
+7. **Viewport:** `100dvh` instead of `100vh`, `env(safe-area-inset-*)` padding for notches and the home
+   indicator, `theme-color` following light/dark, `overscroll-behavior: contain` on scroll areas.
+8. **Hide desktop-only tools** on phones: hand mode, zoom buttons, outline panel, two-column view.
+9. **Quick capture from anywhere:** the share target already parks text; on open, «ثبت سریع» shows it.
+
+**Accept:** at 360×740 every flow (open «امروز», tick a task, open a note, edit, back, search, calendar, new
+note from template, sync) works with one thumb and no horizontal scroll; Back closes sheets before leaving.
+
+## 5. Drag and drop
+
+Use pointer events (mouse drags at once; touch after a long press, like the tab bar already does — see
+`tabDrag` in the app) so it works on phones. Show a drop indicator; Esc cancels; every move is one undo.
+
+1. **Tree:** drag a note onto a folder → move it there (`nbMoveNote`); drag a folder onto a folder → move the
+   folder with its notes (like `nbRenameFolder`); drop on empty space → to the root.
+2. **Into a collection:** dropping a note on a collection's folder (or choosing «انتقال به مجموعه…»)
+   renames it with that collection's pattern: dated patterns take the date from the note's front matter
+   (`date`/`created`), else today; `{title}` from the note's title. Ask once if the name would collide.
+3. **Tasks onto the calendar:** drag a task (from «کارها» or «امروز») onto a day → sets/changes its `📅`.
+4. **Notes onto the editor:** drop a tree note into the in-place editor → inserts `[[title]]` at the drop point.
+5. **Temp tab onto a folder:** drag a temp tab from the tab bar onto a tree folder → «ذخیره در دفترچه» there.
+6. **Files from the computer:** `.md` → imported as notes into the folder they are dropped on; images → into
+   `attachments/` and linked when dropped on the editor (attachments already exist: `nbAddAttachment`).
+
+**Accept:** each drag above works with a mouse and with touch, shows where it will land, and can be undone.
+
+## 6. Polish and extras
+
+1. **Connect wizard:** first open of the notebook → three steps (make a private repository — with a link and a
+   short how-to; make a fine-grained token for that repository only, Contents read/write — with a link; paste
+   and test). Today this is a raw settings form.
+2. **Front matter form:** the properties strip in the preview becomes editable (status, tags, date with the
+   Shamsi picker) without touching YAML.
+3. **Trash:** deleted notes stay recoverable from «سطل بازیافت» until they are pushed (and from git history after).
+4. **Keyboard map:** `?` shows all shortcuts; consistent ones for: new note, quick capture, today, search,
+   calendar, tasks, toggle sidebar, read/edit.
+5. **Consistent motion and spacing:** one easing/duration for drawers, sheets, menus; one radius scale; one
+   spacing scale; skeleton rows while the first pull runs instead of an empty tree.
+6. **Empty states with one clear action** for: empty notebook, no tasks, empty day, no search results.
+7. **Claude Sessions:** the KB script on the user's machine (`/var/www/kb/tools`) will push its notes into
+   `Claude Sessions/`; keep that folder read-only and give it its own filter in search.
+
+## Not in scope now
+
+- A WYSIWYG/CodeMirror editor (the in-place editor in `inplace.js` is the chosen direction for now).
+- Server-side features (sharing links, server PDF, bots).
