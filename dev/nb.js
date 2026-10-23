@@ -1388,10 +1388,12 @@ function nbCommitMessage(list){
       });
       return node;
     }
-    nbFolders().forEach(function(f){ ensure(f.split('/')); });
+    var q = nbNorm(NB.treeQuery || '');
+    var hit = function(p){ return !q || nbNorm(nbTitle(p) + ' ' + p).indexOf(q) !== -1; };
+    if (!q) nbFolders().forEach(function(f){ ensure(f.split('/')); });      // while filtering, only folders with a match show
     NB.paths.forEach(function(p){
       var f = NB.files[p];
-      if (p.slice(-1) === '/' || !f || f.deleted) return;
+      if (p.slice(-1) === '/' || !f || f.deleted || !hit(p)) return;
       var parts = p.split('/'), file = parts.pop();
       ensure(parts).notes.push({ path: p, file: f });
     });
@@ -1400,7 +1402,7 @@ function nbCommitMessage(list){
     Object.keys(NB.attachMeta || {}).forEach(function(k){ atts[k] = 1; });
     Object.keys(atts).forEach(function(k){
       var a = NB.attach[k] || NB.attachMeta[k];
-      if (a && a.deleted) return;
+      if ((a && a.deleted) || !hit(k)) return;
       var parts = k.split('/'), file = parts.pop();
       ensure(parts).notes.push({ path: k, file: null, att: true });
     });
@@ -1415,7 +1417,7 @@ function nbCommitMessage(list){
     var out = '';
     Object.keys(node.folders).sort(function(a, b){ return nbNorm(a).localeCompare(nbNorm(b)); }).forEach(function(k){
       var child = node.folders[k], full = prefix ? prefix + '/' + k : k;
-      var open = NB.expanded[full] !== false, count = nbCountUnder(child);
+      var open = !!NB.treeQuery || NB.expanded[full] !== false, count = nbCountUnder(child);
       out += '<div class="nb-row nb-dir-row' + (open ? ' open' : '') + '" data-nb-dir="' + escapeHtml(full) + '" tabindex="0" role="button">'
         + '<span class="nb-caret">' + icon('chev') + '</span>' + icon('folder')
         + '<span class="nb-name" dir="auto">' + escapeHtml(child.name) + '</span>'
@@ -1442,31 +1444,11 @@ function nbCommitMessage(list){
     if (!box) return;
     var t = currentTab(), active = t && t.nb ? t.nb : '';
     var noteCount = NB.paths.filter(function(p){ return p.slice(-1) !== '/' && NB.files[p] && !NB.files[p].deleted; }).length;
-    var html = '<div class="nb-tabs">'
-      + nbTabBtn('notes', 'tree', 'دفترچه', noteCount)
-      + nbTabBtn('temps', 'file', 'موقت', tabs.length)
-      + nbTabBtn('search', 'search', 'جستجو', 0)
-      + nbTabBtn('cal', 'clock', 'تقویم', 0)
-      + nbTabBtn('tasks', 'check', 'کارها', typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0)
-      + nbTabBtn('tags', 'hash', 'برچسب', 0)
-      + ((NB.trash || []).length || NB.section === 'trash' ? nbTabBtn('trash', 'trash', 'سطل', (NB.trash || []).length) : '')
-      + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
-      + '</div><div class="nb-list" id="nbList">';
+    nbSecsRender(noteCount);
+    var html = '<div class="nb-list" id="nbList">';
     if (NB.section === 'notes'){
-      html += '<div class="nb-actions">'
-        + '<button type="button" class="btn-soft sm" data-nb-act="new">' + icon('plus') + 'یادداشت جدید</button>'
-        + '<button type="button" class="btn-soft sm" data-nb-act="pull" title="گرفتن تغییرهای تازه از مخزن">' + icon('redo') + 'گرفتن</button>'
-        + '<button type="button" class="btn-soft sm" data-nb-act="push" title="ارسال تغییرها به مخزن">' + icon('cloud') + 'ارسال'
-        + (nbCountDirty() ? '<b class="nb-badge">' + faNum(nbCountDirty()) + '</b>' : '') + '</button>'
-        + '<button type="button" class="btn-soft sm" data-nb-act="quick" title="ثبت سریع (یک متن کوتاه، بی عنوان)">' + icon('pen') + 'ثبت سریع</button>'
-        + '</div>';
-      var tree = nbTree(), hasTree = Object.keys(tree.folders).length || tree.notes.length;
-      if (!noteCount){
-        html += nbEmptyBox('دفترچه خالی است.', C.repo ? 'یادداشت تازه' : 'وصل کردن مخزن گیت هاب', C.repo ? 'new' : 'settings', C.repo ? 'plus' : 'cloud');
-        if (C && C.repo) html += '<p class="nb-hint">«گرفتن» را بزن تا یادداشت های مخزن بیایند.</p>';
-      }
-      if (hasTree) html += nbTreeHtml(tree, 0, '', active);
-      if (active) html += nbBacklinksHtml(active);
+      html += '<div class="nb-search nb-tree-q"><input class="nb-input" id="nbTreeQ" type="search" dir="auto" placeholder="فیلتر یادداشت ها…" value="' + escapeHtml(NB.treeQuery || '') + '"></div>'
+        + '<div id="nbTreeBox">' + nbTreeBoxHtml(noteCount, active) + '</div>';
     } else if (NB.section === 'temps'){
       html += nbTempsHtml();
     } else if (NB.section === 'search'){
@@ -1514,9 +1496,51 @@ function nbCommitMessage(list){
     var scroll = $('nbList') ? $('nbList').scrollTop : 0;
     box.innerHTML = html;
     if ($('nbList')) $('nbList').scrollTop = scroll;
-    var onTab = box.querySelector('.nb-tab.on');
+    var onTab = $('nbSecs') && $('nbSecs').querySelector('.nb-tab.on');
     if (onTab && onTab.scrollIntoView) onTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (NB.section === 'search' && NB.focusSearch){ NB.focusSearch = false; var q = $('nbFind'); if (q){ q.focus(); q.select(); } }
+  }
+  /** The tree (or its empty state) and the backlinks of the open note: redrawn alone while the filter is typed in. */
+  function nbTreeBoxHtml(noteCount, active){
+    var html = '', tree = nbTree(), hasTree = Object.keys(tree.folders).length || tree.notes.length;
+    if (!noteCount){
+      html += nbEmptyBox('دفترچه خالی است.', C.repo ? 'یادداشت تازه' : 'وصل کردن مخزن گیت هاب', C.repo ? 'new' : 'settings', C.repo ? 'plus' : 'cloud');
+      if (C && C.repo) html += '<p class="nb-hint">«گرفتن» (نقطهٔ همگام سازی بالا) را بزن تا یادداشت های مخزن بیایند.</p>';
+    } else if (!hasTree) html += '<p class="nb-hint">یادداشتی با «' + escapeHtml(NB.treeQuery || '') + '» پیدا نشد.</p>';
+    if (hasTree) html += nbTreeHtml(tree, 0, '', active);
+    if (active && !NB.treeQuery) html += nbBacklinksHtml(active);
+    return html;
+  }
+  /** The section icons in the panel's head; what does not fit there is under ⋯. */
+  var NB_SECS_MAIN = [['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'file', 'موقت']];
+  var NB_SECS_MORE = [['tags', 'hash', 'برچسب‌ها'], ['trash', 'trash', 'سطل بازیافت']];
+  function nbSecsRender(noteCount){
+    var box = $('nbSecs');
+    if (!box) return;
+    var counts = { notes: noteCount, temps: tabs.filter(function(x){ return !x.nb; }).length,
+      tasks: typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0, trash: (NB.trash || []).length };
+    var list = NB_SECS_MAIN.slice();
+    NB_SECS_MORE.forEach(function(x){ if (x[0] === NB.section) list.push(x); });    // the section open from ⋯ shows where you are
+    box.innerHTML = list.map(function(x){ return nbTabBtn(x[0], x[1], x[2], x[0] === 'notes' || x[0] === 'temps' ? 0 : counts[x[0]]); }).join('')
+      + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
+      + '<button type="button" class="nb-tab nb-tab-more" data-nb-secs-more title="بیشتر" aria-label="بیشتر"><span class="ui-dots">⋯</span></button>';
+  }
+  function nbSecsMoreItems(){
+    return NB_SECS_MORE.map(function(x){
+      return { label: x[2] + (x[0] === 'trash' && (NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: function(){ NB.section = x[0]; nbRender(); } };
+    }).concat([null,
+      { label: 'تنظیمات', act: function(){ nbOpenSettings(); } },
+      { label: 'کلیدهای میانبر', act: function(){ nbKeysDialog(); } }]);
+  }
+  function nbPlusItems(){
+    return [
+      { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },
+      { label: 'ثبت سریع', act: function(){ nbQuickInbox(''); } },
+      { label: 'یادداشت امروز', act: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
+      null,
+      { label: 'پوشهٔ جدید', act: function(){ nbNewFolder(''); } },
+      { label: 'مجموعهٔ جدید (پوشه + تقویم + قالب)…', act: function(){ nbCollectionDialog(-1, ''); } }
+    ];
   }
   function nbTabBtn(sec, ic, label, count, warn){
     // only the open section shows its name; the others are an icon (with a tooltip), so every section fits
@@ -1535,6 +1559,11 @@ function nbCommitMessage(list){
     if (!box) return;
     box.addEventListener('input', function(e){
       if (e.target.id === 'nbFind'){ NB.query = e.target.value; nbRefreshSearch(); }
+      if (e.target.id === 'nbTreeQ'){
+        NB.treeQuery = e.target.value;
+        var tb = $('nbTreeBox'), t = currentTab();
+        if (tb) tb.innerHTML = nbTreeBoxHtml(NB.paths.filter(function(p){ return p.slice(-1) !== '/' && NB.files[p] && !NB.files[p].deleted; }).length, t && t.nb ? t.nb : '');
+      }
     });
     // a mouse wheel scrolls the section row sideways when it is wider than the panel
     box.addEventListener('wheel', function(e){
@@ -1547,6 +1576,10 @@ function nbCommitMessage(list){
       if (e.target.id === 'nbFindCol'){ NB.colFilter = e.target.value; nbRefreshSearch(); }
     });
     box.addEventListener('click', function(e){
+      var anchorMenu = function(el, items){ var r = el.getBoundingClientRect(); nbMenu(r.left, r.bottom + 4, items); };
+      if (e.target.closest('[data-nb-secs-more]')){ e.stopPropagation(); anchorMenu(e.target.closest('[data-nb-secs-more]'), nbSecsMoreItems()); return; }
+      if (e.target.closest('#nbPlus')){ e.stopPropagation(); anchorMenu($('nbPlus'), nbPlusItems()); return; }
+      if (e.target.closest('#nbHeadSync')){ e.stopPropagation(); nbToggleSyncPop($('nbHeadSync')); return; }
       var sec = e.target.closest('[data-nb-sec]');
       if (sec){ NB.section = sec.dataset.nbSec; nbRender(); return; }
       var act = e.target.closest('[data-nb-act]');
@@ -2534,17 +2567,26 @@ function nbCommitMessage(list){
       storeSet('fs2-nbw', String(parseInt(cur, 10) || 328));
     });
   })();
-  $('nbSync').addEventListener('click', function(e){
-    e.stopPropagation();
+  /**
+   * The list of what waits to be sent, opened from the status chip, the panel's sync dot or a phone's top bar:
+   * next to the button on a big screen (above a chip at the bottom, below a button at the top), a sheet on a phone.
+   */
+  function nbToggleSyncPop(anchor){
     if (NB.locked){ nbUnlock(); return; }
     var m = $('nbSyncPop');
     m.hidden = !m.hidden;
     if (m.hidden) return;
     m.innerHTML = nbSyncPopHtml();
     nbSyncPopWire();
-  });
+    if (!anchor || innerWidth <= 760) return;
+    var r = anchor.getBoundingClientRect(), w = m.offsetWidth || 360, below = r.top < innerHeight / 2;
+    m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; m.style.right = 'auto';
+    if (below){ m.style.top = (r.bottom + 6) + 'px'; m.style.bottom = 'auto'; }
+    else { m.style.top = 'auto'; m.style.bottom = Math.max(8, innerHeight - r.top + 8) + 'px'; }
+  }
+  $('nbSync').addEventListener('click', function(e){ e.stopPropagation(); nbToggleSyncPop($('nbSync')); });
   document.addEventListener('click', function(e){
-    if (!e.target.closest('#nbSyncPop') && !e.target.closest('#nbSync')){
+    if (!e.target.closest('#nbSyncPop') && !e.target.closest('#nbSync') && !e.target.closest('#nbHeadSync') && !e.target.closest('[data-nb-top="sync"]')){
       var m = $('nbSyncPop');
       if (m) m.hidden = true;
     }

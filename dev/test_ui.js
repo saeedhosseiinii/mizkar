@@ -334,8 +334,10 @@ async function until(fn, ms = 3000) {
   nb.ui.sidebar(true);
   const notesSec = doc.querySelector('[data-nb-sec="notes"]');
   if (notesSec) notesSec.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  const newNoteBtn = doc.querySelector('[data-nb-act="new"]');
-  newNoteBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  doc.getElementById('nbPlus').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const plusItems = [...doc.querySelectorAll('#nbMenu .mi')];
+  ok('＋ offers a note, a quick capture, today, a folder and a collection', ['یادداشت جدید', 'ثبت سریع', 'یادداشت امروز', 'پوشهٔ جدید', 'مجموعهٔ جدید'].every((s) => plusItems.some((b) => b.textContent.indexOf(s) !== -1)), plusItems.map((b) => b.textContent));
+  plusItems.find((b) => b.textContent.indexOf('یادداشت جدید') !== -1).click();
   ok('the dialog offers «مجموعهٔ جدید…»', !!doc.getElementById('nbColNew'));
   doc.getElementById('nbColNew').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   const nameField = doc.getElementById('nbMiniInput');
@@ -1583,7 +1585,7 @@ async function until(fn, ms = 3000) {
   nb.ui.trashRestore(0);
   ok('restoring then makes it a new note again', nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.files()['سطل/فقط اینجا.md'].isNew && !nb.ui.files()['سطل/فقط اینجا.md'].remote);
   nb.ui.section('trash');
-  ok('the trash has a section of its own', !!doc.querySelector('#nbBody .nb-tab[data-nb-sec="trash"]') || nb.ui.trash().length === 0);
+  ok('the trash has a section of its own', !!doc.querySelector('#nbSecs .nb-tab[data-nb-sec="trash"]') || nb.ui.trash().length === 0);
 
   console.log('\n— sharing through a gist: open, key in the link, password —');
   nb.ui.provider('github');
@@ -1653,10 +1655,30 @@ async function until(fn, ms = 3000) {
   doc.getElementById('nbMiniOk').click();
   eq('saving writes it back into the note', nb.ui.files()['ویژگی/الف.md'].text, '---\ndate: 1405-08-01\ntags: [کار, مهم]\ntype: جلسه\n---\n# الف\n');
 
-  console.log('\n— the section row fits the panel —');
+  console.log('\n— the panel: one head row, a filter over the tree —');
   nb.ui.sidebar(true); nb.ui.section('notes');
+  ok('the sections sit in the head, no row of big buttons below', !!doc.querySelector('#nb .nb-head #nbSecs [data-nb-sec="notes"]') && !doc.querySelector('#nbBody [data-nb-act="new"]') && !doc.querySelector('#nbBody .nb-tabs'));
   ok('only the open section shows its name, the others are icons with a tooltip',
-    !!doc.querySelector('#nbBody .nb-tab.on .nb-tab-l') && [...doc.querySelectorAll('#nbBody .nb-tab:not(.on)')].every((b) => b.title && b.getAttribute('aria-label')));
+    !!doc.querySelector('#nbSecs .nb-tab.on .nb-tab-l') && [...doc.querySelectorAll('#nbSecs .nb-tab:not(.on)')].every((b) => b.title && b.getAttribute('aria-label')));
+  doc.querySelector('#nbSecs [data-nb-secs-more]').click();
+  const moreSecs = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent);
+  ok('⋯ holds tags, the trash and settings', ['برچسب‌ها', 'سطل بازیافت', 'تنظیمات'].every((s) => moreSecs.some((l) => l.indexOf(s) !== -1)), moreSecs);
+  doc.getElementById('nbMenu').hidden = true;
+  nb.ui.write('فیلتر/سیب.md', '# سیب\n'); nb.ui.write('فیلتر/گلابی.md', '# گلابی\n');
+  nb.ui.section('notes');
+  const tq = doc.getElementById('nbTreeQ');
+  tq.value = 'سیب';
+  tq.dispatchEvent(new win.Event('input', { bubbles: true }));
+  const shown = [...doc.querySelectorAll('#nbTreeBox [data-nb-note]')].map((r) => r.dataset.nbNote);
+  ok('typing in the filter narrows the tree to matching notes, folders open', shown.indexOf('فیلتر/سیب.md') !== -1 && shown.indexOf('فیلتر/گلابی.md') === -1, shown);
+  ok('and the filter keeps the focus (only the tree is redrawn)', doc.getElementById('nbTreeQ') === tq);
+  tq.value = ''; tq.dispatchEvent(new win.Event('input', { bubbles: true }));
+  nb.ui.write('فیلتر/سیب.md', '# سیب\nتازه\n');
+  await sleep(30);
+  ok('the head shows the sync dot with the waiting count', /\d|[۰-۹]/.test(doc.querySelector('#nbHeadSync b').textContent));
+  doc.getElementById('nbHeadSync').click();
+  ok('which opens the list of what waits', !doc.getElementById('nbSyncPop').hidden && !!doc.querySelector('#nbSyncPop .nb-pend-row'));
+  doc.body.click();
   ok('and the row scrolls when it still does not fit', /#nb \.nb-tabs\{[^}]*overflow-x:auto/.test(doc.getElementById('appStyle').textContent));
   nb.ui.sidebar(false);
 

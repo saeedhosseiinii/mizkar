@@ -31,7 +31,7 @@
       { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
       { label: 'یادداشت امروز', act: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
       null,
-      { label: 'همگام سازی: ' + (($('nbSync') && $('nbSync').textContent) || 'دفترچه'), act: function(){ $('nbSync').click(); } },
+      { label: 'همگام سازی: ' + (($('nbSync') && $('nbSync').textContent) || 'دفترچه'), act: function(){ nbToggleSyncPop(null); } },
       { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
       { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } }
     ];
@@ -90,7 +90,7 @@
         if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
         nbPrompt('نام یادداشت', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); });
       } else if (w === 'sync'){
-        $('nbSync').click();
+        nbToggleSyncPop(b);
       } else if (w === 'more' && path){
         var r = b.getBoundingClientRect();
         nbMenu(r.left, r.bottom, [
@@ -105,13 +105,6 @@
     var syncPop = $('nbSyncPop'), syncChip = $('nbSync');
     if (syncPop && syncChip){
       document.body.appendChild(syncPop);
-      syncChip.addEventListener('click', function(){
-        if (syncPop.hidden || nbSize() === 'phone') return;
-        var r = syncChip.getBoundingClientRect(), w = syncPop.offsetWidth || 360;
-        syncPop.style.top = 'auto'; syncPop.style.right = 'auto';
-        syncPop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
-        syncPop.style.bottom = Math.max(8, innerHeight - r.top + 8) + 'px';
-      });
     }
 
     /* the ⋯ menu on the preview header drops the desktop-only bits on a phone */
@@ -139,6 +132,13 @@
       var syncBtn = $('nbSync'), dot = top.querySelector('.nb-top-sync');
       if (syncBtn) dot.className = 'nb-top-sync ' + (syncBtn.className.match(/nb-(ok|pending|busy|conflict|error|off)/) || ['nb-off'])[0];
       dot.title = syncBtn ? syncBtn.textContent : '';
+      var hs = $('nbHeadSync');
+      if (hs){
+        var n = NB.dirtyCount || 0;
+        hs.className = 'nb-head-sync ' + dot.className.replace('nb-top-sync ', '');
+        hs.querySelector('b').textContent = n ? faNum(n) : '';
+        hs.title = (syncBtn ? syncBtn.textContent : 'همگام سازی') + ' — فهرست، گرفتن و ارسال';
+      }
       top.querySelector('[data-nb-top="edit"]').setAttribute('aria-pressed', String(state.view !== 'preview'));
       var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
       Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.nbNav === on)); });
@@ -149,7 +149,7 @@
     }
     addEventListener('resize', function(){ sync(); if (NB.open) nbSlot(); });
     new MutationObserver(sync).observe(work, { attributes: true, attributeFilter: ['data-view'] });
-    if ($('nbSync')) new MutationObserver(sync).observe($('nbSync'), { attributes: true, attributeFilter: ['class'] });
+    if ($('nbSync')) new MutationObserver(sync).observe($('nbSync'), { attributes: true, attributeFilter: ['class'], childList: true, subtree: true, characterData: true });
     return sync;
   })();
   /**
