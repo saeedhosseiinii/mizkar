@@ -12270,16 +12270,30 @@ function nbCommitMessage(list){
     return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/git/trees/' + sha + '?recursive=1')
       .then(function(tree){ return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; }); });
   }
-  function nbRemoteTree(){
+  /** Every file the repository has at a commit: {path: sha}. Empty for a repository with no commits. */
+  function nbTreePaths(sha){
+    var have = {};
+    if (!sha) return Promise.resolve(have);
+    function page(n){
+      return nbTreeOnce(sha, n).then(function(list){
+        list.forEach(function(e){ if (e.type === 'blob') have[e.path] = e.sha; });
+        if (nbIsGL() && list.length >= 100 && n < 30) return page(n + 1);
+        return have;
+      });
+    }
+    return page(1);
+  }
+  /** With `full`, the tree is read even when the branch did not move: a pull the user asked for repairs everything. */
+  function nbRemoteTree(full){
     return nbRef().then(function(r){
       var sha = r.sha;
-      if (sha === NB.lastCommit && sha) return { sha: sha, unchanged: true, entries: [] };
+      if (sha === NB.lastCommit && sha && !full) return { sha: sha, unchanged: true, entries: [] };
       var all = [];
       function page(n){
         return nbTreeOnce(sha, n).then(function(list){
           all = all.concat(list);
-          var blobs = list.filter(function(e){ return e.type === 'blob'; });
-          if (nbIsGL() && blobs.length >= 100 && n < 6) return page(n + 1);
+          // a full page (folders count too) means there may be more; stopping early would make files look deleted
+          if (nbIsGL() && list.length >= 100 && n < 30) return page(n + 1);
           return all;
         });
       }
@@ -12304,7 +12318,7 @@ function nbCommitMessage(list){
     if (NB.busy) return Promise.resolve(false);
     if (!C || !C.repo){ nbSay('off'); if (opts.loud) toast('اول مخزن را در تنظیمات دفترچه بگذار', 'x'); return Promise.resolve(false); }
     NB.busy = true; nbSay('sync');
-    return nbRemoteTree().then(function(tree){
+    return nbRemoteTree(!!opts.loud).then(function(tree){
       if (tree.unchanged){ NB.busy = false; nbSay(); if (opts.loud) toast('چیز تازه ای نیست', 'check'); return false; }
       var remote = {};
       tree.entries.forEach(function(en){ remote[en.path] = en; });
@@ -12320,7 +12334,7 @@ function nbCommitMessage(list){
         var f = NB.files[p];
         return f && !f.deleted && !f.isNew && p.slice(-1) !== '/' && !remote[p];
       });
-      var chain = Promise.resolve(), pulled = 0, merged = 0;
+      var chain = Promise.resolve(), pulled = 0, merged = 0, fixed = 0;
       jobs.forEach(function(job){
         chain = chain.then(function(){
           var local = NB.files[job.path];
@@ -12397,6 +12411,14 @@ function nbCommitMessage(list){
         });
       });
       return chain.then(function(){
+        // what «is on the repository» follows the tree, not what this device remembered
+        NB.paths.slice().forEach(function(p){
+          var f = NB.files[p];
+          if (!f || p.slice(-1) === '/') return;
+          if (remote[p]){ f.remote = true; f.isNew = false; return; }
+          if (f.deleted){ delete NB.files[p]; NB.paths = NB.paths.filter(function(x){ return x !== p; }); fixed++; return; }   // removing what is not there
+          if (f.remote || !f.isNew){ f.remote = false; f.isNew = true; }   // gone there, kept here (edited): it will be created again
+        });
         nbApplyRepoConfig();
         NB.lastCommit = tree.sha; NB.lastSync = Date.now(); NB.error = '';
         idbSet('nb-last' + nbStoreSuffix(), { commit: NB.lastCommit, at: NB.lastSync }, 'meta');
@@ -12410,6 +12432,8 @@ function nbCommitMessage(list){
           nbSay();
           if (merged && !opts.quiet) toast(faNum(merged) + ' یادداشت خودکار ادغام شد', 'swap');
           else if (!opts.quiet && n) toast('دفترچه به روز شد — ' + faNum(n) + ' یادداشت', 'check');
+          else if (opts.loud && fixed) toast(faNum(fixed) + ' حذفِ ناموجود از صف برداشته شد — حالا ارسال کن', 'check');
+          else if (opts.loud) toast('چیز تازه ای نیست', 'check');
         }
         return true;
       });
@@ -12477,6 +12501,37 @@ function nbCommitMessage(list){
       throw e;
     }).then(function(go){
       if (go !== true) return go;
+      return nbTreePaths(baseSha).then(function(have){ return nbPushChanges(have); });
+    }).catch(function(e){
+      NB.busy = false;
+      var conflict = !!(e && (e.status === 409 || e.status === 422));
+      NB.error = conflict ? 'نسخهٔ تازه تری روی مخزن هست' : ((e && e.message) || 'خطا');
+      nbSay(conflict ? 'conflict' : (navigator.onLine === false ? 'offline' : 'error'));
+      toast(NB.error, 'x');
+      return false;
+    });
+    /**
+     * The changes, checked against what the repository really has: a delete of a file it does not have is
+     * dropped (it would fail the whole commit), and create/update follow the tree, not this device's memory.
+     */
+    function nbPushChanges(have){
+      list = list.filter(function(fd){
+        if (fd.deleted && !have[fd.path]){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return false; }
+        fd.remote = !!have[fd.path];
+        return true;
+      });
+      atts = atts.filter(function(k){
+        if (NB.attach[k].deleted && !have[k]){ delete NB.attach[k]; return false; }
+        return true;
+      });
+      if (!list.length && !atts.length){
+        NB.busy = false;
+        return Promise.all([nbSaveFiles(), nbSaveAttach()]).then(function(){
+          nbCountDirty(); nbRender(); nbSay();
+          if (opts.loud) toast('تغییری برای ارسال نماند — حذف ها از قبل روی مخزن نبودند', 'check');
+          return true;
+        });
+      }
       var changes = [], chain = Promise.resolve();
       list.forEach(function(fd){
         chain = chain.then(function(){
@@ -12499,7 +12554,7 @@ function nbCommitMessage(list){
         chain = chain.then(function(){
           var a = NB.attach[k];
           if (a.deleted){ changes.push({ path: k, deleted: true }); return true; }
-          changes.push({ path: k, b64: a.b64, exists: !!(NB.attachMeta[k] && NB.attachMeta[k].remote) });
+          changes.push({ path: k, b64: a.b64, exists: !!have[k] });
           return true;
         });
       });
@@ -12529,14 +12584,7 @@ function nbCommitMessage(list){
           if (opts.loud) toast('ارسال شد — ' + message, 'cloud');
           return true;
         });
-    }).catch(function(e){
-      NB.busy = false;
-      var conflict = !!(e && (e.status === 409 || e.status === 422));
-      NB.error = conflict ? 'نسخهٔ تازه تری روی مخزن هست' : ((e && e.message) || 'خطا');
-      nbSay(conflict ? 'conflict' : (navigator.onLine === false ? 'offline' : 'error'));
-      toast(NB.error, 'x');
-      return false;
-    });
+    }
   }
 
 

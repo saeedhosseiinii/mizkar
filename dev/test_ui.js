@@ -55,6 +55,12 @@ function handleApi(method, url, body) {
       return apiResponse(f.text);
     }
     if (/^\/repository\/commits$/.test(rest) && method === 'POST') {
+      // like GitLab: create on an existing file, update or delete on a missing one, fail the whole commit
+      for (const a of bodyObj.actions || []) {
+        const has = repo.files.has(a.file_path);
+        if (a.action === 'create' && has) return apiResponse({ message: 'A file with this name already exists' }, 400);
+        if ((a.action === 'update' || a.action === 'delete') && !has) return apiResponse({ message: "A file with this name doesn't exist" }, 400);
+      }
       for (const a of bodyObj.actions || []) {
         if (a.action === 'delete') repo.files.delete(a.file_path);
         else {
@@ -106,6 +112,9 @@ function handleApi(method, url, body) {
   if (p === '/git/trees' && method === 'POST') {
     // like GitHub: base_tree has to be a tree, never a commit
     if (bodyObj.base_tree && !repo.trees.has(bodyObj.base_tree)) return apiResponse({ message: 'base_tree is not a tree' }, 422);
+    // like GitHub: removing a path the tree does not have is an error
+    const missing = (bodyObj.tree || []).filter((e) => e.sha === null && !repo.files.has(e.path));
+    if (missing.length) return apiResponse({ message: 'GitRPC::BadObjectState' }, 422);
     const sha = crypto.randomBytes(20).toString('hex');
     repo.trees.set(sha, bodyObj);
     return apiResponse({ sha });
@@ -1453,6 +1462,23 @@ async function until(fn, ms = 3000) {
   win.dispatchEvent(new win.Event('online'));
   await until(() => repo.apiCommits > onlineBefore, 2000);
   ok('on: what waited is sent', repo.apiCommits === onlineBefore + 1 && !F()['جابه/آنلاین.md'].dirty, repo.apiCommits - onlineBefore);
+
+  console.log('\n— a send that the repository would refuse is repaired first —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.write('ارسال/واقعی.md', '# باید برود\n');
+  // what an older build left behind: a delete of a file the repository never had, and a «remote» flag that lies
+  nb.ui.files()['ارسال/شبح.md'] = { path: 'ارسال/شبح.md', text: 'x', base: 'x', sha: '', dirty: true, deleted: true, remote: true, at: 1 };
+  nb.ui.state().paths.push('ارسال/شبح.md');
+  nb.ui.files()['ارسال/واقعی.md'].remote = true;
+  const fixBefore = repo.apiCommits;
+  const sent = await nb.ui.push({ loud: true });
+  ok('the send goes through', sent === true && repo.apiCommits === fixBefore + 1, [sent, nb.ui.state().error]);
+  ok('the new note is on the repository', repo.files.has('ارسال/واقعی.md'));
+  ok('the phantom delete is gone from the queue', !nb.ui.files()['ارسال/شبح.md'] && nb.ui.dirty().every((f) => f.path !== 'ارسال/شبح.md'));
+  nb.ui.files()['ارسال/شبح2.md'] = { path: 'ارسال/شبح2.md', text: 'x', base: 'x', sha: '', dirty: true, deleted: true, remote: true, at: 1 };
+  nb.ui.state().paths.push('ارسال/شبح2.md');
+  const pulledFix = await nb.ui.pull({ loud: true });
+  ok('«گرفتن» repairs the queue even when the branch did not move', pulledFix === true && !nb.ui.files()['ارسال/شبح2.md'], pulledFix);
 
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
