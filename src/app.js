@@ -14035,7 +14035,7 @@ function nbCommitMessage(list){
     // once per device: how to enter edit on a phone (double-tap used to look broken)
     if (!storeGet('mz2-tip-edit') && nbSize() === 'phone'){
       storeSet('mz2-tip-edit', '1');
-      setTimeout(function(){ toast('برای ویرایش: دکمهٔ مداد بالا، یا دو ضربه روی متن', 'pen'); }, 900);
+      setTimeout(function(){ toast('ویرایش: مداد بالا · برگشت: «خواندن» پایین', 'pen'); }, 900);
     }
   });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
