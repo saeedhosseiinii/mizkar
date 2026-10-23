@@ -2006,6 +2006,38 @@ async function until(fn, ms = 3000) {
   ok('the stylesheet keeps the FAB off the panel and the dialogs', /body\.m3\.nb-open #m3Fab/.test(css2) && /:has\(\.modal:not\(\[hidden\]\)\) #m3Fab/.test(css2));
   ok('and a tap on it is not a double-tap zoom', /touch-action:manipulation/.test(css2));
 
+  console.log('\n— a long-press menu survives the finger lifting —');
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(50);
+  const lpMenu = () => doc.getElementById('nbMenu');
+  const lpRow = doc.querySelector('#nbBody [data-nb-note]') || doc.querySelector('#nbList [data-nb-note]');
+  if (lpRow){
+    ok('a long press opens the row menu', win.mizkarNotebook.ui.longPressAt(60, 60, lpRow) === true && !lpMenu().hidden);
+    doc.body.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+    ok('the browser own mousedown as the finger lifts does not close it', !lpMenu().hidden);
+    doc.body.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    // jsdom has no trusted events, and the app only swallows the click a real browser sends (isTrusted) —
+    // that half is checked in a real Chromium over CDP, not here
+    ok('an untrusted click closes it here (a real browser’s trusted click is swallowed)', lpMenu().hidden === true);
+    await sleep(900);
+    doc.body.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+    ok('but a real press outside, later, does close it', lpMenu().hidden);
+  }
+  console.log('\n— the note page button says what it does —');
+  const editTop = doc.querySelector('#nbTop [data-nb-top="edit"]');
+  nb.ui.open('عنوانها/ب.md');
+  await sleep(60);
+  const reading = { lab: editTop.getAttribute('aria-label'), ico: editTop.innerHTML };
+  editTop.click();
+  await sleep(60);
+  const writing = { lab: editTop.getAttribute('aria-label'), ico: editTop.innerHTML };
+  editTop.click();
+  await sleep(60);
+  eq('reading asks to edit, with a pen', [reading.lab, /i-pen/.test(reading.ico)], ['ویرایش', true]);
+  eq('writing offers reading, with a book', [writing.lab, /i-book/.test(writing.ico)], ['خواندن', true]);
+  ok('and back again', editTop.getAttribute('aria-label') === 'ویرایش' && /i-pen/.test(editTop.innerHTML));
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

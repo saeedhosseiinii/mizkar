@@ -2325,7 +2325,13 @@ function nbCommitMessage(list){
     if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
   }
   function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
-  document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose(); }, true);
+  /* The finger that opened a long-press menu is still lifting: the browser then sends its own mousedown → click,
+     and those must not count as «outside» and close the menu again (that is why a long press looked dead on a
+     phone, and it takes the FAB with it — the FAB is the switch of its own menu). */
+  document.addEventListener('mousedown', function(e){
+    if (typeof nbSwallowUntil === 'number' && nbSwallowUntil && Date.now() < nbSwallowUntil) return;
+    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose();
+  }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){

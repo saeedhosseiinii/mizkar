@@ -170,7 +170,15 @@
         hs.querySelector('b').textContent = n ? faNum(n) : '';
         hs.title = (syncBtn ? syncBtn.textContent : 'همگام سازی') + ' — فهرست، گرفتن و ارسال';
       }
-      top.querySelector('[data-nb-top="edit"]').setAttribute('aria-pressed', String(state.view !== 'preview'));
+      var editBtn = top.querySelector('[data-nb-top="edit"]'), editing = state.view !== 'preview';
+      editBtn.setAttribute('aria-pressed', String(editing));
+      /* the button says what it does next: a pen while reading, a book while writing */
+      editBtn.setAttribute('aria-label', editing ? 'خواندن' : 'ویرایش');
+      editBtn.title = editing ? 'خواندن (پایان ویرایش)' : 'ویرایش';
+      if (editBtn.dataset.for !== (editing ? 'read' : 'edit')){
+        editBtn.dataset.for = editing ? 'read' : 'edit';
+        editBtn.innerHTML = '<svg class="i"><use href="#i-' + (editing ? 'book' : 'pen') + '"/></svg>';
+      }
       var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal', temps: 'temps' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
       Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.nbNav === on)); });
       var head = $('nbHeadTitle');
