@@ -1898,10 +1898,12 @@ function nbCommitMessage(list){
   }
 
   /* --- floating context menu --- */
+  /** A menu at (x, y). `null` items are separators (never two in a row, never at either end). */
   function nbMenu(x, y, items){
     var m = $('nbMenu');
-    items = (items || []).filter(Boolean);
-    if (!items.length) return;
+    items = (items || []).filter(function(it, i, all){ return it || (i > 0 && all[i - 1] && all.slice(i + 1).some(Boolean)); });
+    if (!items.some(Boolean)) return;
+    if (!m.contains(document.activeElement)) nbMenu.back = document.activeElement;   // focus goes back there when it closes
     m.innerHTML = items.map(function(it, i){
       if (!it) return '<div class="mi-sep" role="separator"></div>';
       return '<button type="button" class="mi' + (it.danger ? ' danger' : '') + '" role="menuitem" data-nb-mi="' + i + '">'
@@ -1918,23 +1920,31 @@ function nbCommitMessage(list){
       if (e.key === 'ArrowDown'){ e.preventDefault(); list[(at + 1) % list.length].focus(); }
       else if (e.key === 'ArrowUp'){ e.preventDefault(); list[(at - 1 + list.length) % list.length].focus(); }
       else if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); if (document.activeElement.closest && document.activeElement.closest('#nbMenu')) document.activeElement.click(); }
-      else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); m.hidden = true; }
+      else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); nbMenuClose(); }
     };
     m.onclick = function(e){
       var b = e.target.closest('[data-nb-mi]');
       if (!b) return;
+      // the item may open a submenu, which rebuilds this one: the click must not reach the «outside» closer
+      e.stopPropagation();
       m.hidden = true;
       var it = items[+b.dataset.nbMi];
       if (it && it.act) it.act();
+      if (m.hidden) nbMenuFocusBack();
     };
   }
-  function nbMenuClose(){ var m = $('nbMenu'); if (m) m.hidden = true; }
+  function nbMenuFocusBack(){
+    var el = nbMenu.back;
+    nbMenu.back = null;
+    if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
+  }
+  function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
   document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu')) nbMenuClose(); }, true);
-  document.addEventListener('scroll', nbMenuClose, true);
+  document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    if (m && !m.hidden && !e.target.closest('#nbMenu')) m.hidden = true;
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu')) nbMenuClose();
   });
 
   /* --- settings --- */
@@ -3367,8 +3377,17 @@ function nbCommitMessage(list){
     if (!el) return false;
     try { if (navigator.vibrate) navigator.vibrate(10); } catch(e){}
     el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
-    return $('nbMenu').hidden === false;
+    var opened = $('nbMenu').hidden === false;
+    if (opened) nbSwallowUntil = Date.now() + 800;                 // lifting the finger is not a click on the menu
+    return opened;
   };
+  var nbSwallowUntil = 0;
+  document.addEventListener('click', function(e){
+    if (!nbSwallowUntil) return;
+    var until = nbSwallowUntil;
+    nbSwallowUntil = 0;
+    if (Date.now() < until && e.isTrusted !== false){ e.preventDefault(); e.stopPropagation(); }
+  }, true);
   (function(){
     var timer = 0, x0 = 0, y0 = 0;
     function stop(){ if (timer){ clearTimeout(timer); timer = 0; } }
@@ -3970,7 +3989,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
+    menu: nbMenu, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,

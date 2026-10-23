@@ -95,6 +95,7 @@ html[data-theme="dark"] .nb-input{ background:#0a0e16; }
 #nbMenu{
   position:fixed; z-index:400; min-width:190px; background:var(--surface); border:1px solid var(--border);
   border-radius:12px; box-shadow:0 18px 40px -18px rgba(15,23,42,.45); padding:5px;
+  max-height:calc(100dvh - 24px); overflow-y:auto; overscroll-behavior:contain;
 }
 #nbMenu .mi{ width:100%; text-align:start; }
 #nbMenu .mi.danger{ color:#dc2626; }
@@ -427,3 +428,5 @@ body.readmode .work{ margin-right:0 !important; }
   .work{ margin-right:0 !important; }
   body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }
 }
+/* the app's «drop a file» cover is only a picture: drops land on what is under it (drawer, editor, page) */
+#drop{ pointer-events:none; }

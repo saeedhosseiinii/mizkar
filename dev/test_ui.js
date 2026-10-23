@@ -864,6 +864,26 @@ async function until(fn, ms = 3000) {
     await dragFrom(nestedRow, listEl);
     ok('dropping on empty space brings a note to the root', !!nb.ui.files()[nestedName], Object.keys(nb.ui.files()).slice(0, 4));
   } else ok('dropping on empty space brings a note to the root', false, 'no nested note in the tree');
+  nb.ui.write('ردیف/مقصد.md', '# مقصد\n');
+  nb.ui.write('ردیف2/مسافر.md', '# مسافر\n');
+  nb.ui.section('notes');
+  await sleep(40);
+  const rowOf = (p) => [...doc.querySelectorAll('#nbList [data-nb-note]')].filter((r) => r.dataset.nbNote === p)[0];
+  if (rowOf('ردیف2/مسافر.md') && rowOf('ردیف/مقصد.md')){
+    await dragFrom(rowOf('ردیف2/مسافر.md'), rowOf('ردیف/مقصد.md'));
+    ok('dropping on a note row moves into that note\'s folder', !!nb.ui.files()['ردیف/مسافر.md'] && !nb.ui.files()['مسافر.md']);
+  } else ok('dropping on a note row moves into that note\'s folder', false, 'rows missing');
+
+  console.log('\n— menus: separators, submenus —');
+  const menuEl = doc.getElementById('nbMenu');
+  let subOpened = false;
+  nb.ui.menu(10, 10, [null, { label: 'یک' }, null, null, { label: 'باز کردن زیرمنو', act: () => { nb.ui.menu(10, 10, [{ label: 'زیر', act: () => { subOpened = true; } }]); } }, null]);
+  eq('separators stay, but never doubled or at the ends', [...menuEl.children].map((c) => c.classList.contains('mi-sep') ? '-' : 'i').join(''), 'i-i');
+  menuEl.querySelectorAll('.mi')[1].click();
+  await sleep(20);
+  ok('a submenu opened from an item stays open', !menuEl.hidden && menuEl.textContent.indexOf('زیر') !== -1);
+  menuEl.querySelector('.mi').click();
+  ok('and its item runs', subOpened && menuEl.hidden);
 
   console.log('\n— a task onto a day, a note into the page —');
   nb.ui.write('کشیدن/کارها.md', '# کارها\n- [ ] کاری برای کشیدن\n');

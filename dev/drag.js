@@ -11,12 +11,21 @@
     var day = el.closest('[data-nb-day]');
     if (day && NBD.item && NBD.item.kind === 'task') return { el: day, kind: 'day', stamp: day.dataset.nbDay };
     var row = el.closest('[data-nb-note]');
-    if (row && NBD.item && NBD.item.kind === 'note' && row.dataset.nbNote !== NBD.item.path) return { el: row, kind: 'none' };
+    if (row && NBD.item && (NBD.item.kind === 'note' || NBD.item.kind === 'tab')){
+      // a note row stands for its folder; the note's own folder is no move at all
+      var rowDir = nbFolder(row.dataset.nbNote);
+      if (NBD.item.kind === 'tab') return { el: row, kind: 'folder-tab', folder: rowDir };
+      if (row.dataset.nbNote === NBD.item.path || rowDir === nbFolder(NBD.item.path)) return { el: row, kind: 'none' };
+      return { el: row, kind: 'folder', folder: rowDir, col: null };
+    }
     var dir = el.closest('[data-nb-dir]');
     if (dir){
       var folder = dir.dataset.nbDir;
       var col = (C.collections.filter(function(c){ return nbFolderOfPattern(c.path) === folder; })[0]) || null;
-      if (NBD.item && NBD.item.kind === 'note') return { el: dir, kind: 'folder', folder: folder, col: col };
+      if (NBD.item && NBD.item.kind === 'note'){
+        if (folder === nbFolder(NBD.item.path)) return { el: dir, kind: 'none' };
+        return { el: dir, kind: 'folder', folder: folder, col: col };
+      }
       if (NBD.item && NBD.item.kind === 'folder' && folder !== NBD.item.path && folder.indexOf(NBD.item.path + '/') !== 0) return { el: dir, kind: 'folder-move', folder: folder };
       if (NBD.item && NBD.item.kind === 'tab') return { el: dir, kind: 'folder-tab', folder: folder };
       return { el: dir, kind: 'none' };
@@ -26,8 +35,13 @@
       if (NBD.item.kind === 'note') return { el: editor, kind: 'insert', el2: el };
       if (NBD.item.kind === 'attach') return { el: editor, kind: 'insert-image', path: NBD.item.path };
     }
-    var list = el.closest('#nbList, #nbBody');
-    if (list && NBD.item && (NBD.item.kind === 'note' || NBD.item.kind === 'folder')) return { el: list, kind: 'root' };
+    // the empty part of the tree is the root (rows above already meant their folder); the rest of the drawer is nothing
+    var list = el.closest('#nbList');
+    if (list && NBD.item && (NBD.item.kind === 'note' || NBD.item.kind === 'folder')){
+      if (NBD.item.kind === 'note' && !nbFolder(NBD.item.path)) return { el: list, kind: 'none', quiet: true };
+      return { el: list, kind: 'root' };
+    }
+    if (el.closest('#nb')) return { el: null, kind: 'none', quiet: true };
     return null;
   }
   function nbdMark(hit){
@@ -155,7 +169,7 @@
     var tab = el.closest('#tabsList [data-tab]');
     if (tab){
       var t = tabs.filter(function(x){ return x.id === tab.dataset.tab; })[0];
-      if (t && !t.nb && String(t.text || '').trim() && t.id !== activeTab) return { kind: 'tab', el: tab, tab: t, label: tabLabel(t) };
+      if (t && !t.nb && String(t.text || '').trim()) return { kind: 'tab', el: tab, tab: t, label: tabLabel(t) };
       return null;
     }
     var task = el.closest('[data-task-open]');
@@ -215,7 +229,8 @@
       toast('لغو شد', 'x');
       return;
     }
-    if (!hit || hit.kind === 'none'){ toast('جای درستی رها نشد', 'x'); return; }
+    if (item.kind === 'tab' && (!hit || hit.kind !== 'folder-tab')) return;     // the tab bar reorders tabs itself
+    if (!hit || hit.kind === 'none'){ if (!(hit && hit.quiet)) toast('جای درستی رها نشد', 'x'); return; }
     if (item.kind === 'note'){
       if (hit.kind === 'folder') nbdDropNoteIn(item.path, hit.folder, hit.col);
       else if (hit.kind === 'root') nbdDropNoteIn(item.path, '');
@@ -234,34 +249,50 @@
     }
   }
   document.addEventListener('pointerup', function(e){ nbdFinish(e, true); });
+  // a finger that held and now moves drags: the page must not scroll (and cancel the pointer) instead
+  document.addEventListener('touchmove', function(e){ if (NBD.ready || NBD.on) e.preventDefault(); }, { passive: false });
   document.addEventListener('pointercancel', function(e){ nbdFinish(e, false); if (NBD.armed) nbdEnd(); });
   addEventListener('keydown', function(e){ if (e.key === 'Escape' && NBD.on){ nbdEnd(); toast('کشیدن لغو شد', 'x'); } });
 
-  /* ---- files from the computer ---- */
+  /* ---- files from the computer ----
+     Only the drawer and the editor of a notebook note take files; anywhere else the app opens the file as
+     a tab, as it always did. Capture phase, and stopped: the app must not open the same file as well. */
   function nbdFilesOver(e){ return e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1; }
-  document.addEventListener('dragover', function(e){
+  function nbdFileZone(target){
+    if (!target || !target.closest) return null;
+    if (target.closest('#nb')){
+      var dir = target.closest('[data-nb-dir]'), note = target.closest('[data-nb-note]');
+      return { mark: dir || note || target.closest('#nbList, #nbBody') || $('nb'), folder: dir ? dir.dataset.nbDir : note ? nbFolder(note.dataset.nbNote) : '', editor: false };
+    }
+    var t = currentTab(), ed = target.closest('textarea#input, #zoomWrap');
+    if (ed && t && t.nb) return { mark: ed, folder: nbFolder(t.nb), editor: true };
+    return null;
+  }
+  function nbdClearMarks(){ document.querySelectorAll('.nb-drop').forEach(function(x){ x.classList.remove('nb-drop'); }); }
+  addEventListener('dragover', function(e){
     if (!nbdFilesOver(e)) return;
-    e.preventDefault();
-    var dir = e.target.closest('[data-nb-dir]');
-    var list = e.target.closest('#nbList, #nbBody');
-    var editor = e.target.closest('textarea#input, #zoomWrap');
-    var mark = dir || (editor ? editor : (list ? list : null));
-    if (mark && !mark.classList.contains('nb-drop')){ document.querySelectorAll('.nb-drop').forEach(function(x){ x.classList.remove('nb-drop'); }); mark.classList.add('nb-drop'); }
+    var z = nbdFileZone(e.target);
+    if (!z){ nbdClearMarks(); return; }
+    e.preventDefault(); e.stopPropagation();
+    if (!z.mark.classList.contains('nb-drop')){ nbdClearMarks(); z.mark.classList.add('nb-drop'); }
     e.dataTransfer.dropEffect = 'copy';
-  });
-  document.addEventListener('dragleave', function(e){
+  }, true);
+  addEventListener('dragleave', function(e){
     if (!nbdFilesOver(e)) return;
-    var mark = e.target.closest('.nb-drop');
+    var mark = e.target.closest && e.target.closest('.nb-drop');
     if (mark && !mark.contains(e.relatedTarget)) mark.classList.remove('nb-drop');
-  });
-  document.addEventListener('drop', function(e){
+  }, true);
+  addEventListener('drop', function(e){
     if (!nbdFilesOver(e)) return;
-    e.preventDefault();
-    document.querySelectorAll('.nb-drop').forEach(function(x){ x.classList.remove('nb-drop'); });
-    var dir = e.target.closest('[data-nb-dir]');
-    var editor = e.target.closest('textarea#input, #zoomWrap');
-    nbdDropFiles(e.dataTransfer.files, dir ? dir.dataset.nbDir : '', !!editor);
-  });
+    nbdClearMarks();
+    var z = nbdFileZone(e.target);
+    if (!z) return;                                              // the app opens it as a tab
+    e.preventDefault(); e.stopPropagation();
+    var cover = $('drop');
+    if (cover) cover.classList.remove('show');
+    if (typeof dragDepth === 'number') dragDepth = 0;            // the app's own counter for its cover
+    nbdDropFiles(e.dataTransfer.files, z.folder, z.editor);
+  }, true);
   /* the app (and the tests) can drive a drop without a pointer */
   window.nbDragFiles = nbdDropFiles;
   window.nbDrag = { note: nbdDropNoteIn, folder: nbdDropFolder, taskDay: nbdDropTaskOnDay, files: nbdDropFiles, link: nbdDropLink, hit: nbdHit, cancel: nbdEnd };
