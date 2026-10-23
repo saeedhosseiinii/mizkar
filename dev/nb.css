@@ -3,8 +3,10 @@
 #nb .nb-head .nb-h-title{ font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px; color:var(--ink); }
 #nb .nb-h-sp{ flex:1; }
 #nb .nb-body{ flex:1; display:flex; flex-direction:column; min-height:0; }
-#nb .nb-tabs{ display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--border); }
-#nb .nb-tab{
+#nb .nb-tabs{ display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--border); overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; flex:none; }
+#nb .nb-tabs::-webkit-scrollbar{ height:3px; }
+#nb .nb-tab:not(.on) .nb-tab-l{ display:none; }
+#nb .nb-tab{ flex:none; white-space:nowrap;
   display:flex; align-items:center; gap:5px; border:0; background:transparent; cursor:pointer; color:var(--muted);
   font:inherit; font-size:12.5px; padding:6px 8px; border-radius:8px 8px 0 0; border-bottom:2px solid transparent;
 }
@@ -260,3 +262,10 @@ body.nb-dragging #nbBody,body.nb-dragging #zoomWrap{user-select:none;}
 .nb-share-opt b{display:block;font-size:.88rem;}
 .nb-share-opt small{display:block;color:var(--muted);font-size:.74rem;line-height:1.8;}
 .nb-share-row .nb-name small{color:var(--muted);font-size:.7rem;}
+/* --- «ویژگی‌ها»: front matter as a form --- */
+.nb-fm{display:flex;flex-direction:column;gap:6px;}
+.nb-fm-row{display:grid;grid-template-columns:minmax(70px,120px) minmax(0,1fr) auto;gap:6px;align-items:center;}
+.nb-fm-k{font-size:.8rem;color:var(--muted);}
+.fmprops{cursor:default;}
+body.ip-on .fmprops{cursor:pointer;}
+body.ip-on .fmprops:hover{outline:1px dashed var(--border-strong);outline-offset:3px;border-radius:8px;}

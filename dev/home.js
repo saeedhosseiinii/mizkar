@@ -149,6 +149,10 @@
     }
     return true;
   }
-  zoomWrap.addEventListener('click', function(e){ if (e.target.closest('.hm')) homeClick(e); });
+  zoomWrap.addEventListener('click', function(e){
+    if (e.target.closest('.hm')){ homeClick(e); return; }
+    var t = currentTab();
+    if (t && t.nb && e.target.closest('.fmprops')) nbFmDialog(t.nb);       // the properties strip opens its form
+  });
   $('nbBody').addEventListener('click', function(e){ if (e.target.closest('[data-task-toggle],[data-task-open]')) homeClick(e); });
   /* === /HOME === */

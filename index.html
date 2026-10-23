@@ -11064,8 +11064,10 @@ var NB_CSS = [
   '#nb .nb-head .nb-h-title{ font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px; color:var(--ink); }',
   '#nb .nb-h-sp{ flex:1; }',
   '#nb .nb-body{ flex:1; display:flex; flex-direction:column; min-height:0; }',
-  '#nb .nb-tabs{ display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--border); }',
-  '#nb .nb-tab{',
+  '#nb .nb-tabs{ display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--border); overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; flex:none; }',
+  '#nb .nb-tabs::-webkit-scrollbar{ height:3px; }',
+  '#nb .nb-tab:not(.on) .nb-tab-l{ display:none; }',
+  '#nb .nb-tab{ flex:none; white-space:nowrap;',
   '  display:flex; align-items:center; gap:5px; border:0; background:transparent; cursor:pointer; color:var(--muted);',
   '  font:inherit; font-size:12.5px; padding:6px 8px; border-radius:8px 8px 0 0; border-bottom:2px solid transparent;',
   '}',
@@ -11321,6 +11323,13 @@ var NB_CSS = [
   '.nb-share-opt b{display:block;font-size:.88rem;}',
   '.nb-share-opt small{display:block;color:var(--muted);font-size:.74rem;line-height:1.8;}',
   '.nb-share-row .nb-name small{color:var(--muted);font-size:.7rem;}',
+  '/* --- «ویژگی‌ها»: front matter as a form --- */',
+  '.nb-fm{display:flex;flex-direction:column;gap:6px;}',
+  '.nb-fm-row{display:grid;grid-template-columns:minmax(70px,120px) minmax(0,1fr) auto;gap:6px;align-items:center;}',
+  '.nb-fm-k{font-size:.8rem;color:var(--muted);}',
+  '.fmprops{cursor:default;}',
+  'body.ip-on .fmprops{cursor:pointer;}',
+  'body.ip-on .fmprops:hover{outline:1px dashed var(--border-strong);outline-offset:3px;border-radius:8px;}',
   '',
   '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
   'body.ui-calm #fmtChips{display:none;}',
@@ -12108,7 +12117,7 @@ function nbCommitMessage(list){
         var msg = (data && data.message) || ('خطای گیت هاب (' + res.status + ')');
         if (res.status === 401) msg = 'توکن پذیرفته نشد — توکن را دوباره بررسی کن';
         if (res.status === 404) msg = 'پیدا نشد — نام مخزن، شاخه یا مسیر را بررسی کن';
-        if (res.status === 409 || res.status === 422) msg = 'نسخهٔ تازه تری روی مخزن هست';
+        if (res.status === 409 || res.status === 422) msg = /empty/i.test((data && data.message) || '') ? 'مخزن خالی است' : 'نسخهٔ تازه تری روی مخزن هست';
         throw nbError(res.status, msg);
       });
     }, function(){
@@ -12216,6 +12225,35 @@ function nbCommitMessage(list){
     var d = iso ? new Date(iso) : null;
     return d && !isNaN(d) ? homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate()) : '';
   }
+  /**
+   * An empty GitHub repository refuses the Git Data API (blobs, trees: 409 «Git Repository is empty»). Its first
+   * file goes through the Contents API, which makes the first commit and the default branch; the notebook's branch
+   * is made from it when it has another name.
+   */
+  function nbFirstCommit(base, changes, message){
+    var firstAt = -1;
+    changes.forEach(function(c, i){ if (firstAt === -1 && !c.deleted) firstAt = i; });
+    if (firstAt === -1) return Promise.reject(nbError(0, 'مخزن خالی است و چیزی برای ساختن نیست'));
+    var c = changes[firstAt], rest = changes.filter(function(x, i){ return i !== firstAt && !x.deleted; });
+    return nbApi('GET', base).then(function(repo){
+      var def = (repo && repo.default_branch) || C.branch;
+      return nbApi('GET', base + '/git/ref/heads/' + encodeURIComponent(def)).then(function(r){
+        // not empty, only the notebook's branch is new: it starts from the default branch, then the batch as usual
+        var sha = r && r.object && r.object.sha;
+        if (!sha || def === C.branch) throw nbError(0, 'شاخهٔ «' + C.branch + '» خوانده نشد');
+        return nbApi('POST', base + '/git/refs', { ref: 'refs/heads/' + C.branch, sha: sha }).then(function(){ return { sha: sha, rest: changes }; });
+      }, function(e){
+        if (e.status !== 404 && e.status !== 409) throw e;
+        var path = c.path.split('/').map(encodeURIComponent).join('/');
+        return nbApi('PUT', base + '/contents/' + path, { message: message, content: c.b64 || nbB64(c.text) }).then(function(res){
+          var sha = res && res.commit && res.commit.sha;
+          if (!sha) throw nbError(0, 'اولین commit ساخته نشد');
+          if (def === C.branch) return { sha: sha, rest: rest };
+          return nbApi('POST', base + '/git/refs', { ref: 'refs/heads/' + C.branch, sha: sha }).then(function(){ return { sha: sha, rest: rest }; });
+        });
+      });
+    });
+  }
   /** One commit carrying every change, on either provider. */
   function nbCommitPush(changes, message, baseSha){
     if (nbIsGL()){
@@ -12230,6 +12268,10 @@ function nbCommitMessage(list){
         .then(function(c){ return { sha: c.id }; });
     }
     var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
+    if (!baseSha) return nbFirstCommit(base, changes, message).then(function(first){
+      // the rest of the batch goes on top of that first commit, the usual way
+      return first.rest.length ? nbCommitPush(first.rest, message, first.sha) : { sha: first.sha };
+    });
     // blobs go up four at a time; the tree keeps the order of the changes
     var tree = new Array(changes.length), next = 0;
     function worker(){
@@ -13083,11 +13125,14 @@ function nbCommitMessage(list){
     var scroll = $('nbList') ? $('nbList').scrollTop : 0;
     box.innerHTML = html;
     if ($('nbList')) $('nbList').scrollTop = scroll;
+    var onTab = box.querySelector('.nb-tab.on');
+    if (onTab && onTab.scrollIntoView) onTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (NB.section === 'search' && NB.focusSearch){ NB.focusSearch = false; var q = $('nbFind'); if (q){ q.focus(); q.select(); } }
   }
   function nbTabBtn(sec, ic, label, count, warn){
-    return '<button type="button" class="nb-tab' + (NB.section === sec ? ' on' : '') + (warn ? ' nb-tab-warn' : '') + '" data-nb-sec="' + sec + '">'
-      + icon(ic) + label + (count ? '<b>' + faNum(count) + '</b>' : '') + '</button>';
+    // only the open section shows its name; the others are an icon (with a tooltip), so every section fits
+    return '<button type="button" class="nb-tab' + (NB.section === sec ? ' on' : '') + (warn ? ' nb-tab-warn' : '') + '" data-nb-sec="' + sec + '" title="' + label + '" aria-label="' + label + '">'
+      + icon(ic) + '<span class="nb-tab-l">' + label + '</span>' + (count ? '<b>' + faNum(count) + '</b>' : '') + '</button>';
   }
 
   /* --- sidebar events --- */
@@ -13102,6 +13147,13 @@ function nbCommitMessage(list){
     box.addEventListener('input', function(e){
       if (e.target.id === 'nbFind'){ NB.query = e.target.value; nbRefreshSearch(); }
     });
+    // a mouse wheel scrolls the section row sideways when it is wider than the panel
+    box.addEventListener('wheel', function(e){
+      var row = e.target.closest('.nb-tabs');
+      if (!row || row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      row.scrollLeft -= e.deltaY;                     // right to left: down goes towards the later (left) sections
+    }, { passive: false });
     box.addEventListener('change', function(e){
       if (e.target.id === 'nbFindCol'){ NB.colFilter = e.target.value; nbRefreshSearch(); }
     });
@@ -13254,6 +13306,63 @@ function nbCommitMessage(list){
       { label: 'بستن', danger: true, act: after(function(){ closeTab(id); }) }
     ];
   }
+  /* --- «ویژگی‌ها»: the front matter as a form (date with the Shamsi picker, tags, any other key) --- */
+  var NB_FM_DATES = /^(date|created|updated|due)$/i;
+  /** The note's text with its front matter replaced by `rows` ([key, value]; arrays become [a, b]); none → no block. */
+  function nbFmWrite(text, rows){
+    var fm = nbParseFm(text), body = fm.raw ? fm.body : String(text);
+    rows = rows.filter(function(r){ return r[0] && String(r[1] == null ? '' : r[1]).trim() !== '' && !(Array.isArray(r[1]) && !r[1].length); });
+    if (!rows.length) return body.replace(/^\n+/, '');
+    return '---\n' + rows.map(function(r){
+      var v = Array.isArray(r[1]) ? '[' + r[1].join(', ') + ']' : String(r[1]).trim();
+      return r[0] + ': ' + v;
+    }).join('\n') + '\n---\n' + body.replace(/^(?!\n)/, '');
+  }
+  function nbFmDialog(path){
+    var f = NB.files[path];
+    if (!f || f.deleted) return;
+    if (f.enc && f.plain == null){ nbEnsurePlain(path).then(function(ok){ if (ok) nbFmDialog(path); }); return; }
+    if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
+    var data = nbParseFm(nbTextOf(f)).data, keys = Object.keys(data);
+    if (keys.indexOf('date') === -1) keys.unshift('date');
+    if (keys.indexOf('tags') === -1) keys.push('tags');
+    var row = function(k, i){
+      var v = data[k];
+      var input = NB_FM_DATES.test(k) ? nbDateField('nbFmV' + i, v || '', { empty: true, title: k })
+        : '<input class="nb-input" id="nbFmV' + i + '" dir="auto" value="' + escapeHtml(Array.isArray(v) ? v.join('، ') : (v || '')) + '"'
+          + (k === 'tags' ? ' placeholder="برچسب ها، با کاما"' : '') + '>';
+      return '<div class="nb-fm-row" data-nb-fm="' + i + '"><input class="nb-input nb-fm-k" dir="ltr" value="' + escapeHtml(k) + '" aria-label="نام">' + input
+        + '<button type="button" class="ib sm" data-nb-fm-del="' + i + '" aria-label="برداشتن">' + icon('x') + '</button></div>';
+    };
+    nbModalBox('ویژگی‌ها: ' + nbTitle(path),
+      '<div class="nb-fm" id="nbFmRows">' + keys.map(row).join('') + '</div>'
+      + '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-fm-add>' + icon('plus') + 'ویژگی تازه</button></div>'
+      + '<p class="nb-mini-text">بالای یادداشت بین دو «---» نوشته می شود؛ تاریخ ها شمسی اند، برچسب ها با کاما.</p>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">ذخیره</button>', 'list');
+    var box = $('nbMini'), n = keys.length;
+    box.onclick = function(e){
+      var del = e.target.closest('[data-nb-fm-del]');
+      if (del){ var r = del.closest('.nb-fm-row'); if (r) r.remove(); return; }
+      if (e.target.closest('[data-nb-fm-add]')){
+        $('nbFmRows').insertAdjacentHTML('beforeend', row('', n++));
+        var rows = $('nbFmRows').querySelectorAll('.nb-fm-k');
+        rows[rows.length - 1].focus();
+      }
+    };
+    $('nbMiniOk').onclick = function(){
+      var rows = Array.prototype.map.call($('nbFmRows').querySelectorAll('.nb-fm-row'), function(r){
+        var k = r.querySelector('.nb-fm-k').value.trim().replace(/[:\s]+/g, '_'), i = r.dataset.nbFm, el = $('nbFmV' + i);
+        var v = el.dataset && el.dataset.nbDate !== undefined && el.tagName === 'BUTTON' ? el.dataset.nbDate : el.value;
+        if (k === 'tags' || Array.isArray(data[k])) v = String(v).split(/[،,]/).map(function(s){ return s.trim().replace(/^#/, ''); }).filter(Boolean);
+        return [k, v];
+      });
+      var before = nbTextOf(f), after = nbFmWrite(before, rows);
+      nbCloseMini();
+      if (after === before) return;
+      nbPutNoteText(path, after);
+      toast('ویژگی ها ذخیره شد', 'check', { label: 'بازگشت', icon: 'undo', run: function(){ nbPutNoteText(path, before); } });
+    };
+  }
   /** Everything that can be done to one note: the tree's right-click, the note page's ⋯ on a phone. */
   function nbNoteMenuItems(path){
     return [
@@ -13266,6 +13375,7 @@ function nbCommitMessage(list){
       { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
       { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
       null,
+      { label: 'ویژگی‌ها (تاریخ، برچسب…)', act: function(){ nbFmDialog(path); } },
       { label: 'اشتراک‌گذاری…', act: function(){ nbShareDialog(path); } },
       { label: 'اشتراک‌های این یادداشت', act: function(){ NB.shareFilter = path; nbOpenSettings('shares'); } },
       null,
@@ -14070,6 +14180,7 @@ function nbCommitMessage(list){
   ACTIONS['nb-cal'] = { label: 'تقویم دفترچه', icon: 'clock', kbd: 'Alt Shift C', kw: 'notebook calendar jalali month', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } };
   ACTIONS['nb-tasks'] = { label: 'کارهای دفترچه', icon: 'check', kbd: 'Alt Shift T', kw: 'notebook tasks todos', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } };
   ACTIONS['nb-share'] = { label: 'اشتراک‌گذاری این یادداشت (گیست)…', icon: 'link', kw: 'share gist link password', run: function(){ var p = nbActivePath(); if (p) nbShareDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
+  ACTIONS['nb-props'] = { label: 'ویژگی‌های یادداشت (front matter)…', icon: 'list', kw: 'front matter properties tags date', run: function(){ var p = nbActivePath(); if (p) nbFmDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
   ACTIONS['nb-shares'] = { label: 'اشتراک‌ها (لینک های گیست)', icon: 'link', kw: 'shares gists links', run: function(){ nbOpenSettings('shares'); } };
   ACTIONS['nb-keys'] = { label: 'کلیدهای میانبر', icon: 'keyboard', kw: 'keyboard shortcuts keys map', run: function(){ nbKeysDialog(); } };
   ACTIONS['nb-today'] = { label: 'یادداشت امروز (روزانه)', icon: 'clock', kw: 'notebook today daily journal', run: function(){
@@ -15996,7 +16107,11 @@ function nbCommitMessage(list){
     }
     return true;
   }
-  zoomWrap.addEventListener('click', function(e){ if (e.target.closest('.hm')) homeClick(e); });
+  zoomWrap.addEventListener('click', function(e){
+    if (e.target.closest('.hm')){ homeClick(e); return; }
+    var t = currentTab();
+    if (t && t.nb && e.target.closest('.fmprops')) nbFmDialog(t.nb);       // the properties strip opens its form
+  });
   $('nbBody').addEventListener('click', function(e){ if (e.target.closest('[data-task-toggle],[data-task-open]')) homeClick(e); });
   /* === /HOME === */
 
@@ -17063,7 +17178,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
+    fmDialog: nbFmDialog, fmWrite: nbFmWrite, shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
     trash: function(){ return NB.trash; }, trashRestore: nbTrashRestore, emptyTrash: nbEmptyTrash, menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,

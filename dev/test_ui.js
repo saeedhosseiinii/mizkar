@@ -94,7 +94,17 @@ function handleApi(method, url, body) {
     if (method === 'PATCH') { for (const [n, f] of Object.entries(bodyObj.files)) g.files[n].content = f.content; return apiResponse(g); }
     if (method === 'DELETE') { repo.gists.delete(gm[1]); return apiResponse(null, 204); }
   }
-  if (p === '' && method === 'GET') return apiResponse({ full_name: 'me/notes', private: true, permissions: { push: true } });
+  if (p === '' && method === 'GET') return apiResponse({ full_name: 'me/notes', private: true, default_branch: 'main', permissions: { push: true } });
+  // like GitHub: an empty repository has no Git database yet — only the Contents API can make its first commit
+  if (!head() && ((p === '/git/blobs' || p === '/git/trees' || p === '/git/commits') && method === 'POST')) return apiResponse({ message: 'Git Repository is empty.' }, 409);
+  if (p.startsWith('/contents/') && method === 'PUT') {
+    const path = p.slice('/contents/'.length), text = Buffer.from(bodyObj.content, 'base64').toString('utf8');
+    const blob = putRemote(path, text), sha = crypto.randomBytes(20).toString('hex'), tree = crypto.randomBytes(20).toString('hex');
+    repo.trees.set(tree, { tree: [{ path, mode: '100644', type: 'blob', sha: blob }] });
+    repo.apiCommits++;
+    repo.commits.push({ sha, message: bodyObj.message, tree, parents: head() ? [head()] : [], treeBody: repo.trees.get(tree) });
+    return apiResponse({ content: { path }, commit: { sha } }, 201);
+  }
   if (p === '/git/ref/heads/main' && method === 'GET') {
     if (!head()) return apiResponse({ message: 'Not Found' }, 404);
     return apiResponse({ object: { sha: head() } });
@@ -1625,6 +1635,43 @@ async function until(fn, ms = 3000) {
   const reg = await nb.ui.shareList();
   reg.find((r) => r.title === 'کلید').exp = '2000-01-01';
   ok('a share past its date is removed when the app runs', (await nb.ui.shareExpire()) === 1 && !repo.gists.has(recKey.id));
+
+  console.log('\n— «ویژگی‌ها»: front matter as a form —');
+  eq('a new block on a note without one', nb.ui.fmWrite('# عنوان\n', [['date', '1405-08-05'], ['tags', ['کار', 'خانه']]]), '---\ndate: 1405-08-05\ntags: [کار, خانه]\n---\n# عنوان\n');
+  eq('empty values drop out, the body stays', nb.ui.fmWrite('---\ndate: 1405-08-05\ntype: x\n---\n# عنوان\n', [['date', ''], ['type', 'جلسه']]), '---\ntype: جلسه\n---\n# عنوان\n');
+  eq('nothing left: no block at all', nb.ui.fmWrite('---\ntype: x\n---\n# عنوان\n', [['type', '']]), '# عنوان\n');
+  nb.ui.write('ویژگی/الف.md', '---\ndate: 1405-08-01\n---\n# الف\n');
+  nb.ui.fmDialog('ویژگی/الف.md');
+  await sleep(20);
+  const fmRows = doc.querySelectorAll('#nbFmRows .nb-fm-row');
+  ok('the form shows the date (Shamsi picker) and tags', fmRows.length === 2 && !!doc.querySelector('#nbFmRows .nb-datebtn'));
+  doc.querySelector('#nbFmRows .nb-fm-row:last-child input:not(.nb-fm-k)').value = 'کار، #مهم';
+  doc.querySelector('#nbMini [data-nb-fm-add]').click();
+  const newRow = [...doc.querySelectorAll('#nbFmRows .nb-fm-row')].pop();
+  newRow.querySelector('.nb-fm-k').value = 'type';
+  newRow.querySelector('input:not(.nb-fm-k)').value = 'جلسه';
+  doc.getElementById('nbMiniOk').click();
+  eq('saving writes it back into the note', nb.ui.files()['ویژگی/الف.md'].text, '---\ndate: 1405-08-01\ntags: [کار, مهم]\ntype: جلسه\n---\n# الف\n');
+
+  console.log('\n— the section row fits the panel —');
+  nb.ui.sidebar(true); nb.ui.section('notes');
+  ok('only the open section shows its name, the others are icons with a tooltip',
+    !!doc.querySelector('#nbBody .nb-tab.on .nb-tab-l') && [...doc.querySelectorAll('#nbBody .nb-tab:not(.on)')].every((b) => b.title && b.getAttribute('aria-label')));
+  ok('and the row scrolls when it still does not fit', /#nb \.nb-tabs\{[^}]*overflow-x:auto/.test(doc.getElementById('appStyle').textContent));
+  nb.ui.sidebar(false);
+
+  console.log('\n— the first send to an empty GitHub repository —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.provider('github');
+  repo.files.clear(); repo.commits.length = 0; repo.apiCommits = 0;
+  nb.ui.state().lastCommit = '';
+  nb.ui.write('خالی/اول.md', '# اول\n');
+  nb.ui.write('خالی/دوم.md', '# دوم\n');
+  const firstSent = await nb.ui.push({ loud: true });
+  ok('it goes through (no «نسخهٔ تازه تر»)', firstSent === true, nb.ui.state().error);
+  ok('both notes are on the repository', repo.files.has('خالی/اول.md') && repo.files.has('خالی/دوم.md'));
+  ok('in two commits: the first through the Contents API, the rest on top', repo.apiCommits === 2 && repo.commits[1].parents[0] === repo.commits[0].sha, repo.apiCommits);
+  eq('nothing waits any more', nb.ui.dirty().filter((f) => f.path.startsWith('خالی/')).length, 0);
 
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
