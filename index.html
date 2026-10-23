@@ -11231,6 +11231,18 @@ var NB_CSS = [
   '}',
   '@keyframes nb-sheet{ from{ transform: translateY(14px); opacity: .6; } to{ transform: none; opacity: 1; } }',
   '',
+  '/* collections list and «پیشرفته» (settings) */',
+  '.nb-sec h4 small{font-weight:500;color:var(--muted);margin-inline-start:6px;}',
+  '.nb-collist{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}',
+  '.nb-colrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;}',
+  '.nb-colrow span{flex:1;min-width:0;}',
+  '.nb-colrow b{display:block;font-size:.88rem;}',
+  '.nb-colrow small{display:block;color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+  '.nb-colrow .hm-dot{width:10px;height:10px;border-radius:50%;flex:none;}',
+  'details.nb-adv > summary{cursor:pointer;font-weight:700;color:var(--ink-2);padding:6px 0;}',
+  'details.nb-adv h5{margin:12px 0 6px;font-size:.78rem;color:var(--muted);}',
+  '#nbColColor{width:52px;height:32px;border:1px solid var(--border);border-radius:8px;background:none;padding:2px;}',
+  '',
   '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
   'body.ui-calm #fmtChips{display:none;}',
   'body.ui-calm #viewSeg{display:none;}',
@@ -12084,6 +12096,7 @@ function nbCommitMessage(list){
         });
       });
       return chain.then(function(){
+        nbApplyRepoConfig();
         NB.lastCommit = tree.sha; NB.lastSync = Date.now(); NB.error = '';
         idbSet('nb-last' + nbStoreSuffix(), { commit: NB.lastCommit, at: NB.lastSync }, 'meta');
         return nbSaveFiles();
@@ -12679,7 +12692,19 @@ function nbCommitMessage(list){
     });
     box.addEventListener('contextmenu', function(e){
       var note = e.target.closest('[data-nb-note]'), dir = e.target.closest('[data-nb-dir]'), att = e.target.closest('[data-nb-att]');
-      if (!note && !dir && !att) return;
+      if (!note && !dir && !att){
+        if (NB.section !== 'notes' || !e.target.closest('#nbList')) return;
+        e.preventDefault();
+        nbMenu(e.clientX, e.clientY, [
+          { label: 'یادداشت جدید', act: function(){ nbNewDialog(null, ''); } },
+          { label: 'پوشهٔ جدید', act: function(){ nbNewFolder(''); } },
+          { label: 'مجموعهٔ جدید (پوشه + تقویم + قالب)…', act: function(){ nbCollectionDialog(-1, ''); } },
+          { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
+          { label: 'گرفتن از مخزن', act: function(){ nbPull({ loud: true }); } },
+          { label: 'ارسال به مخزن', act: function(){ nbPush({ loud: true }); } }
+        ]);
+        return;
+      }
       e.preventDefault();
       if (note){
         var path = note.dataset.nbNote;
@@ -12712,14 +12737,14 @@ function nbCommitMessage(list){
         var folder = dir.dataset.nbDir;
         nbMenu(e.clientX, e.clientY, [
           { label: 'یادداشت جدید در این پوشه', act: function(){ nbNewDialog(null, folder); } },
-          { label: 'پوشهٔ جدید', act: function(){
-            nbPrompt('نام پوشه', '', function(v){
-              if (!v) return;
-              var p = folder + '/' + nbSlug(v) + '/';
-              if (NB.paths.indexOf(p) === -1) NB.paths.push(p);
-              nbRender(); nbSaveFiles();
-            });
-          } },
+          { label: 'پوشهٔ جدید داخل این پوشه', act: function(){ nbNewFolder(folder); } },
+          (function(){
+            var ci = -1;
+            C.collections.forEach(function(c, i){ if (ci < 0 && nbFolderOfPattern(c.path) === folder) ci = i; });
+            return ci >= 0 ? { label: 'تنظیمات مجموعهٔ «' + C.collections[ci].name + '»…', act: function(){ nbCollectionDialog(ci); } }
+              : { label: 'مجموعه کردن این پوشه (تقویم و قالب)…', act: function(){ nbCollectionDialog(-1, folder); } };
+          })(),
+          { label: 'تغییر نام پوشه', act: function(){ nbRenameFolder(folder); } },
           { label: 'دانلود zip این پوشه', act: function(){ nbDownloadZip(folder); } },
           { label: 'حذف پوشه', danger: true, act: function(){
             nbConfirm('حذف پوشه', 'همهٔ یادداشت های «' + folder + '» حذف شوند؟', function(){ nbDeletePath(folder + '/'); toast('پوشه برای حذف صف شد', 'trash'); });
@@ -12906,6 +12931,138 @@ function nbCommitMessage(list){
     if (!NB.open) nbSidebar(true); else nbRender();
     toast('تعارض: ' + faNum(NB.conflicts.length) + ' یادداشت هم اینجا و هم روی مخزن عوض شده', 'x');
   }
+  /* --- collections: a folder with a calendar and a template --- */
+  var NB_CAL_KINDS = [['day', 'یک یادداشت در روز'], ['many', 'چند یادداشت در روز (با عنوان)'], ['week', 'یک یادداشت در هفته'], ['', 'بدون تقویم (فقط عنوان)']];
+  var NB_PRESETS = [['templates/daily.md', 'روزانه'], ['templates/meeting.md', 'جلسه'], ['templates/weekly.md', 'هفتگی'], ['templates/idea.md', 'ایده'], ['', 'خالی']];
+  /** The path pattern for a folder and a calendar kind; `byMonth` puts dated notes in year/month folders. */
+  function nbPatternFor(folder, kind, byMonth){
+    var f = String(folder || '').replace(/^\/+|\/+$/g, '').trim() || 'یادداشت ها';
+    if (kind === 'day') return f + (byMonth ? '/{jy}/{jm}' : '') + '/{jy}-{jm}-{jd}.md';
+    if (kind === 'many') return f + (byMonth ? '/{jy}/{jm}' : '') + '/{jy}-{jm}-{jd} {title}.md';
+    if (kind === 'week') return f + (byMonth ? '/{jy}' : '') + '/{jy}-W{jw}.md';
+    return f + '/{title}.md';
+  }
+  function nbFolderOfPattern(pattern){ return String(pattern || '').split('/{')[0].replace(/\/[^\/]*\{.*$/, '').replace(/\/+$/, ''); }
+  function nbTemplateFiles(){
+    return NB.paths.filter(function(x){ return /^templates\/.+\.md$/i.test(x) && NB.files[x] && !NB.files[x].deleted; });
+  }
+  /** Opens the dialog to add a collection (index = -1) or edit one; `folder` prefills a new one. */
+  function nbCollectionDialog(index, folder){
+    var c = index >= 0 ? C.collections[index] : null;
+    var name = c ? c.name : (folder ? folder.split('/').pop() : '');
+    var kind = c ? (c.calendar || '') : 'day';
+    var dir = c ? nbFolderOfPattern(c.path) : (folder || '');
+    var byMonth = c ? /\{jm\}\//.test(c.path) || /\{jy\}\/\{jy\}-W/.test(c.path) : true;
+    var tpls = nbTemplateFiles();
+    var body = '<div class="nb-field"><label>نام</label><input class="nb-input" id="nbColName" dir="auto" placeholder="مثلاً: جلسه ها" value="' + escapeHtml(name) + '"></div>'
+      + '<div class="nb-field"><label>پوشه</label><input class="nb-input" id="nbColDir" dir="auto" placeholder="همان نام" value="' + escapeHtml(dir) + '"></div>'
+      + '<div class="nb-field"><label>تقویم</label><select id="nbColKind">' + NB_CAL_KINDS.map(function(k){
+          return '<option value="' + k[0] + '"' + (k[0] === kind ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select></div>'
+      + '<label class="sw"><input type="checkbox" id="nbColMonth"' + (byMonth ? ' checked' : '') + '><span class="sw-ui"></span><span><b>پوشه برای هر سال و ماه</b><small>مثل روزانه/1405/08/…</small></span></label>'
+      + '<div class="nb-field"><label>قالب</label><select id="nbColTpl"><option value="">بدون قالب</option>'
+      + tpls.map(function(t){ return '<option value="' + escapeHtml(t) + '"' + (c && c.template === t ? ' selected' : '') + '>' + escapeHtml(nbTitle(t)) + '</option>'; }).join('')
+      + NB_PRESETS.filter(function(pr){ return pr[0] && tpls.indexOf(pr[0]) === -1; }).map(function(pr){
+          return '<option value="new:' + pr[0] + '"' + (c && c.template === pr[0] ? ' selected' : '') + '>قالب تازه از نمونهٔ «' + pr[1] + '»</option>'; }).join('')
+      + '<option value="new:">قالب تازهٔ خالی</option></select></div>'
+      + '<div class="nb-field"><label>رنگ</label><input type="color" id="nbColColor" value="' + escapeHtml((c && c.color) || '#6d5efc') + '"></div>'
+      + '<p class="nb-hint" id="nbColEx"></p>'
+      + '<details class="nb-adv"><summary>پیشرفته: الگوی مسیر</summary><input class="nb-input" id="nbColPath" dir="ltr" value="' + escapeHtml(c ? c.path : '') + '">'
+      + '<p class="nb-hint">{jy} {jm} {jd} شمسی · {gy} {gm} {gd} میلادی · {jw} شمارهٔ هفته · {title} عنوان</p></details>';
+    nbModalBox(c ? 'تنظیمات مجموعه' : 'مجموعهٔ جدید', body,
+      (c ? '<button class="btn-soft" type="button" id="nbColDel">حذف مجموعه</button>' : '')
+      + '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">' + (c ? 'ذخیره' : 'ساختن') + '</button>', 'folder');
+    var custom = !!c && c.path !== nbPatternFor(dir, kind, byMonth);
+    function pattern(){
+      return custom ? $('nbColPath').value.trim() : nbPatternFor($('nbColDir').value.trim() || $('nbColName').value.trim(), $('nbColKind').value, $('nbColMonth').checked);
+    }
+    function preview(){
+      if (!custom) $('nbColPath').value = pattern();
+      $('nbColMonth').parentNode.hidden = !$('nbColKind').value;
+      $('nbColEx').textContent = 'مثلاً: ' + nbFillPath(pattern(), nbCtx(new Date(), $('nbColKind').value === 'day' || $('nbColKind').value === 'week' ? '' : 'عنوان یادداشت', C.weekStart));
+    }
+    ['nbColName', 'nbColDir', 'nbColKind', 'nbColMonth'].forEach(function(id){ $(id).addEventListener('input', preview); $(id).addEventListener('change', preview); });
+    $('nbColPath').addEventListener('input', function(){ custom = true; preview(); });
+    preview();
+    if ($('nbColDel')) $('nbColDel').onclick = function(){
+      nbCloseMini();
+      nbConfirm('حذف مجموعه', '«' + c.name + '» از فهرست مجموعه ها برداشته شود؟ یادداشت ها و قالبش سر جایشان می مانند.', function(){
+        C.collections.splice(index, 1); nbCollectionsChanged(); toast('مجموعه برداشته شد', 'trash');
+      });
+    };
+    $('nbMiniOk').onclick = function(){
+      var nm = $('nbColName').value.trim();
+      if (!nm){ toast('یک نام بده', 'x'); return; }
+      var tpl = $('nbColTpl').value;
+      if (tpl.indexOf('new:') === 0){
+        var preset = tpl.slice(4), target = 'templates/' + nbSlug(nm) + '.md';
+        if (NB.files[target] && !NB.files[target].deleted) target = 'templates/' + nbSlug(nm) + ' ' + Date.now().toString(36).slice(-3) + '.md';
+        nbWrite(target, preset ? NB_TEMPLATES[preset] : '---\ndate: {{gdate}}\n---\n# {{title}}\n\n{{cursor}}\n');
+        tpl = target;
+      }
+      var col = { id: c ? c.id : 'c' + Date.now().toString(36), name: nm, color: $('nbColColor').value, calendar: $('nbColKind').value || null, path: pattern(), template: tpl };
+      if (c) C.collections[index] = col; else C.collections.push(col);
+      nbCloseMini();
+      nbCollectionsChanged();
+      toast((c ? 'ذخیره شد: ' : 'مجموعه ساخته شد: ') + nm + (tpl && tpl.indexOf('templates/') === 0 && !c ? ' — قالبش را در ' + tpl + ' ویرایش کن' : ''), 'check');
+    };
+    $('nbColName').focus();
+  }
+  /** Collections, week start and the attachments folder travel with the repository in .mizkar/config.json. */
+  function nbConfigText(){
+    return JSON.stringify({ version: 1, weekStart: C.weekStart, attachments: C.attachments, collections: C.collections }, null, 2) + '\n';
+  }
+  var nbCfgTimer = 0;
+  function nbCollectionsChanged(fromSettings){
+    nbSaveCfg(); nbRender();
+    if (!fromSettings && $('nbModal') && !$('nbModal').hidden) nbDrawSettings();   // a field being typed in keeps its focus
+    clearTimeout(nbCfgTimer);
+    nbCfgTimer = setTimeout(function(){
+      if (!C.repo) return;
+      var f = NB.files[C.configPath], text = nbConfigText();
+      if (!f || f.deleted || f.text !== text){ nbWrite(C.configPath, text); NB.cfgSeen = text; }
+    }, 400);
+  }
+  /** A config.json that arrived from the repository (another device) is applied here. */
+  function nbApplyRepoConfig(){
+    var f = NB.files[C.configPath];
+    if (!f || f.deleted || f.dirty || f.text === NB.cfgSeen) return;
+    NB.cfgSeen = f.text;
+    try {
+      var cfg = JSON.parse(f.text);
+      if (Array.isArray(cfg.collections) && cfg.collections.length) C.collections = cfg.collections;
+      if (cfg.weekStart) C.weekStart = cfg.weekStart;
+      if (cfg.attachments) C.attachments = cfg.attachments;
+      nbSaveCfg(); nbRender();
+    } catch(e){ toast('config.json مخزن خوانده نشد: ' + e.message, 'x'); }
+  }
+  function nbRenameFolder(folder){
+    nbPrompt('نام تازهٔ پوشه', folder.split('/').pop(), function(v){
+      if (!v) return;
+      var parent = folder.split('/').slice(0, -1).join('/'), target = (parent ? parent + '/' : '') + nbSlug(v);
+      if (target === folder) return;
+      var moved = 0;
+      NB.paths.slice().forEach(function(x){
+        if (x.indexOf(folder + '/') !== 0) return;
+        var to = target + x.slice(folder.length);
+        if (x.slice(-1) === '/'){ NB.paths = NB.paths.map(function(y){ return y === x ? to : y; }); return; }
+        var f = NB.files[x];
+        if (f && !f.deleted && nbMoveNote(x, to)) moved++;
+      });
+      C.collections.forEach(function(c){ if (nbFolderOfPattern(c.path) === folder) c.path = target + c.path.slice(folder.length); });
+      nbCollectionsChanged();
+      toast('پوشه تغییر نام داد — ' + faNum(moved) + ' یادداشت', 'folder');
+    });
+  }
+  function nbNewFolder(parent){
+    nbPrompt('نام پوشه', '', function(v){
+      if (!v) return;
+      var p = (parent ? parent + '/' : '') + nbSlug(v) + '/';
+      if (NB.paths.indexOf(p) === -1) NB.paths.push(p);
+      nbRender(); nbSaveFiles();
+      toast('پوشه ساخته شد — با اولین یادداشتش به مخزن می رود', 'folder');
+    });
+  }
+
   /* --- new note dialog --- */
   function nbNewDialog(colId, folder, date){
     var body = '<div class="nb-field"><label>مجموعه</label><div class="nb-inline-row"><select id="nbPanelCol">'
@@ -12983,50 +13140,46 @@ function nbCommitMessage(list){
     var m = $('nbModal');
     m.hidden = false;
     $('nbModalBody').innerHTML = '<div class="nb-sec"><h4>اتصال</h4>'
-      + '<div class="nb-field"><label>سرویس</label><select id="nbProvider">'
-      + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<option value="' + o[0] + '"' + ((C.provider || 'github') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div>'
-      + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
-        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
-        + '</select></div>' : '')
       + '<div class="nb-field"><label>مخزن</label><input class="nb-input" id="nbRepo" dir="ltr" placeholder="user/notes" value="' + escapeHtml(C.repo) + '"></div>'
-      + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
       + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="' + (NB.locked ? 'قفل است' : 'github_pat_…') + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '"></div>'
       + (NB.locked ? '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="unlock">باز کردن قفل توکن</button></div>' : '')
       + '<label class="sw"><input type="checkbox" id="nbLock"' + (C.lockToken ? ' checked' : '') + (NB.locked ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>قفل توکن با گذرواژه</b><small>توکن فقط رمزشده در مرورگر می ماند؛ هر بار باز شدن صفحه، با کلیک روی «قفل» باز می شود</small></span></label>'
-      + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن). توکن فقط در همین مرورگر می ماند و در لینک اشتراک یا خروجی نمی آید.</p>'
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">ساخت قالب های پیش فرض</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-cfg="config">ساخت config.json</button></div>'
+      + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن).</p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
       + '<p class="nb-hint" id="nbTestOut"></p>'
+      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند</small></span></label></div>'
+      + '<div class="nb-sec"><h4>مجموعه ها <small>پوشه + تقویم + قالب</small></h4><div class="nb-collist">'
+      + C.collections.map(function(c, i){
+        var kind = (NB_CAL_KINDS.filter(function(k){ return k[0] === (c.calendar || ''); })[0] || ['', ''])[1];
+        return '<div class="nb-colrow"><i class="hm-dot" style="background:' + escapeHtml(c.color || 'var(--accent)') + '"></i>'
+          + '<span><b dir="auto">' + escapeHtml(c.name) + '</b><small dir="auto">' + escapeHtml(nbFolderOfPattern(c.path) + ' · ' + kind + (c.template ? ' · قالب: ' + nbTitle(c.template) : '')) + '</small></span>'
+          + '<button class="btn-soft sm" type="button" data-nb-colfix="' + i + '">ویرایش</button></div>';
+      }).join('')
+      + '</div><div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="addcol">مجموعهٔ جدید…</button>'
+      + (Object.keys(NB_TEMPLATES).some(function(p){ return !NB.files[p]; }) ? '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">قالب های نمونه را بساز</button>' : '')
+      + '</div></div>'
+      + '<details class="nb-sec nb-adv"><summary>پیشرفته</summary>'
+      + '<div class="nb-field"><label>سرویس</label><select id="nbProvider">'
+      + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<option value="' + o[0] + '"' + ((C.provider || 'github') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
+      + '<div class="nb-field"><label>ثانیه تا ارسال خودکار</label><input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '"></div>'
+      + '<div class="nb-field"><label>شروع هفته</label><select id="nbWeekStart">'
+      + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
+      + '<h5>چند دفترچه</h5>'
+      + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
+        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
+        + '</select></div>' : '')
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
       + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
       + '</div>'
-      + '<p class="nb-hint">هر دفترچه نسخهٔ کاری خودش را جدا نگه می دارد؛ با عوض کردن دفترچه، یادداشت های آن یکی می آیند. برای گیت لب، توکن با دسترسی <b dir="ltr">api</b> بساز.</p></div>'
-      + '<div class="nb-sec"><h4>ارسال</h4>'
-      + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
-      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>بعد از چند ثانیه بی کاری، همهٔ تغییرها با یک commit</small></span></label>'
-      + '<div class="nb-field"><label>ثانیه بی کاری</label><input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '"></div>'
-      + '<div class="nb-field"><label>شروع هفته</label><select id="nbWeekStart">'
-      + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div></div>'
-      + '<div class="nb-sec"><h4>مجموعه ها</h4><div class="nb-cols">'
-      + C.collections.map(function(c, i){
-        return '<div class="nb-col">'
-          + '<div class="nb-field"><label>نام</label><input class="nb-input" data-nb-col="' + i + '" data-k="name" value="' + escapeHtml(c.name) + '"></div>'
-          + '<div class="nb-field"><label>الگوی مسیر</label><input class="nb-input" dir="auto" data-nb-col="' + i + '" data-k="path" value="' + escapeHtml(c.path) + '"></div>'
-          + '<div class="nb-field"><label>قالب</label><input class="nb-input" dir="ltr" data-nb-col="' + i + '" data-k="template" value="' + escapeHtml(c.template || '') + '"></div>'
-          + '<div class="nb-field"><label>تقویم</label><select data-nb-col="' + i + '" data-k="calendar">'
-          + [['day', 'روزانه'], ['week', 'هفتگی'], ['many', 'چند در روز'], ['', 'بدون تقویم']].map(function(o){ return '<option value="' + o[0] + '"' + ((c.calendar || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-          + '</select></div></div>';
-      }).join('')
-      + '</div><div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="addcol">افزودن مجموعه</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-cfg="delcol">حذف آخرین</button></div>'
-      + '<p class="nb-hint">جای خالی های مسیر: {jy} {jm} {jd} شمسی · {gy} {gm} {gd} میلادی · {jw} شمارهٔ هفته · {title} عنوان</p></div>'
-      + '<div class="nb-sec"><h4>خروجی و ورودی</h4><div class="nb-actions">'
+      + '<h5>خروجی و ورودی</h5><div class="nb-actions">'
       + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
       + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label>'
-      + '</div><p class="nb-hint">فایل های .md را هم با «باز کردن فایل» وارد کن؛ در تب باز می شوند و با «ذخیره در دفترچه» به مخزن می روند.</p></div>';
+      + '</div></details>';
+    var nbSharedBefore = C.weekStart + '|' + C.attachments;
     function apply(){
       C.repo = $('nbRepo').value.trim();
       C.branch = $('nbBranch').value.trim() || 'main';
@@ -13036,11 +13189,9 @@ function nbCommitMessage(list){
       C.auto = $('nbAuto').checked;
       C.idleSeconds = +$('nbIdle').value || 20;
       C.weekStart = $('nbWeekStart').value;
-      Array.prototype.forEach.call(m.querySelectorAll('[data-nb-col]'), function(el){
-        var c = C.collections[+el.dataset.nbCol];
-        if (c) c[el.dataset.k] = el.value;
-      });
+      var shared = C.weekStart + '|' + C.attachments;
       nbSaveCfg(); nbSay();
+      if (shared !== nbSharedBefore){ nbSharedBefore = shared; nbCollectionsChanged(true); }
     }
     m.addEventListener('input', apply);
     m.addEventListener('change', function(e){
@@ -13065,9 +13216,12 @@ function nbCommitMessage(list){
       apply();
     });
     m.addEventListener('click', function(e){
+      var fix = e.target.closest('[data-nb-colfix]');
+      if (fix){ nbCollectionDialog(+fix.dataset.nbColfix); return; }
       var btn = e.target.closest('[data-nb-cfg]');
       if (!btn) return;
       if (btn.dataset.nbCfg === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
+      if (btn.dataset.nbCfg === 'addcol'){ nbCollectionDialog(-1, ''); return; }
       var what = btn.dataset.nbCfg;
       if (what === 'test'){
         apply();

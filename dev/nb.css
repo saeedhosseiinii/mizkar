@@ -176,3 +176,15 @@ img.nb-img-missing{ border:1px dashed #dc2626; min-height:40px; min-width:80px; 
   .nb-sug{ max-height: 34vh; }
 }
 @keyframes nb-sheet{ from{ transform: translateY(14px); opacity: .6; } to{ transform: none; opacity: 1; } }
+
+/* collections list and «پیشرفته» (settings) */
+.nb-sec h4 small{font-weight:500;color:var(--muted);margin-inline-start:6px;}
+.nb-collist{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+.nb-colrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;}
+.nb-colrow span{flex:1;min-width:0;}
+.nb-colrow b{display:block;font-size:.88rem;}
+.nb-colrow small{display:block;color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nb-colrow .hm-dot{width:10px;height:10px;border-radius:50%;flex:none;}
+details.nb-adv > summary{cursor:pointer;font-weight:700;color:var(--ink-2);padding:6px 0;}
+details.nb-adv h5{margin:12px 0 6px;font-size:.78rem;color:var(--muted);}
+#nbColColor{width:52px;height:32px;border:1px solid var(--border);border-radius:8px;background:none;padding:2px;}
