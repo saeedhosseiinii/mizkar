@@ -25,6 +25,7 @@ first: it explains the build (`dev/apply.py`), the beta (`dev/beta.py`) and the 
 3. Drag and drop (§5)
 4. Polish and extras (§6)
 5. Sharing through Gist (§9)
+6. Mobile-first shell (§10), when the user approves it
 
 ---
 
@@ -238,6 +239,45 @@ browser; «رمزدار» asks for the password and a wrong one opens nothing; t
 only ciphertext for the two encrypted modes; «اشتراک‌ها» lists all three, «به‌روزرسانی» changes what the same
 link shows, and «برداشتن» makes the link say it was removed. Tests: the fake GitHub in `dev/test_ui.js` gets
 `/gists` (create, list, patch, delete, get); the crypto round-trip and the link parsing go in `dev/test_nb.js`.
+
+## 10. A mobile-first app shell (proposed — starts only after the user says go)
+
+**Why:** the shell grew from a desktop page by patches. Today there are 7 different width breakpoints (600, 640,
+700, 760, 900, 1099, 1100), 8+ separate overlay systems (`.pop`, `.ctx-menu`, `#nbMenu`, `#nbMini`, `#nbMini2`,
+`#nbModal`, `.modal`, the palette, the sheets) with z-indexes from 96 to 450, and three different controls that
+open the same drawer (edge tab, rail, top-bar button). The user finds opening the side menu and reaching the
+settings awkward, and uses the app on the phone a lot. The engine (storage, sync, merge, encryption, collections,
+in-place editor, tests) is good and stays; only the shell around it changes.
+
+**Wanted:**
+
+1. **One layout system, three sizes:** phone ≤ 640, tablet 641–1099, desktop ≥ 1100. Every rule uses these three;
+   the old breakpoints go. Spacing, radius and z-index are tokens (`--z-bar`, `--z-drawer`, `--z-sheet`,
+   `--z-menu`, `--z-toast`), never raw numbers.
+2. **One layer manager:** a single `layer.open(kind, el)` / `layer.close()` for menus, dialogs, sheets and the
+   palette. On the phone every layer is a bottom sheet; on desktop a popover or a centred dialog. It owns Esc,
+   the phone's Back (one history entry), focus return and the backdrop. The current `nbBack*`, `nbMenu`,
+   `nbModalBox` and the app's `.pop` all go through it.
+3. **Phone:** no drawer. A bottom bar with «امروز · یادداشت‌ها · جستجو · تقویم · بیشتر» switches full-screen
+   pages. A note opens as its own page with a top bar: ← back, the title, the sync dot, ⋯ (everything that is
+   now in the right-click menu). «بیشتر» holds «موقت», «کارها», «اشتراک‌ها» and «تنظیمات».
+4. **Desktop:** the notebook panel is always on the right, with one toggle in one fixed place (top bar, right
+   end) and the sections as tabs at its top. The edge tab and the rail go. The panel's width is remembered.
+5. **Settings as a page, not a long dialog:** one «تنظیمات» with a short list — اتصال (connect wizard: provider,
+   repository, token with a «آزمایش»), همگام‌سازی (auto send, sync when back online, interval), مجموعه‌ها,
+   پوشه‌های فقط خواندنی, ظاهر, امنیت (secret notes, token lock), اشتراک‌ها (§9). The app's own settings and the
+   notebook's settings live in this same page. Reachable from the top bar on desktop and «بیشتر» on the phone.
+6. **Right-click and long-press stay** (the map in §2), but every action they offer is also reachable from a
+   visible ⋯ button, so nothing depends on knowing about the long-press.
+
+**How (in order, each step shippable to the beta):** tokens + breakpoints → layer manager (move the existing
+layers onto it) → phone pages and bottom bar → note page top bar → desktop panel → settings page → remove the
+old chrome (edge tab, rail, `#nbMini2`, duplicated CSS blocks in `nb.css` §«بازبینی موبایل»).
+
+**Accept:** at 360×740 every section is reachable in one tap from the bottom bar, Back always closes the top
+layer and never leaves the app while something is open, no popover is clipped or hidden under another bar;
+at 1440 the panel opens and closes from one button and never covers a menu or dialog; the full test suites
+stay green and gain tests for the layer manager.
 
 ## Not in scope now
 
