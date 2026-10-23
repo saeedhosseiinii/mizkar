@@ -7495,16 +7495,20 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
-  /* tint behind transparent glyphs; selection keeps glyphs transparent so colours stay and text does not double */
+  /* tint behind transparent glyphs; while a range is selected, hide tint and show real ink (RTL select otherwise doubles/jumps) */
   'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);overflow-anchor:none;}',
   'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  'body.ip-tint textarea#input::selection{color:transparent!important;-webkit-text-fill-color:transparent!important;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
-  'body.ip-tint textarea#input::-moz-selection{color:transparent!important;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint textarea#input::selection{color:transparent;-webkit-text-fill-color:transparent;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint textarea#input::-moz-selection{color:transparent;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint.ip-has-sel textarea#input{color:var(--ink);-webkit-text-fill-color:var(--ink);}',
+  'body.ip-tint.ip-has-sel textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint.ip-has-sel textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 38%,transparent);}',
+  'body.ip-tint.ip-has-sel .ta-md{visibility:hidden;}',
   '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[hidden]{display:none;}',
   '.ta-md .mk-h{color:var(--accent);}',
   '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
-  '.ta-md .mk-c{color:var(--tok-str,#047857);background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:3px;}',
+  '.ta-md .mk-c{color:var(--tok-str,#047857);}',
   '.ta-md .mk-l{color:var(--tok-fn,#0369a1);}',
   '.ta-md .mk-t{color:#d97706;}',
   '.ta-md .mk-fm{color:var(--muted);}',
@@ -13611,8 +13615,9 @@ function nbCommitMessage(list){
     setView('editor');
     saveState();
     if (typeof syncInputDir === 'function') syncInputDir();
+    var keepScroll = ta.scrollTop;
     ipTint();
-    ta.focus();
+    try { ta.focus({ preventScroll: true }); } catch(err){ ta.focus(); }
     // after dir/tint: changing dir can clear the selection, so set it last
     ta.setSelectionRange(selStart, selEnd);
     /* only realign scroll when we came from a click on the preview — avoid jump on every caret click */
@@ -13620,7 +13625,10 @@ function nbCommitMessage(list){
       var paneTop = ta.getBoundingClientRect().top;
       var want = Math.max(0, ipCaretTop(selStart) - (screenY - paneTop));
       if (Math.abs(ta.scrollTop - want) > 8) ta.scrollTop = want;
+    } else {
+      ta.scrollTop = keepScroll;
     }
+    if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop;
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
@@ -13729,17 +13737,31 @@ function nbCommitMessage(list){
       return m;
     });
   }
+  function ipSelSync(){
+    if (!body.classList.contains('ip-tint') || document.activeElement !== ta){
+      if (body.classList.contains('ip-has-sel')) body.classList.remove('ip-has-sel');
+      return;
+    }
+    var has = ta.selectionStart !== ta.selectionEnd;
+    if (has !== body.classList.contains('ip-has-sel')) body.classList.toggle('ip-has-sel', has);
+  }
   function ipTint(){
     var on = !!ipTab() && state.view === 'editor';
     body.classList.toggle('ip-tint', on);
+    if (!on){ body.classList.remove('ip-has-sel'); if (ip.md) ip.md.hidden = true; return; }
+    /* selecting: keep real glyphs only — rebuilding the overlay here was the scroll/colour jump */
+    if (ta.selectionStart !== ta.selectionEnd){
+      body.classList.add('ip-has-sel');
+      return;
+    }
     body.classList.remove('ip-has-sel');
-    if (!on){ if (ip.md) ip.md.hidden = true; return; }
     if (!ip.md){
       ip.md = document.createElement('div');
       ip.md.className = 'ta-md';
       ip.md.setAttribute('aria-hidden', 'true');
       ta.parentNode.insertBefore(ip.md, ta);
     }
+    var keepScroll = ta.scrollTop;
     var cs = getComputedStyle(ta);
     ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
       'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'].forEach(function(k){ ip.md.style[k] = cs[k]; });
@@ -13750,15 +13772,24 @@ function nbCommitMessage(list){
       if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
       if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
       var html = ipTintLine(line, st);
+      /* only fences get an LTR wrap — per-line dir on prose desyncs wrap from the textarea */
       if (st.fence || /^\s*(```|~~~)/.test(line)) return '<span dir="ltr">' + html + '</span>';
       return html;
     }).join('\n') + '\n ';
     ip.md.hidden = false;
-    ip.md.scrollTop = ta.scrollTop;
+    ta.scrollTop = keepScroll;
+    ip.md.scrollTop = keepScroll;
   }
-  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } });
+  document.addEventListener('selectionchange', ipSelSync);
+  ta.addEventListener('keyup', ipSelSync);
+  ta.addEventListener('mouseup', ipSelSync);
+  ta.addEventListener('blur', function(){ body.classList.remove('ip-has-sel'); });
+  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } ipSelSync(); });
   ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
-  if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
+  if (window.ResizeObserver) new ResizeObserver(function(){
+    if (!body.classList.contains('ip-tint') || body.classList.contains('ip-has-sel')) return;
+    cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint);
+  }).observe(ta);
   /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
   function ipArm(){
     var t = ipTab();
