@@ -7538,8 +7538,19 @@ var NB_CSS = [
   '  body.app{ height:100dvh !important; overflow:hidden !important; box-sizing:border-box; }',
   '  body.nb-nav-on{ --nb-nav-h:56px; padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important; }',
   '  /* typing: the bottom bar steps aside for the keyboard and the Markdown toolbar */',
-  '  body.nb-nav-on.ip-tint, body.nb-nav-on:has(textarea#input:focus){ --nb-nav-h:0px; }',
+  '  body.nb-nav-on.ip-tint, body.nb-nav-on:has(textarea#input:focus){ --nb-nav-h:56px; }',
   '  body.ip-tint #nbNav, body:has(textarea#input:focus) #nbNav{ display:none !important; }',
+  '  #ipDone{ display:none; }',
+  '  body.nb-nav-on.ip-tint #ipDone, body.nb-nav-on:has(textarea#input:focus) #ipDone{',
+  '    display:flex; position:fixed; z-index:var(--z-nav); left:0; right:0; bottom:0;',
+  '    align-items:center; justify-content:center; gap:10px;',
+  '    height:calc(56px + env(safe-area-inset-bottom, 0px));',
+  '    padding:8px 16px calc(8px + env(safe-area-inset-bottom, 0px));',
+  '    border:0; border-top:1px solid var(--border); background:var(--surface); color:var(--accent);',
+  '    font:inherit; font-size:1.05rem; font-weight:800; cursor:pointer;',
+  '    box-shadow:0 -10px 28px -18px rgba(15,23,42,.4);',
+  '  }',
+  '  body.nb-nav-on.ip-tint #ipDone .i, body.nb-nav-on:has(textarea#input:focus) #ipDone .i{ width:22px; height:22px; }',
   '',
   '  /* the page: one column filling the space between the top bar and the bottom bar */',
   '  .tabs, .status, #btnNotebook{ display:none !important; }',
@@ -7665,6 +7676,7 @@ var NB_CSS = [
   '  .pane.editor .mdbar > *{ width:100%; min-width:0; }',
   '  .pane.editor .mdbar > .mdsep{ display:none; }   /* separators and the table picker are not columns */',
   '  textarea#input{ padding-bottom:104px; font-size:16px; }     /* 16px: the phone does not zoom into the field */',
+  '  body.ip-tint textarea#input{ padding-bottom:calc(104px + 56px + env(safe-area-inset-bottom, 0px)); }',
   '  .nb-input, #nbBody input, #nbBody select{ font-size:16px; }',
   '',
   '  /* the app\'s own floating buttons (چسباندن، ویرایش سریع) sit above the bottom bar, pinned to the screen */',
@@ -7875,7 +7887,7 @@ var NB_CSS = [
   '',
   '/* --- bottom navigation (phone): taller, pill behind the active icon, label always --- */',
   'body.m3.nb-nav-on{ --nb-nav-h:64px; }',
-  'body.m3.nb-nav-on.ip-tint{ --nb-nav-h:0px; }       /* editing: the bar is gone, nothing may keep its height */',
+  'body.m3.nb-nav-on.ip-tint{ --nb-nav-h:56px; }      /* room for the «خواندن» done bar */',
   'body.m3 #nbNav{ background:var(--surface-2); border-top:0; }',
   'body.m3 .nb-nav-b{ font-size:.7rem; gap:4px; color:var(--ink-2); }',
   'body.m3 .nb-nav-b .i{ width:24px; height:24px; padding:3px 16px; box-sizing:content-box; border-radius:999px; transition:background .15s; }',
@@ -12379,7 +12391,10 @@ function nbCommitMessage(list){
   var nbBack = { entry: false, ignore: false, timer: 0 };
   function nbBackOn(){ return innerWidth < 1100; }               // phones and tablets have a Back button (or gesture)
   function nbPanelIsLayer(){ return NB.open && innerWidth < 1100; }
-  function nbSomethingOpen(){ return nbLayerOpen() || nbPanelIsLayer(); }
+  function nbEditingLayer(){
+    return !!(innerWidth <= 760 && typeof ipTab === 'function' && ipTab() && state.view === 'editor');
+  }
+  function nbSomethingOpen(){ return nbLayerOpen() || nbPanelIsLayer() || nbEditingLayer(); }
   function nbBackSync(){
     clearTimeout(nbBack.timer);
     // after the current task: a dialog that closes and opens the next one at once is still «open»
@@ -12393,6 +12408,11 @@ function nbCommitMessage(list){
   function nbCloseTopLayer(){
     var L = nbLayerTop(true);
     if (L){ L.close(); return true; }
+    if (nbEditingLayer()){
+      if (typeof ipRead === 'function') ipRead();
+      else { setView('preview'); saveState(); }
+      return true;
+    }
     if (NB.open){ nbSidebar(false); return true; }
     return false;
   }
@@ -12917,6 +12937,19 @@ function nbCommitMessage(list){
     }).join('');
     document.body.appendChild(nav);
     body.classList.add('nb-nav-on');
+    if (!$('ipDone')){
+      var done = document.createElement('button');
+      done.type = 'button';
+      done.id = 'ipDone';
+      done.setAttribute('aria-label', 'پایان ویرایش و بازگشت به خواندن');
+      done.innerHTML = icon('book') + '<span>خواندن</span>';
+      done.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function') ipRead();
+        else { setView('preview'); saveState(); }
+      });
+      document.body.appendChild(done);
+    }
     nav.addEventListener('click', function(e){
       var b = e.target.closest('[data-nb-nav]');
       if (!b) return;
@@ -12960,9 +12993,14 @@ function nbCommitMessage(list){
         if (NB.cameFrom && NB.cameFrom !== 'home'){ NB.section = NB.cameFrom; nbSidebar(true); }
         else nbGoHome();
       } else if (w === 'edit'){
-        setView(state.view === 'preview' ? 'editor' : 'preview');
-        saveState();
-        if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
+        if (state.view === 'preview'){
+          if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function') ipEdit(0, '');
+          else { setView('editor'); saveState(); setTimeout(function(){ ta.focus(); }, 0); }
+        } else if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){
+          ipRead();
+        } else {
+          setView('preview'); saveState();
+        }
       } else if (w === 'rename' && path){
         if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
         nbPrompt('نام یادداشت', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); });
@@ -14035,33 +14073,38 @@ function nbCommitMessage(list){
      not still guessing whether the second tap meant a zoom; the notebook reads the two taps itself and hands the
      app the dblclick it expects. */
   (function(){
-    var last = 0, lx = 0, ly = 0, done = 0;
+    /* Deliberate double-tap: min gap filters bounce, max gap + small radius filters scroll taps,
+       short open delay lets a fling cancel the pending edit. */
+    var TAP_MIN = 200, TAP_MAX = 520, TAP_DIST = 30, TAP_OPEN = 280, TAP_COOL = 1400;
+    var last = 0, lx = 0, ly = 0, done = 0, pending = 0;
+    function cancelPending(){ if (pending){ clearTimeout(pending); pending = 0; } }
+    document.addEventListener('touchmove', function(){ cancelPending(); }, { passive: true });
     document.addEventListener('touchstart', function(e){
       if (!('ontouchstart' in window) && !(window.matchMedia && matchMedia('(max-width: 760px)').matches)) return;
-      if (e.touches.length !== 1) return;
+      if (e.touches.length !== 1){ cancelPending(); return; }
       var t = e.target;
       if (!t || !t.closest || t.closest('a,button,input,textarea,[contenteditable],.mdbar,.status,#nbTop,#nbNav,#nbMenu,#nb,#m3Fab,[data-ui],.mdc')) return;
-      if (!t.closest || !t.closest('#zoomWrap')) return;
+      if (!t.closest('#zoomWrap')) return;
       var now = Date.now(), x = e.touches[0].clientX, y = e.touches[0].clientY;
-      var twice = now - last < 750 && Math.abs(x - lx) < 48 && Math.abs(y - ly) < 48;
+      var gap = now - last;
+      var twice = gap >= TAP_MIN && gap < TAP_MAX && Math.abs(x - lx) < TAP_DIST && Math.abs(y - ly) < TAP_DIST;
       last = now; lx = x; ly = y;
       if (!twice || now < done) return;
-      done = now + 900;
-      // open the editor directly: synthetic dblclick + the phone's follow-up mousedown used to cancel each other
-      if (state.view === 'preview'){
+      done = now + TAP_COOL;
+      cancelPending();
+      var block = t.closest(IP_BLOCKS), topY = block ? block.getBoundingClientRect().top : y;
+      pending = setTimeout(function(){
+        pending = 0;
+        if (state.view !== 'preview') return;
         if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function'){
-          var block = t.closest(IP_BLOCKS);
-          ipEdit(block ? ipLineOf(block) : 0, '', block ? block.getBoundingClientRect().top : y);
+          ipEdit(block ? ipLineOf(block) : 0, '', topY);
           return;
         }
-        // temp tabs on a phone: no in-place caret map, but two taps still open the editor
         if (innerWidth <= 760){
           setView('editor'); saveState();
           setTimeout(function(){ ta.focus(); }, 0);
-          return;
         }
-      }
-      try { t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y })); } catch(err){}
+      }, TAP_OPEN);
     }, { passive: true });
   })();
 
