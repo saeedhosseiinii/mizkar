@@ -2038,6 +2038,12 @@ async function until(fn, ms = 3000) {
   eq('writing offers reading, with a book', [writing.lab, /i-book/.test(writing.ico)], ['خواندن', true]);
   ok('and back again', editTop.getAttribute('aria-label') === 'ویرایش' && /i-pen/.test(editTop.innerHTML));
 
+  console.log('\n— the worker asks the network for the page first —');
+  const swSrc = fs.readFileSync(require('path').join(require('path').dirname(HTML), 'sw.js'), 'utf8');
+  ok('a navigation goes to the network (with the saved copy as the fallback, not the other way round)',
+     /mode === 'navigate'/.test(swSrc) && /navigationPage\(\)/.test(swSrc) && !/refreshPage/.test(swSrc) && /cached \|\|/.test(swSrc));
+  ok('and the update check itself is never cached', /version\\\.json\$/.test(swSrc) && /return;/.test(swSrc));
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

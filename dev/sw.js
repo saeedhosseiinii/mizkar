@@ -61,13 +61,11 @@ self.addEventListener('fetch', function(event){
   // the update check must always see the live version
   if (/\/version\.json$/.test(new URL(request.url).pathname)) return;
   if (request.mode === 'navigate'){
-    event.respondWith(caches.open(CACHE).then(function(cache){
-      return cache.match('index.html').then(function(cached){
-        var update = refreshPage(cache, cached).catch(function(){ return null; });
-        if (cached){ event.waitUntil(update); return cached; }
-        return update.then(function(fresh){ return fresh || Response.error(); });
-      });
-    }));
+    /* The page itself is asked of the network first (revalidated with its ETag, so an unchanged build costs a
+       304) and only falls back to the saved copy when the network does not answer in time or is offline. The
+       other way round — cache first, update in the background — meant a phone kept opening the build from
+       before the last one and the user had to find the «تازه‌سازی» chip to see anything new. */
+    event.respondWith(navigationPage());
     return;
   }
   event.respondWith(caches.match(request).then(function(hit){
@@ -81,21 +79,19 @@ self.addEventListener('fetch', function(event){
   }));
 });
 
-function versionOf(response){
-  return response ? (response.headers.get('etag') || response.headers.get('last-modified') || response.headers.get('content-length') || '') : '';
-}
-
-function refreshPage(cache, cached){
-  return fetch('index.html', { cache: 'no-cache' }).then(function(fresh){
-    if (!fresh || !fresh.ok) return fresh;
-    var changed = cached && versionOf(cached) !== versionOf(fresh);
-    return cache.put('index.html', fresh.clone()).then(function(){
-      if (changed){
-        self.clients.matchAll({ type: 'window' }).then(function(list){
-          list.forEach(function(c){ c.postMessage({ type: 'fs-update' }); });
-        });
-      }
-      return fresh;
+/** The newest index.html, or the saved one when the network is slow/offline. A fresh copy is kept for later. */
+function navigationPage(){
+  return caches.open(CACHE).then(function(cache){
+    return cache.match('index.html').then(function(cached){
+      var net = fetch('index.html', { cache: 'no-cache' })
+        .then(function(fresh){ return fresh && fresh.ok ? fresh : null; })
+        .catch(function(){ return null; });
+      var inTime = Promise.race([net, new Promise(function(r){ setTimeout(function(){ r(null); }, 3000); })]);
+      return inTime.then(function(fresh){
+        if (!fresh) return cached || net.then(function(late){ return late || Response.error(); });
+        cache.put('index.html', fresh.clone());
+        return fresh;
+      });
     });
   });
 }
