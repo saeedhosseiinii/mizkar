@@ -1743,6 +1743,23 @@ async function until(fn, ms = 3000) {
   await sleep(60);
   ok('a dated note keeps its file name (its title was never the name)', !!nb.ui.files()['روزانه/1405/08/1405-08-09.md']);
 
+  console.log('\n— the top: one row, and a note shows where it lives —');
+  const topBar = doc.querySelector('header.bar');
+  ok('the tabs sit in the top bar, right after the brand', topBar.contains(doc.getElementById('tabs')) && topBar.querySelector('.brand').nextElementSibling === doc.getElementById('tabs'));
+  ok('«خروجی» is an icon with a name for screen readers', doc.getElementById('btnExport').getAttribute('aria-label') === 'خروجی');
+  nb.ui.write('مسیر/زیر/یادداشت ته.md', '# ته\n');
+  nb.ui.open('مسیر/زیر/یادداشت ته.md');
+  await sleep(40);
+  const ph = doc.querySelector('.pane.out .pane-head .ph-title');
+  eq('the page head is the path, not «پیش‌نمایش»', [...ph.querySelectorAll('.nb-crumb')].map((b) => b.textContent).concat(ph.querySelector('.nb-crumb-t').textContent), ['مسیر', 'زیر', 'یادداشت ته']);
+  nb.ui.sidebar(false);
+  ph.querySelector('[data-nb-crumb="مسیر/زیر"]').click();
+  ok('a folder in the path opens it in the panel', doc.body.classList.contains('nb-open') && nb.ui.state().section === 'notes' && !!doc.querySelector('#nbBody [data-nb-dir="مسیر/زیر"]'));
+  nb.ui.goHome();
+  await sleep(40);
+  ok('a temp tab gets its own head back', !ph.dataset.crumbs && !ph.querySelector('.nb-crumb'));
+  nb.ui.sidebar(false);
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

@@ -107,6 +107,35 @@
       document.body.appendChild(syncPop);
     }
 
+    /* the tabs join the top bar (one row instead of two): brand · tabs · the controls · export */
+    var tabsRow = $('tabs'), bar = document.querySelector('header.bar'), brand = bar && bar.querySelector('.brand');
+    if (tabsRow && bar && brand){ brand.parentNode.insertBefore(tabsRow, brand.nextSibling); body.classList.add('nb-tabs-in-bar'); }
+    if ($('btnExport')){ $('btnExport').setAttribute('aria-label', 'خروجی'); $('btnExport').setAttribute('data-tip', 'خروجی: PDF، HTML، Word، لینک…'); }
+
+    /* a note's page head shows where it lives (روزانه › 1405 › 08 › …) instead of «پیش‌نمایش»; a folder opens in the panel */
+    var phTitle = document.querySelector('.pane.out .pane-head .ph-title'), phOrig = phTitle ? phTitle.innerHTML : '';
+    function crumbs(path){
+      if (!phTitle) return;
+      if (!path){ if (phTitle.dataset.crumbs){ phTitle.innerHTML = phOrig; delete phTitle.dataset.crumbs; } return; }
+      if (phTitle.dataset.crumbs === path) return;
+      var parts = path.split('/'), name = nbTitle(parts.pop()), acc = '';
+      phTitle.innerHTML = icon('folder') + parts.map(function(seg){
+        acc = acc ? acc + '/' + seg : seg;
+        return '<button type="button" class="nb-crumb" data-nb-crumb="' + escapeHtml(acc) + '" dir="auto">' + escapeHtml(seg) + '</button><span class="nb-crumb-sep">›</span>';
+      }).join('') + '<b class="nb-crumb-t" dir="auto">' + escapeHtml(name) + '</b>';
+      phTitle.dataset.crumbs = path;
+    }
+    if (phTitle) phTitle.addEventListener('click', function(e){
+      var c = e.target.closest('[data-nb-crumb]');
+      if (!c) return;
+      var folder = c.dataset.nbCrumb, acc = '';
+      folder.split('/').forEach(function(seg){ acc = acc ? acc + '/' + seg : seg; NB.expanded[acc] = true; });
+      NB.section = 'notes'; NB.treeQuery = '';
+      nbSidebar(true);
+      var row = $('nbBody') && Array.prototype.filter.call($('nbBody').querySelectorAll('[data-nb-dir]'), function(r){ return r.dataset.nbDir === folder; })[0];
+      if (row && row.scrollIntoView){ row.scrollIntoView({ block: 'center' }); row.classList.add('nb-flash'); setTimeout(function(){ row.classList.remove('nb-flash'); }, 1200); }
+    });
+
     /* the ⋯ menu on the preview header drops the desktop-only bits on a phone */
     function phoneItems(items, w){
       if ((w || innerWidth) > 760) return items;
@@ -129,6 +158,7 @@
       var notePage = size === 'phone' && !!path && !NB.open;
       body.classList.toggle('nb-note-page', notePage);
       if (path) $('nbTopTitle').textContent = nbTitle(path);
+      crumbs(path);
       var syncBtn = $('nbSync'), dot = top.querySelector('.nb-top-sync');
       if (syncBtn) dot.className = 'nb-top-sync ' + (syncBtn.className.match(/nb-(ok|pending|busy|conflict|error|off)/) || ['nb-off'])[0];
       dot.title = syncBtn ? syncBtn.textContent : '';

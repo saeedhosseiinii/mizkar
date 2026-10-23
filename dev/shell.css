@@ -220,3 +220,21 @@ body.readmode .work{ margin-right:0 !important; }
   #nb .nb-head .nb-h-sp{ flex:1; }
   .nb-head-sync{ height:36px; }
 }
+
+/* --- the top: brand · tabs · controls · export in one row; «خروجی» is an icon; a note's head is its path --- */
+@media (min-width:761px){
+  body.nb-tabs-in-bar .bar{ gap:8px; padding-block:8px; }
+  body.nb-tabs-in-bar .bar .tabs{ flex:1 1 auto; min-width:0; padding:0; margin:0; }
+  body.nb-tabs-in-bar .bar .ui-near{ margin-inline-start:auto; flex:none; }
+  body.nb-tabs-in-bar .bar .ui-export{ margin-inline-start:0; flex:none; }
+}
+body.ui-calm #btnExport{ background:transparent; color:var(--ink-2); border:1px solid var(--border); box-shadow:none; width:36px; height:36px; padding:0; justify-content:center; }
+body.ui-calm #btnExport:hover{ color:var(--accent); border-color:var(--border-strong); }
+body.ui-calm #btnExport .bp-label{ display:none; }
+.ph-title .nb-crumb{ border:0; background:none; padding:2px 4px; border-radius:6px; font:inherit; font-weight:600; color:var(--muted); cursor:pointer; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ph-title .nb-crumb:hover{ color:var(--accent); background:var(--soft); }
+.ph-title .nb-crumb-sep{ color:var(--border-strong); }
+.ph-title .nb-crumb-t{ font-weight:800; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px; }
+.ph-title[data-crumbs]{ gap:2px; min-width:0; }
+.nb-flash{ animation:nb-flash 1.2s ease; }
+@keyframes nb-flash{ 0%,60%{ background:color-mix(in srgb, var(--accent) 22%, transparent); } 100%{ background:transparent; } }
