@@ -382,11 +382,17 @@ function nbCommitMessage(list){
       nbProfiles().forEach(function(pr){ delete pr.tokenEnc; });
       return idbSet('nb-cfg', C, 'meta');
     }
-    if (!NB.tokenPass) return Promise.resolve(false);      // locked and not opened: what is stored stays as it is
+    if (!NB.tokenPass){
+      // locked and not opened: the sealed tokens stay as they are, every other setting still saves
+      var plainless = JSON.parse(JSON.stringify(C));
+      plainless.token = ''; plainless.gistToken = '';
+      (plainless.profiles || []).forEach(function(pr){ pr.token = ''; });
+      return idbSet('nb-cfg', plainless, 'meta');
+    }
     var copy = JSON.parse(JSON.stringify(C)), pass = NB.tokenPass;
-    function seal(token, prev){ return token ? nbEncrypt(token, pass, NB.localSalt) : Promise.resolve(prev || ''); }
+    function seal(token){ return token ? nbEncrypt(token, pass, NB.localSalt) : Promise.resolve(''); }   // cleared stays cleared
     copy.token = ''; copy.gistToken = '';
-    return Promise.all([seal(C.token, C.tokenEnc), seal(C.gistToken, C.gistTokenEnc)].concat(nbProfiles().map(function(pr){ return seal(pr.token, pr.tokenEnc); })))
+    return Promise.all([seal(C.token), seal(C.gistToken)].concat(nbProfiles().map(function(pr){ return seal(pr.token); })))
       .then(function(sealed){
         copy.tokenEnc = C.tokenEnc = sealed[0];
         copy.gistTokenEnc = C.gistTokenEnc = sealed[1];
@@ -614,6 +620,16 @@ function nbCommitMessage(list){
     var d = iso ? new Date(iso) : null;
     return d && !isNaN(d) ? homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate()) : '';
   }
+  /** The files of the repository's default branch, for a push that will create our branch from it. */
+  function nbDefaultBranchPaths(){
+    if (nbIsGL()) return Promise.resolve({});
+    var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
+    return nbApi('GET', base).then(function(info){
+      if (!info || !info.default_branch) return {};
+      return nbApi('GET', base + '/git/ref/heads/' + encodeURIComponent(info.default_branch))
+        .then(function(r){ return nbTreePaths(r.object.sha); }, function(){ return {}; });
+    }, function(){ return {}; });
+  }
   /**
    * An empty GitHub repository refuses the Git Data API (blobs, trees: 409 «Git Repository is empty»). Its first
    * file goes through the Contents API, which makes the first commit and the default branch; the notebook's branch
@@ -703,7 +719,10 @@ function nbCommitMessage(list){
     }
     var sp = nbSplitRepo();
     return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/git/trees/' + sha + '?recursive=1')
-      .then(function(tree){ return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; }); });
+      .then(function(tree){
+        if (tree.truncated) throw nbError(0, 'مخزن بزرگ تر از آن است که یک جا خوانده شود');
+        return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; });
+      });
   }
   /** Every file the repository has at a commit: {path: sha}. Empty for a repository with no commits. */
   function nbTreePaths(sha){
@@ -712,7 +731,10 @@ function nbCommitMessage(list){
     function page(n){
       return nbTreeOnce(sha, n).then(function(list){
         list.forEach(function(e){ if (e.type === 'blob') have[e.path] = e.sha; });
-        if (nbIsGL() && list.length >= 100 && n < 30) return page(n + 1);
+        if (nbIsGL() && list.length >= 100){
+          if (n >= 50) throw nbError(0, 'درخت مخزن کامل خوانده نشد');
+          return page(n + 1);
+        }
         return have;
       });
     }
@@ -728,7 +750,10 @@ function nbCommitMessage(list){
         return nbTreeOnce(sha, n).then(function(list){
           all = all.concat(list);
           // a full page (folders count too) means there may be more; stopping early would make files look deleted
-          if (nbIsGL() && list.length >= 100 && n < 30) return page(n + 1);
+          if (nbIsGL() && list.length >= 100){
+            if (n >= 50) throw nbError(0, 'درخت مخزن کامل خوانده نشد');
+            return page(n + 1);
+          }
           return all;
         });
       }
@@ -813,11 +838,11 @@ function nbCommitMessage(list){
                 return false;
               });
             }
-            if (local && local.dirty && local.base !== text){
-              // both sides moved: merge what can be merged, and only then ask the user
+            if (local && local.dirty){
+              // something unsent here: merge (when only the branch moved, the merge is simply my text)
               var mg2 = nbMerge3(local.base || '', local.text, text);
               if (!mg2.conflicts.length){
-                nbPutFile(job.path, mg2.text, job.sha, { base: text, dirty: true, remote: true });
+                nbPutFile(job.path, mg2.text, job.sha, { base: text, dirty: mg2.text !== text, remote: true });
                 nbRefreshOpenTab(job.path, true);
                 merged++;
                 return true;
@@ -933,15 +958,17 @@ function nbCommitMessage(list){
             return false;
           }
           return nbPush({ retried: true, force: opts.force, loud: opts.loud });
-        });
+        }).then(function(r){ return { done: r }; });      // the inner push finished everything: nothing more here
       }
       return true;
     }, function(e){
-      if (e.status === 404 || e.status === 409) return true; // brand new repository: no commits yet
+      if (e.status === 404 || e.status === 409) return true; // brand new repository (or the branch is not there yet)
       throw e;
     }).then(function(go){
-      if (go !== true) return go;
-      return nbTreePaths(baseSha).then(function(have){ return nbPushChanges(have); });
+      if (go !== true) return go && go.done !== undefined ? go.done : go;
+      // the files the repository really has: from our branch, else from the default branch the new branch will start from
+      var havePromise = baseSha ? nbTreePaths(baseSha) : nbDefaultBranchPaths();
+      return havePromise.then(function(have){ return nbPushChanges(have); });
     }).catch(function(e){
       NB.busy = false;
       var conflict = !!(e && (e.status === 409 || e.status === 422));
@@ -1154,7 +1181,7 @@ function nbCommitMessage(list){
     if (dst && dst.remote){
       Object.assign(dst, { text: f.text, enc: f.enc, plain: f.plain, deleted: false, movedFrom: '', at: Date.now() });
       if (f.localCipher) dst.localCipher = f.localCipher; else delete dst.localCipher;
-      dst.dirty = dst.enc ? (dst.plain == null ? !!f.dirty : dst.plain !== dst.basePlain) : dst.text !== dst.base;
+      dst.dirty = dst.enc ? (dst.plain == null ? dst.text !== dst.base || !!f.dirty : dst.plain !== dst.basePlain) : dst.text !== dst.base;
     } else {
       if (dst){ delete NB.files[dst.path]; NB.paths = NB.paths.filter(function(p){ return p !== newPath; }); }
       NB.files[newPath] = Object.assign({}, f, { path: newPath, dirty: true, isNew: true, remote: false, deleted: false, at: Date.now(),
@@ -1487,7 +1514,6 @@ function nbCommitMessage(list){
           + '</div></div>';
       }).join('') || '<div class="nb-empty">تعارضی نیست</div>';
       if (NB.conflicts.length) html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-act="reset">همه با نسخهٔ مخزن جایگزین شود…</button></div>';
-      if (NB.conflicts.length) html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-act="reset">همه با نسخهٔ مخزن جایگزین شود…</button></div>';
     }
     html += '</div><div class="nb-foot" id="nbFoot">'
       + (nbCountDirty() ? faNum(nbCountDirty()) + ' تغییر منتظر ارسال'
@@ -1653,6 +1679,15 @@ function nbCommitMessage(list){
       nbRender();
       var q = $('nbTempQ');
       if (q){ q.focus(); try { q.setSelectionRange(at, at); } catch(err){} }
+    });
+    // the rows are divs: Enter and Space must open them like a click
+    box.addEventListener('keydown', function(e){
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target.closest('input, textarea, select, button, a')) return;
+      var row = e.target.closest('[data-nb-note], [data-nb-dir], [data-nb-att], .nb-row[tabindex], .nb-hist-row');
+      if (!row) return;
+      e.preventDefault();
+      row.click();
     });
     box.addEventListener('contextmenu', function(e){
       var tr = e.target.closest('.nb-temp-row');
@@ -2414,7 +2449,13 @@ function nbCommitMessage(list){
   }
   var nbSharedBefore = '';
   function nbSettingsApply(){
-    if ($('nbRepo')) C.repo = $('nbRepo').value.trim();
+    if ($('nbRepo') && $('nbRepo').value.trim() !== C.repo){
+      // the old repo's working copy is saved under its own key, then the new repo's own copy is loaded
+      nbSaveFiles(); nbSaveAttach();
+      C.repo = $('nbRepo').value.trim();
+      NB.lastCommit = ''; NB.conflicts = [];
+      nbLoadFiles().then(function(){ nbCountDirty(); nbRender(); });
+    }
     if ($('nbBranch')) C.branch = $('nbBranch').value.trim() || 'main';
     if ($('nbToken') && !NB.locked) C.token = $('nbToken').value.trim();
     if ($('nbProvider')) C.provider = $('nbProvider').value;
@@ -3655,6 +3696,7 @@ function nbCommitMessage(list){
     NB.section = 'notes';
     NB.query = '';
     NB.tagFilter = '';
+    NB.treeQuery = '';
     nbSidebar(true);
     var dir = nbFolder(path);
     while (dir){ NB.expanded[dir] = true; dir = nbFolder(dir); }
@@ -3964,8 +4006,7 @@ function nbCommitMessage(list){
       var f = NB.files[row.path];
       if (row.att){
         var a = NB.attach[row.path];
-        if (a && !(NB.attachMeta[row.path] && NB.attachMeta[row.path].remote)) delete NB.attach[row.path];   // never sent: it just goes
-        else if (a){ a.dirty = false; a.deleted = false; }
+        if (a) delete NB.attach[row.path];     // the local change (new bytes or a delete) goes; what the repository has stands
         nbSaveAttach(); nbPendRefresh(); toast('پیوست دور انداخته شد', 'undo');
         return;
       }
@@ -3990,8 +4031,7 @@ function nbCommitMessage(list){
         return;
       }
       if (row.kind === 'move'){
-        var back = row.from;
-        nbMoveNote(row.path, back);
+        if (!nbMoveNote(row.path, row.from)){ toast('برنگشت — مسیر قبلی حالا پر است', 'x'); return; }
         nbPendRefresh();
         toast('جابه جایی برگشت', 'undo');
         return;

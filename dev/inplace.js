@@ -12,6 +12,7 @@
     if (t && !ip.wasNb){ ip.tempView = state.view; }
     if (t && state.view !== 'preview' && state.view !== 'editor') setView('preview');
     if (t && t.nb !== ip.note && state.view === 'editor' && document.activeElement !== ta) setView('preview');   // another note opens to read
+    if (!t || t.nb !== ip.note) ip.h1 = null;          // a title remembered for one note must never rename another
     ip.note = t ? t.nb : '';
     if (!t && ip.wasNb && ip.tempView && ip.tempView !== state.view) setView(ip.tempView);
     ip.wasNb = !!t;
@@ -76,8 +77,7 @@
     var t = ipTab();
     if (!t) return;
     if (ipReadOnly(t)){ toast('این پوشه فقط خواندنی است', 'x'); return; }
-    // the title line and the file name go together only when they were the same before editing
-    ip.h1 = nbSlug(nbH1(ta.value)) === nbTitle(t.nb) ? nbH1(ta.value) : null;
+
     var lines = ta.value.split('\n'), pos = 0;
     line = Math.max(0, Math.min(line, lines.length - 1));
     for (var i = 0; i < line; i++) pos += lines[i].length + 1;
@@ -202,5 +202,12 @@
   ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } });
   ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
   if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
-  new MutationObserver(ipTint).observe(work, { attributes: true, attributeFilter: ['data-view'] });
+  /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
+  function ipArm(){
+    var t = ipTab();
+    if (!t || state.view !== 'editor'){ ip.h1 = null; return; }
+    // the title line and the file name go together only when they were the same before editing
+    ip.h1 = nbSlug(nbH1(ta.value)) === nbTitle(t.nb) ? nbH1(ta.value) : null;
+  }
+  new MutationObserver(function(){ ipTint(); ipArm(); }).observe(work, { attributes: true, attributeFilter: ['data-view'] });
   /* === /IN PLACE === */

@@ -98,6 +98,7 @@ body.m3 .nb-empty-box{ border:0; background:var(--surface-2); border-radius:16px
 
 /* --- bottom navigation (phone): taller, pill behind the active icon, label always --- */
 body.m3.nb-nav-on{ --nb-nav-h:64px; }
+body.m3.nb-nav-on.ip-tint{ --nb-nav-h:0px; }       /* editing: the bar is gone, nothing may keep its height */
 body.m3 #nbNav{ background:var(--surface-2); border-top:0; }
 body.m3 .nb-nav-b{ font-size:.7rem; gap:4px; color:var(--ink-2); }
 body.m3 .nb-nav-b .i{ width:24px; height:24px; padding:3px 16px; box-sizing:content-box; border-radius:999px; transition:background .15s; }

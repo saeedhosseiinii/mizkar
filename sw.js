@@ -23,7 +23,10 @@ self.addEventListener('activate', function(event){
 function shareStore(item){
   return new Promise(function(resolve){
     var rq = indexedDB.open(SHARE_DB, 2);
-    rq.onupgradeneeded = function(){ if (!rq.result.objectStoreNames.contains(SHARE_STORE)) rq.result.createObjectStore(SHARE_STORE); };
+    rq.onupgradeneeded = function(){
+      // the same stores the page makes: whoever creates the database first, the other must still find its stores
+      ['kv', 'notes', 'queue', 'search', 'meta'].forEach(function(n){ if (!rq.result.objectStoreNames.contains(n)) rq.result.createObjectStore(n); });
+    };
     rq.onerror = function(){ resolve(false); };
     rq.onsuccess = function(){
       var db = rq.result;
@@ -53,6 +56,8 @@ self.addEventListener('fetch', function(event){
     return;
   }
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  // the betas (/beta/, /beta2/) have their own workers and caches: never answer for them from here
+  if (/\/beta2?\//.test(new URL(request.url).pathname) && !/\/beta2?\//.test(self.location.pathname)) return;
   // the update check must always see the live version
   if (/\/version\.json$/.test(new URL(request.url).pathname)) return;
   if (request.mode === 'navigate'){

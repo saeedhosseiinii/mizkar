@@ -134,7 +134,16 @@
   function nbShareList(){
     return nbShareLoadReg().then(function(){
       if (!nbShareToken()) return nbShareReg;
-      return nbGistApi('GET', '/gists?per_page=100').then(function(list){
+      var all = [];
+      var page = function(n){
+        return nbGistApi('GET', '/gists?per_page=100&page=' + n).then(function(list){
+          all = all.concat(list || []);
+          if ((list || []).length >= 100 && n < 10) return page(n + 1);
+          if ((list || []).length >= 100) throw nbError(0, 'partial');   // too many gists: keep what we know
+          return all;
+        });
+      };
+      return page(1).then(function(list){
         var mine = (list || []).filter(function(g){ return String(g.description || '').indexOf(NB_SHARE_PREFIX) === 0; });
         var known = {};
         nbShareReg.forEach(function(r){ known[r.id] = r; });
@@ -211,7 +220,9 @@
     return nbGistApi('GET', '/gists/' + m[1], null, true).then(function(g){
       var name = Object.keys(g.files || {})[0], file = name && g.files[name];
       if (!file) throw nbError(404, 'این اشتراک برداشته شده');
-      var content = file.truncated && file.raw_url ? fetch(file.raw_url).then(function(r){ return r.text(); }) : Promise.resolve(file.content || '');
+      var content = file.truncated && file.raw_url
+        ? fetch(file.raw_url).then(function(r){ if (!r.ok) throw nbError(r.status, 'این اشتراک خوانده نشد'); return r.text(); })
+        : Promise.resolve(file.content || '');
       return content.then(function(text){
         if (/\.md$/.test(name)) return { title: name.replace(/\.md$/, ''), text: text };
         return nbShareOpenCipher(text, m[2]);

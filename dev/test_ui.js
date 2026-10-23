@@ -1783,6 +1783,82 @@ async function until(fn, ms = 3000) {
     ok('the Android skin stays asleep outside beta2', !doc.body.classList.contains('m3') && !doc.getElementById('m3Fab'));
   }
 
+  console.log('\n— ریویو: ویرایش ارسال نشده از pull جان به در می برد و ارسالِ تکرارشده یکی می ماند —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.cfg({ branch: 'main' });
+  nb.ui.write('ریویو/الف.md', '# الف\n');
+  await nb.ui.push({ loud: false });
+  putRemote('ریویو/ب.md', '# ب از دستگاه دیگر\n');
+  repo.commits.push({ sha: 'b'.repeat(40), message: 'other device', tree: 'x', parents: [], treeBody: { tree: [] } });
+  nb.ui.write('ریویو/الف.md', '# الف\nویرایش من\n');
+  await nb.ui.pull({ quiet: true });
+  ok('بعد از pull آرام، ویرایش من سر جایش است', nb.ui.files()['ریویو/الف.md'].dirty === true && /ویرایش من/.test(nb.ui.files()['ریویو/الف.md'].text), nb.ui.files()['ریویو/الف.md']);
+  putRemote('ریویو/ج.md', '# ج\n');
+  repo.commits.push({ sha: 'c'.repeat(40), message: 'other device 2', tree: 'x', parents: [], treeBody: { tree: [] } });
+  const rvBefore = repo.apiCommits;
+  const rvSent = await nb.ui.push({ loud: false });
+  ok('ارسالِ بعد از جابه جایی شاخه یک commit است، نه دو', rvSent === true && repo.apiCommits === rvBefore + 1, repo.apiCommits - rvBefore);
+  eq('و متن من روی مخزن است', repo.files.get('ریویو/الف.md').text, '# الف\nویرایش من\n');
+  ok('و چیزی منتظر نماند', nb.ui.dirty().every((f) => !f.path.startsWith('ریویو/')));
+
+  console.log('\n— ریویو: یادداشت رمزدارِ قفل که روی مسیر حذف شده می رود، منتظرِ ارسال می ماند —');
+  nb.ui.state().pass = 'pass-1234';
+  nb.ui.write('رمزها/س.md', '# راز\n');
+  nb.ui.encrypt('رمزها/س.md');
+  nb.ui.write('رمزها/هدف.md', '# هدف قدیمی\n');
+  await nb.ui.push({ loud: false });
+  const sEnc = nb.ui.files()['رمزها/س.md'];
+  sEnc.plain = null; sEnc.basePlain = null; nb.ui.state().pass = '';
+  nb.ui.del('رمزها/هدف.md');
+  nb.ui.move('رمزها/س.md', 'رمزها/هدف.md');
+  const movedEnc = nb.ui.files()['رمزها/هدف.md'];
+  ok('مقصد رمزدار و در صف ارسال است', movedEnc && movedEnc.enc === true && movedEnc.dirty === true, movedEnc && { enc: movedEnc.enc, dirty: movedEnc.dirty });
+  nb.ui.state().pass = 'pass-1234';
+  await nb.ui.push({ loud: false });
+  ok('با گذرواژه می رود و مخزن رمزشده را دارد', nb.ui.isEncrypted(repo.files.get('رمزها/هدف.md').text) && !repo.files.has('رمزها/س.md'));
+
+  console.log('\n— ریویو: عنوانِ به خاطر مانده از یک یادداشت، یادداشت بعدی را تغییر نام نمی دهد —');
+  nb.ui.write('عنوانها/ع.md', '# ع\nمتن\n');
+  nb.ui.write('عنوانها/ب.md', '# زد\nعمداً فرق دارد\n');
+  nb.ui.open('عنوانها/ع.md');
+  await sleep(40);
+  doc.querySelector('#zoomWrap h1').dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, clientX: 40, clientY: 40 }));
+  await sleep(30);
+  const taR = doc.getElementById('input');
+  taR.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(30);
+  nb.ui.open('عنوانها/ب.md');
+  await sleep(40);
+  doc.getElementById('uiEdit').click();
+  await sleep(40);
+  taR.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(60);
+  ok('ب سر جایش است و «زد» ساخته نشد', !!nb.ui.files()['عنوانها/ب.md'] && !nb.ui.files()['عنوانها/زد.md'], Object.keys(nb.ui.files()).filter((p) => p.startsWith('عنوانها/')));
+
+  console.log('\n— ریویو: صفحه کلید و دور انداختن جابه جاییِ بسته —');
+  nb.ui.sidebar(true); nb.ui.section('notes');
+  const kbRow = [...doc.querySelectorAll('#nbBody [data-nb-note]')].find((r) => r.dataset.nbNote === 'عنوانها/ب.md');
+  kbRow.focus();
+  kbRow.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(30);
+  ok('Enter روی ردیف، یادداشت را باز می کند', doc.getElementById('input').value === nb.ui.files()['عنوانها/ب.md'].text, doc.getElementById('input').value.slice(0, 30));
+  nb.ui.write('بستن/م۱.md', '# م\n');
+  nb.ui.move('بستن/م۱.md', 'بستن/م۲.md');
+  nb.ui.write('بستن/م۱.md', '# تازه روی مسیر قبلی\n');
+  const mvRow = nb.ui.pending().findIndex((r) => r.kind === 'move' && r.path === 'بستن/م۲.md');
+  if (mvRow !== -1){ nb.ui.pendDrop(mvRow); doc.getElementById('nbMiniOk') && doc.getElementById('nbMiniOk').click(); }
+  await sleep(40);
+  ok('دور انداختن جابه جایی وقتی مسیر قبلی پر است، چیزی را له نمی کند', !!nb.ui.files()['بستن/م۲.md'] && /تازه/.test(nb.ui.files()['بستن/م۱.md'].text));
+
+  console.log('\n— ریویو: تنظیمات در حالت قفل هم ذخیره می شود —');
+  nb.ui.state().tokenPass = '';                 // the lock is closed: no passphrase in memory
+  nb.ui.cfg({ lockToken: true, tokenEnc: 'sealed-x' });
+  nb.ui.cfg({ weekStart: 'monday' });
+  await sleep(50);
+  const savedLocked = win.__idb.get('meta') && win.__idb.get('meta').get('nb-cfg');
+  ok('weekStart ذخیره شد و توکن ساده در انبار نیست', savedLocked && savedLocked.weekStart === 'monday' && savedLocked.token === '' && savedLocked.tokenEnc === 'sealed-x', savedLocked && { w: savedLocked.weekStart, t: savedLocked.token });
+  nb.ui.cfg({ lockToken: false, tokenEnc: '', weekStart: 'saturday' });
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();
