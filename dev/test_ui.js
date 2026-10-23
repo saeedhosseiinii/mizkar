@@ -498,6 +498,30 @@ async function until(fn, ms = 3000) {
   eq('switching back brings the first notebook notes', Object.keys(nb.ui.files()).length, personal);
   ok('the profile was kept', nb.ui.profiles().some((p) => p.name === 'شخصی' && p.repo === 'me/notes'), nb.ui.profiles());
 
+  console.log('\n— the token can be locked —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.state().tokenPass = 'lock-pass';
+  nb.ui.cfg({ lockToken: true, token: 'secret-token-123' });
+  await sleep(1500);
+  const storedCfg = () => JSON.stringify(win.__idb.get('meta') && win.__idb.get('meta').get('nb-cfg'));
+  ok('the stored settings hold no token in clear', !/secret-token-123/.test(storedCfg()) && /tokenEnc/.test(storedCfg()), storedCfg().slice(0, 120));
+  ok('profiles keep no token in clear either', !/fake-token/.test(storedCfg()));
+  nb.ui.state().tokenPass = '';
+  await nb.ui.load();
+  ok('after a reload the notebook is locked', nb.ui.state().locked === true && !nb.ui.cfg().token);
+  ok('the status says so', /قفل/.test(doc.getElementById('nbSyncText').textContent), doc.getElementById('nbSyncText').textContent);
+  const callsBefore = repo.req.length;
+  await nb.ui.pull({ quiet: true });
+  ok('a quiet sync waits while locked', repo.req.length === callsBefore);
+  const opening = nb.ui.unlock();
+  await sleep(20);
+  doc.getElementById('nbMiniInput').value = 'lock-pass';
+  doc.getElementById('nbMiniOk').click();
+  ok('the right passphrase opens it', (await opening) === true && nb.ui.cfg().token === 'secret-token-123');
+  ok('and the profile tokens come back too', nb.ui.profiles().every((pr) => !pr.tokenEnc || pr.token));
+  nb.ui.cfg({ lockToken: false, token: 'fake-token' });
+  await sleep(50);
+
   console.log('\n— GitLab, through the same calls —');
   await until(() => !nb.ui.state().busy, 4000);      // let the profile switch's own pull finish first
   await sleep(900);

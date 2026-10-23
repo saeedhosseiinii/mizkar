@@ -371,7 +371,48 @@ function nbCommitMessage(list){
     NB.dirtyCount = n;
     return n;
   }
-  function nbSaveCfg(){ return idbSet('nb-cfg', C, 'meta'); }
+  /**
+   * With «قفل توکن», nothing that could reach the repository rests in clear: tokens (this one and every
+   * profile's) are stored encrypted with the lock passphrase, and live in memory only after unlocking.
+   */
+  function nbSaveCfg(){
+    if (!C.lockToken){
+      delete C.tokenEnc;
+      nbProfiles().forEach(function(pr){ delete pr.tokenEnc; });
+      return idbSet('nb-cfg', C, 'meta');
+    }
+    if (!NB.tokenPass) return Promise.resolve(false);      // locked and not opened: what is stored stays as it is
+    var copy = JSON.parse(JSON.stringify(C)), pass = NB.tokenPass;
+    function seal(token, prev){ return token ? nbEncrypt(token, pass, NB.localSalt) : Promise.resolve(prev || ''); }
+    copy.token = '';
+    return Promise.all([seal(C.token, C.tokenEnc)].concat(nbProfiles().map(function(pr){ return seal(pr.token, pr.tokenEnc); })))
+      .then(function(sealed){
+        copy.tokenEnc = C.tokenEnc = sealed[0];
+        (copy.profiles || []).forEach(function(pr, i){ pr.token = ''; pr.tokenEnc = sealed[i + 1]; nbProfiles()[i].tokenEnc = sealed[i + 1]; });
+        return idbSet('nb-cfg', copy, 'meta');
+      });
+  }
+  /** Opens a locked token: asks for the lock passphrase, then sync resumes. */
+  function nbUnlock(){
+    if (!NB.locked) return Promise.resolve(true);
+    return new Promise(function(resolve){
+      nbPrompt('گذرواژهٔ قفل توکن', '', function(pass){
+        if (!pass) return resolve(false);
+        nbDecrypt(C.tokenEnc, pass).then(function(token){
+          NB.tokenPass = pass; NB.locked = false; C.token = token;
+          return Promise.all(nbProfiles().map(function(pr){
+            return pr.tokenEnc ? nbDecrypt(pr.tokenEnc, pass).then(function(t){ pr.token = t; }, function(){}) : null;
+          }));
+        }).then(function(){
+          nbSay(); toast('توکن باز شد', 'check');
+          if (C.repo) nbSchedulePull(300);
+          resolve(true);
+        }, function(){ toast('گذرواژهٔ قفل درست نیست', 'x'); resolve(false); });
+      });
+      var el = $('nbMiniInput');
+      if (el) el.type = 'password';
+    });
+  }
   /** Every notebook keeps its own working copy, so switching repositories never mixes notes. */
   function nbStoreSuffix(){ return ':' + (C && C.repo ? C.repo.replace(/[^\w.-]/g, '_') : 'local'); }
   /**
@@ -414,6 +455,7 @@ function nbCommitMessage(list){
   function nbLoad(){
     return idbGet('nb-cfg', 'meta').then(function(saved){
       C = NB.cfg = Object.assign({}, NB_DEFAULTS, saved || {});
+      NB.locked = !!(C.lockToken && C.tokenEnc && !C.token);
       if (!Array.isArray(C.collections) || !C.collections.length) C.collections = NB_DEFAULTS.collections.slice();
       if (!Array.isArray(C.profiles)) C.profiles = [];
       NB.section = 'notes';
@@ -643,6 +685,10 @@ function nbCommitMessage(list){
   }
   function nbPull(opts){
     opts = opts || {};
+    if (NB.locked){
+      if (!opts.loud){ nbSay(); return Promise.resolve(false); }
+      return nbUnlock().then(function(ok){ return ok ? nbPull(opts) : false; });
+    }
     if (NB.busy) return Promise.resolve(false);
     if (!C || !C.repo){ nbSay('off'); if (opts.loud) toast('اول مخزن را در تنظیمات دفترچه بگذار', 'x'); return Promise.resolve(false); }
     NB.busy = true; nbSay('sync');
@@ -786,6 +832,10 @@ function nbCommitMessage(list){
   }
   function nbPush(opts){
     opts = opts || {};
+    if (NB.locked){
+      if (!opts.loud){ nbSay(); return Promise.resolve(false); }
+      return nbUnlock().then(function(ok){ return ok ? nbPush(opts) : false; });
+    }
     if (NB.busy) return Promise.resolve(false);
     if (NB.conflicts.length && !opts.force){ nbShowConflicts(); toast('اول تعارض ها را حل کن', 'x'); return Promise.resolve(false); }
     nbSyncActiveNote();
@@ -1066,10 +1116,12 @@ function nbCommitMessage(list){
     pending: { t: 'تغییر منتظر ارسال', c: 'nb-pending' },
     conflict: { t: 'تعارض', c: 'nb-conflict' },
     offline: { t: 'آفلاین — بعدا ارسال می شود', c: 'nb-off' },
-    error: { t: 'خطای اتصال', c: 'nb-error' }
+    error: { t: 'خطای اتصال', c: 'nb-error' },
+    locked: { t: 'توکن قفل است — برای باز کردن کلیک کن', c: 'nb-off' }
   };
   function nbSay(state){
     if (state) NB.state = state;
+    else if (NB.locked) NB.state = 'locked';
     else if (NB.busy) NB.state = 'sync';
     else if (NB.conflicts.length) NB.state = 'conflict';
     else if (navigator.onLine === false) NB.state = 'offline';
@@ -1086,6 +1138,7 @@ function nbCommitMessage(list){
     if (state === 'conflict') return 'تعارض';
     if (state === 'offline') return 'آفلاین';
     if (state === 'error') return 'خطا';
+    if (state === 'locked') return 'قفل';
     return 'دفترچه';
   }
   function nbStatus(){
@@ -1636,7 +1689,9 @@ function nbCommitMessage(list){
         + '</select></div>' : '')
       + '<div class="nb-field"><label>مخزن</label><input class="nb-input" id="nbRepo" dir="ltr" placeholder="user/notes" value="' + escapeHtml(C.repo) + '"></div>'
       + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
-      + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="github_pat_…" value="' + escapeHtml(C.token) + '"></div>'
+      + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="' + (NB.locked ? 'قفل است' : 'github_pat_…') + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '"></div>'
+      + (NB.locked ? '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="unlock">باز کردن قفل توکن</button></div>' : '')
+      + '<label class="sw"><input type="checkbox" id="nbLock"' + (C.lockToken ? ' checked' : '') + (NB.locked ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>قفل توکن با گذرواژه</b><small>توکن فقط رمزشده در مرورگر می ماند؛ هر بار باز شدن صفحه، با کلیک روی «قفل» باز می شود</small></span></label>'
       + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن). توکن فقط در همین مرورگر می ماند و در لینک اشتراک یا خروجی نمی آید.</p>'
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button>'
       + '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">ساخت قالب های پیش فرض</button>'
@@ -1673,7 +1728,7 @@ function nbCommitMessage(list){
     function apply(){
       C.repo = $('nbRepo').value.trim();
       C.branch = $('nbBranch').value.trim() || 'main';
-      C.token = $('nbToken').value.trim();
+      if (!NB.locked) C.token = $('nbToken').value.trim();
       if ($('nbProvider')) C.provider = $('nbProvider').value;
       if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
       C.auto = $('nbAuto').checked;
@@ -1687,6 +1742,18 @@ function nbCommitMessage(list){
     }
     m.addEventListener('input', apply);
     m.addEventListener('change', function(e){
+      if (e.target.id === 'nbLock'){
+        if (!e.target.checked){ C.lockToken = false; NB.tokenPass = ''; nbSaveCfg(); nbDrawSettings(); toast('قفل توکن برداشته شد', 'check'); return; }
+        e.target.checked = false;
+        nbPrompt('یک گذرواژه برای قفل توکن', '', function(pass){
+          if (!pass) return;
+          NB.tokenPass = pass; C.lockToken = true;
+          nbSaveCfg().then(function(){ nbDrawSettings(); toast('توکن قفل شد — فقط رمزشده ذخیره می شود', 'check'); });
+        });
+        var el = $('nbMiniInput');
+        if (el) el.type = 'password';
+        return;
+      }
       if (e.target.id === 'nbProf' && e.target.value){
         apply();
         nbUseProfile(e.target.value);
@@ -1698,6 +1765,7 @@ function nbCommitMessage(list){
     m.addEventListener('click', function(e){
       var btn = e.target.closest('[data-nb-cfg]');
       if (!btn) return;
+      if (btn.dataset.nbCfg === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
       var what = btn.dataset.nbCfg;
       if (what === 'test'){
         apply();
@@ -1803,6 +1871,7 @@ function nbCommitMessage(list){
   })();
   $('nbSync').addEventListener('click', function(e){
     e.stopPropagation();
+    if (NB.locked){ nbUnlock(); return; }
     var m = $('nbSyncPop');
     m.hidden = !m.hidden;
     if (m.hidden) return;
@@ -2402,6 +2471,7 @@ function nbCommitMessage(list){
     if (!p){ toast('این دفترچه پیدا نشد', 'x'); return; }
     nbSaveFiles().then(function(){                  // everything in flight goes to its own store first
       C.repo = p.repo; C.branch = p.branch || 'main'; C.token = p.token || '';
+      if (!C.token && p.tokenEnc){ C.tokenEnc = p.tokenEnc; NB.locked = !!C.lockToken; }
       if (Array.isArray(p.collections) && p.collections.length) C.collections = p.collections;
       C.active = name;
       NB.files = {}; NB.paths = []; NB.conflicts = []; NB.lastCommit = ''; NB.lastSync = 0;
@@ -2552,7 +2622,8 @@ function nbCommitMessage(list){
     provider: function(p){ if (p) C.provider = p; return C.provider; }, ref: nbRef, tree: nbRemoteTree, fileText: nbFileText, history: nbHistoryList,
     state: function(){ return NB; },
     files: function(){ return NB.files; },
-    cfg: function(o){ if (o){ Object.assign(C, o); nbSaveCfg(); nbSay(); } return C; }
+    cfg: function(o){ if (o){ Object.assign(C, o); nbSaveCfg(); nbSay(); } return C; },
+    unlock: nbUnlock, load: nbLoad
   };
   window.mizkarNotebook = NB;
 })();
