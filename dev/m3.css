@@ -119,8 +119,10 @@ body.m3.ip-tint #m3Fab, body.m3.readmode #m3Fab, body.m3:has(textarea#input:focu
 body.m3:has(#deck:not([hidden])) #m3Fab{ display:none !important; }
 
 body.m3[data-nb-size="phone"] .fabs{
-  bottom:calc(var(--nb-nav-h, 64px) + 16px + 56px + 12px + env(safe-area-inset-bottom, 0px)); left:16px;
+  position:fixed; left:16px; z-index:214;
+  bottom:calc(var(--nb-nav-h, 64px) + 16px + 56px + 12px + env(safe-area-inset-bottom, 0px));
 }
+body.m3[data-nb-size="phone"] .fab-mini{ display:none; }   /* the pen lives in the top bar; one floating pair is enough */
 body.m3 .fab{ background:var(--m3-sc); color:var(--m3-on-sc); border-radius:16px; height:48px; font-weight:700; box-shadow:0 2px 6px rgba(0,0,0,.2); }
 body.m3 .fab:hover{ transform:none; filter:none; }
 body.m3 .fab-mini{ border:0; background:var(--m3-hi); color:var(--ink-2); border-radius:14px; box-shadow:0 2px 6px rgba(0,0,0,.18); }
