@@ -6,7 +6,7 @@
        desktop ≥ 1100  the panel sits beside the page.
      On tablet and desktop one button opens the panel: the notebook button at the start of the top bar. */
   function nbSize(){ return innerWidth <= 760 ? 'phone' : innerWidth < 1100 ? 'tablet' : 'desk'; }
-  var NB_SECTION_NAMES = { notes: 'یادداشت‌ها', temps: 'موقت', search: 'جستجو', cal: 'تقویم', tasks: 'کارها', tags: 'برچسب‌ها', conflicts: 'تعارض‌ها' };
+  var NB_SECTION_NAMES = { notes: 'یادداشت‌ها', temps: 'موقت', search: 'جستجو', cal: 'تقویم', tasks: 'کارها', tags: 'برچسب‌ها', trash: 'سطل بازیافت', conflicts: 'تعارض‌ها' };
 
   /** «امروز» is the empty page: an empty temp tab is reused instead of opening one more each time. */
   function nbGoHome(){
@@ -24,6 +24,7 @@
       { label: 'موقت (تب ها و متن های اخیر)', act: sec('temps') },
       { label: 'کارها', act: sec('tasks') },
       { label: 'برچسب ها', act: sec('tags') },
+      { label: 'سطل بازیافت' + ((NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: sec('trash') },
       NB.conflicts.length ? { label: 'تعارض ها (' + faNum(NB.conflicts.length) + ')', act: sec('conflicts') } : null,
       null,
       { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },

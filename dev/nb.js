@@ -444,7 +444,11 @@ function nbCommitMessage(list){
     return idbSet('attach' + nbStoreSuffix(), { at: Date.now(), files: list }, 'queue');
   }
   function nbLoadFiles(){
-    NB.files = {}; NB.paths = []; NB.attach = {}; NB.lastCommit = ''; NB.lastSync = 0;
+    NB.files = {}; NB.paths = []; NB.attach = {}; NB.lastCommit = ''; NB.lastSync = 0; NB.trash = [];
+    idbGet('trash' + nbStoreSuffix(), 'meta').then(function(t){
+      var month = Date.now() - 30 * 86400000;
+      NB.trash = (Array.isArray(t) ? t : []).filter(function(x){ return x && x.at > month; });   // a month, then it goes for good
+    }, function(){});
     return Promise.all([idbGet('all' + nbStoreSuffix(), 'notes'), idbGet('nb-last' + nbStoreSuffix(), 'meta'), idbGet('attach' + nbStoreSuffix(), 'queue')]).then(function(r){
       if (r[0] && Array.isArray(r[0].files)) r[0].files.forEach(function(f){ if (f && f.path){ NB.files[f.path] = f; if (NB.paths.indexOf(f.path) === -1) NB.paths.push(f.path); } });
       if (r[1] && typeof r[1] === 'object'){ NB.lastCommit = r[1].commit || ''; NB.lastSync = r[1].at || 0; }
@@ -1025,9 +1029,64 @@ function nbCommitMessage(list){
   function nbDeleteOne(path){
     var f = NB.files[path];
     if (!f) return false;
+    nbToTrash(f);
+    if (!f.remote){ delete NB.files[path]; NB.paths = NB.paths.filter(function(p){ return p !== path; }); nbCloseTabFor(path, false); return true; }   // never sent: nothing to delete there
     f.deleted = true; f.dirty = true; f.at = Date.now();
     nbCloseTabFor(path, false);
     return true;
+  }
+  /* --- سطل بازیافت: a deleted note stays on this device for a month (a secret one only as ciphertext) --- */
+  function nbToTrash(f){
+    if (!f || f.deleted || f.path.slice(-1) === '/') return;
+    var text = f.enc ? (nbIsEncrypted(f.localCipher || '') ? f.localCipher : nbIsEncrypted(f.text || '') ? f.text : nbIsEncrypted(f.base || '') ? f.base : '') : f.text;
+    if (f.enc && !text) return;                                  // nothing safe to keep: the repository's history still has it
+    NB.trash = (NB.trash || []).filter(function(x){ return x.path !== f.path; });
+    NB.trash.unshift({ path: f.path, text: text, enc: !!f.enc, at: Date.now() });
+    NB.trash = NB.trash.slice(0, 300);
+    nbSaveTrash();
+  }
+  function nbSaveTrash(){ return idbSet('trash' + nbStoreSuffix(), NB.trash || [], 'meta'); }
+  function nbTrashRestore(i){
+    var x = (NB.trash || [])[i];
+    if (!x) return;
+    var f = NB.files[x.path], path = x.path;
+    if (f && f.deleted && f.remote){
+      // the delete was not sent yet: the note simply comes back
+      f.deleted = false;
+      if (x.enc){ f.text = x.text; f.enc = true; f.plain = null; f.dirty = f.text !== f.base; }
+      else { f.text = x.text; f.dirty = f.text !== f.base; }
+    } else {
+      if (f && !f.deleted) path = nbFreePath(x.path);
+      if (f && f.deleted){ delete NB.files[x.path]; NB.paths = NB.paths.filter(function(p){ return p !== x.path; }); }
+      nbPutFile(path, x.text, '', { base: '', dirty: true, isNew: true, remote: false, deleted: false, enc: x.enc, plain: null });
+      if (f && f.deleted && f.remote) NB.files[path].remote = true;
+    }
+    NB.trash.splice(i, 1);
+    nbSaveTrash(); nbCountDirty(); nbStatus(); nbRender(); nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+    toast('برگشت: ' + nbTitle(path) + (path !== x.path ? ' (با نام تازه)' : ''), 'undo', { label: 'باز کردن', icon: 'file', run: function(){ nbOpen(path); } });
+  }
+  function nbTrashForget(i){
+    if (!(NB.trash || [])[i]) return;
+    NB.trash.splice(i, 1); nbSaveTrash(); nbRender();
+  }
+  function nbEmptyTrash(){
+    if (!(NB.trash || []).length) return;
+    nbConfirm('خالی کردن سطل', faNum(NB.trash.length) + ' یادداشت حذف شده برای همیشه از این دستگاه پاک شوند؟ (تاریخچهٔ مخزن دست نمی خورد)', function(){
+      NB.trash = []; nbSaveTrash(); nbRender(); toast('سطل خالی شد', 'trash');
+    });
+  }
+  function nbTrashHtml(){
+    var list = NB.trash || [];
+    if (!list.length) return nbEmptyBox('سطل خالی است. یادداشتی که حذف کنی تا یک ماه اینجا می ماند.', 'یادداشت ها', 'notes', 'tree');
+    return '<p class="nb-hint">یادداشت های حذف شده تا یک ماه روی همین دستگاه می مانند.</p>'
+      + list.map(function(x, i){
+        return '<div class="nb-row nb-hist-row nb-trash-row" data-nb-trash="' + i + '">' + icon(x.enc ? 'lock' : 'file')
+          + '<span class="nb-name" dir="auto">' + escapeHtml(nbTitle(x.path)) + '<small dir="auto"> · ' + escapeHtml(nbFolder(x.path) || 'ریشه') + ' · ' + escapeHtml(relTime((x.at - Date.now()) / 1000)) + '</small></span>'
+          + '<span class="nb-hist-btns"><button type="button" class="elbtn xs" data-nb-trash-back="' + i + '">برگرداندن</button>'
+          + '<button type="button" class="elbtn xs" data-nb-trash-del="' + i + '">پاک کردن</button></span></div>';
+      }).join('')
+      + '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-act="empty-trash">خالی کردن سطل</button></div>';
   }
   function nbDeletePath(path){
     var n = 0;
@@ -1353,6 +1412,7 @@ function nbCommitMessage(list){
       + nbTabBtn('cal', 'clock', 'تقویم', 0)
       + nbTabBtn('tasks', 'check', 'کارها', typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0)
       + nbTabBtn('tags', 'hash', 'برچسب', 0)
+      + ((NB.trash || []).length || NB.section === 'trash' ? nbTabBtn('trash', 'trash', 'سطل', (NB.trash || []).length) : '')
       + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
       + '</div><div class="nb-list" id="nbList">';
     if (NB.section === 'notes'){
@@ -1386,6 +1446,8 @@ function nbCommitMessage(list){
       html += nbCalHtml();
     } else if (NB.section === 'tasks'){
       html += nbTasksHtml();
+    } else if (NB.section === 'trash'){
+      html += nbTrashHtml();
     } else if (NB.section === 'tags'){
       var tags = nbTagCounts();
       html += tags.length ? '<div class="nb-tags">' + tags.map(function(x){
@@ -1448,6 +1510,7 @@ function nbCommitMessage(list){
         else if (a === 'pull') nbPull({ loud: true });
         else if (a === 'push') nbPush({ loud: true });
         else if (a === 'reset') nbResetFromRepo();
+        else if (a === 'empty-trash') nbEmptyTrash();
         return;
       }
       var att = e.target.closest('[data-nb-att]');
@@ -1481,6 +1544,10 @@ function nbCommitMessage(list){
       if (empty){ nbEmptyAct(empty.dataset.nbEmpty); return; }
       var temp = e.target.closest('[data-nb-temp]');
       if (temp){ nbPhoneLeavePanel(); switchTab(temp.dataset.nbTemp); nbRender(); return; }
+      var tb = e.target.closest('[data-nb-trash-back]');
+      if (tb){ nbTrashRestore(+tb.dataset.nbTrashBack); return; }
+      var td = e.target.closest('[data-nb-trash-del]');
+      if (td){ nbTrashForget(+td.dataset.nbTrashDel); return; }
       var hs = e.target.closest('[data-nb-hist-save]');
       if (hs){ nbHistSaveToNotebook(+hs.dataset.nbHistSave); return; }
       var hd = e.target.closest('[data-nb-hist-del]');
@@ -1522,7 +1589,9 @@ function nbCommitMessage(list){
           { label: 'مجموعهٔ جدید (پوشه + تقویم + قالب)…', act: function(){ nbCollectionDialog(-1, ''); } },
           { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
           { label: 'گرفتن از مخزن', act: function(){ nbPull({ loud: true }); } },
-          { label: 'ارسال به مخزن', act: function(){ nbPush({ loud: true }); } }
+          { label: 'ارسال به مخزن', act: function(){ nbPush({ loud: true }); } },
+          null,
+          { label: 'سطل بازیافت' + ((NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: function(){ NB.section = 'trash'; nbRender(); } }
         ]);
         return;
       }
@@ -4187,7 +4256,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
+    trash: function(){ return NB.trash; }, trashRestore: nbTrashRestore, emptyTrash: nbEmptyTrash, menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,

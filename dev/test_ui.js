@@ -1536,6 +1536,28 @@ async function until(fn, ms = 3000) {
   const tempItems = tempTabId ? nb.ui.tempMenu(tempTabId).filter(Boolean).map((x) => x.label) : [];
   ok('close, save, pin, rename and copy are there', ['ذخیره در دفترچه…', 'تغییر نام', 'تکثیر', 'کپی متن', 'بستن'].every((x) => tempItems.indexOf(x) !== -1), tempItems);
 
+  console.log('\n— سطل بازیافت —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.write('سطل/فقط اینجا.md', '# هنوز نرفته\n');
+  nb.ui.del('سطل/فقط اینجا.md');
+  ok('a note never sent is not queued as a delete', !nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.dirty().every((f) => f.path !== 'سطل/فقط اینجا.md'));
+  ok('but it is in the trash', nb.ui.trash()[0] && nb.ui.trash()[0].path === 'سطل/فقط اینجا.md');
+  nb.ui.trashRestore(0);
+  eq('«برگرداندن» brings it back', nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.files()['سطل/فقط اینجا.md'].text, '# هنوز نرفته\n');
+  ok('and it leaves the trash', !nb.ui.trash().some((x) => x.path === 'سطل/فقط اینجا.md'));
+  await nb.ui.push({ loud: false });
+  nb.ui.del('سطل/فقط اینجا.md');
+  ok('a sent note is queued as a delete', nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.files()['سطل/فقط اینجا.md'].deleted);
+  nb.ui.trashRestore(0);
+  ok('restoring before sending just cancels the delete', !nb.ui.files()['سطل/فقط اینجا.md'].deleted && !nb.ui.files()['سطل/فقط اینجا.md'].dirty);
+  nb.ui.del('سطل/فقط اینجا.md');
+  await nb.ui.push({ loud: false });
+  ok('after sending, the repository no longer has it', !repo.files.has('سطل/فقط اینجا.md'));
+  nb.ui.trashRestore(0);
+  ok('restoring then makes it a new note again', nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.files()['سطل/فقط اینجا.md'].isNew && !nb.ui.files()['سطل/فقط اینجا.md'].remote);
+  nb.ui.section('trash');
+  ok('the trash has a section of its own', !!doc.querySelector('#nbBody .nb-tab[data-nb-sec="trash"]') || nb.ui.trash().length === 0);
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();
