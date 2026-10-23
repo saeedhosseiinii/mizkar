@@ -6995,8 +6995,24 @@ if (typeof document !== 'undefined'){
     toast('از منوی مرورگر گزینهٔ «Install» یا «Add to Home Screen» را بزنید', 'install');
   }
   /* --- version and updates: version.json (a few bytes) is checked on load, every 30 minutes and on demand --- */
+  /** Numeric build («2.41») or legacy ISO stamp → sortable number. Old date stamps count as older than any 2.x. */
+  function verNum(v){
+    v = String(v || '').trim();
+    if (!v) return 0;
+    if (/^\d{4}-\d{2}-\d{2}/.test(v) || /T\d{2}:/.test(v)) return 0;
+    var parts = v.replace(/^v/i, '').split(/[.+]/).map(function(x){ return parseInt(x, 10) || 0; });
+    var n = 0, i;
+    for (i = 0; i < Math.min(parts.length, 4); i++) n = n * 1000 + parts[i];
+    return n;
+  }
+  function verNewer(a, b){ return verNum(a) > verNum(b); }
+  /** What we show in the UI: «۲٫۴۱» for numeric builds; legacy ISO still as a short date. */
   function updLabel(v){
-    var ms = Date.parse(v || '');
+    v = String(v || '');
+    if (/^\d+(\.\d+)*$/.test(v)){
+      return v.split('.').map(function(p){ return typeof faNum === 'function' ? faNum(+p) : p; }).join('٫');
+    }
+    var ms = Date.parse(v);
     return isNaN(ms) ? (v || 'نامشخص') : faDateTime(ms, 'Asia/Tehran', { weekday: undefined });
   }
   function drawUpd(){
@@ -7014,8 +7030,8 @@ if (typeof document !== 'undefined'){
       error: ['bad', upd.error || 'بررسی به‌روزرسانی ممکن نشد.'],
       offline: ['', 'اینترنت وصل نیست؛ میزکار آفلاین کار می‌کند و وقتی وصل شوی دوباره بررسی می‌کند.']
     }[s] || ['', 'هنوز بررسی نشده.'];
-    var newer = upd.changes.filter(function(c){ return APP_VERSION && c.v > APP_VERSION; });
-    var older = upd.changes.filter(function(c){ return !(APP_VERSION && c.v > APP_VERSION); }).slice(0, 3);
+    var newer = upd.changes.filter(function(c){ return APP_VERSION && verNewer(c.v, APP_VERSION); });
+    var older = upd.changes.filter(function(c){ return !(APP_VERSION && verNewer(c.v, APP_VERSION)); }).slice(0, 3);
     var notes = function(list, fresh){
       return list.map(function(c){
         return '<div' + (fresh ? ' class="fresh"' : '') + '><h5>' + escapeHtml(updLabel(c.v)) + (fresh ? ' · تازه' : '') + '</h5><ul>'
@@ -7044,7 +7060,7 @@ if (typeof document !== 'undefined'){
       upd.remote = v.version || '';
       upd.changes = Array.isArray(v.changes) ? v.changes : [];
       upd.checkedAt = Date.now();
-      var newer = !!APP_VERSION && upd.remote > APP_VERSION;
+      var newer = !!APP_VERSION && verNewer(upd.remote, APP_VERSION);
       upd.state = !newer ? 'latest' : was === 'ready' ? 'ready' : 'available';
       drawUpd();
       if (newer && was !== 'available' && was !== 'ready' && !manual) toast('نسخهٔ جدید میزکار منتشر شده', 'redo', { label: 'به‌روزرسانی', icon: 'redo', run: applyUpdate });
@@ -10427,7 +10443,7 @@ function nbCommitMessage(list){
       + '<p class="nb-mini-text">متن رمزدار فقط روی همین دستگاه باز می شود و روی مخزن رمزشده می رود. گذرواژه تا بسته شدن برنامه در حافظه می ماند.</p>'
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="forget"' + (NB.pass ? '' : ' disabled') + '>فراموش کردن گذرواژه در این نشست</button></div>';
     var ver = (document.querySelector('meta[name="app-version"]') || {}).content || '';
-    return '<p class="nb-mini-text">میزکار — نسخهٔ <b dir="ltr">' + escapeHtml(ver) + '</b></p>'
+    return '<p class="nb-mini-text">میزکار — نسخهٔ <b dir="ltr">' + escapeHtml(typeof updLabel === 'function' ? updLabel(ver) : ver) + '</b></p>'
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="nb-keys">کلیدهای میانبر</button>'
       + ($('btnInstall') && !$('btnInstall').hidden ? '<button class="btn-soft sm" type="button" data-nb-run="install">نصب به عنوان برنامه</button>' : '')
       + '</div>';
@@ -12173,7 +12189,7 @@ function nbCommitMessage(list){
   /** The build stamped into this page (see the shell's «بیشتر» for the phone). */
   function nbBuildVersion(){
     var m = document.querySelector('meta[name="app-version"]');
-    return m && m.content ? m.content : '?';
+    return m && m.content ? (typeof updLabel === 'function' ? updLabel(m.content) : m.content) : '?';
   }
   function nbSyncPopHtml(){
     var rows = nbPendingRows();
@@ -12915,7 +12931,7 @@ function nbCommitMessage(list){
   /** The build stamped into this page — the fastest way to tell an old copy from a fresh one. */
   function nbBuild(){
     var m = document.querySelector('meta[name="app-version"]');
-    return m && m.content ? m.content : 'نامعلوم';
+    return m && m.content ? (typeof updLabel === 'function' ? updLabel(m.content) : m.content) : 'نامعلوم';
   }
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
