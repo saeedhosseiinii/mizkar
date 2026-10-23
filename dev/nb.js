@@ -1,0 +1,2452 @@
+/* === NOTEBOOK (Git) — Mizkar ===
+   A personal notebook that lives in a private Git repo: notes as plain `.md` files, a working
+   copy in IndexedDB, batched commits through the Git Data API, and no server of its own.
+   The pure half (paths, Jalali dates, templates, front matter, zip, diff, three-way merge) sits
+   between the markers below, so the engine can be tested on its own with Node. */
+/* NB:PURE:START */
+var nbJdiv = function(a, b){ return ~~(a / b); };
+var nbJmod = function(a, b){ return a - ~~(a / b) * b; };
+/** Jalali calendar (jalaali algorithm by Behrang Noruzi Niya, MIT). */
+function nbJalCal(jy){
+  var breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+  var gy = jy + 621, leapJ = -14, jp = breaks[0], jm, jump = 0, leap = 0, n, i;
+  for (i = 1; i < breaks.length; i++){
+    jm = breaks[i]; jump = jm - jp;
+    if (jy < jm) break;
+    leapJ += nbJdiv(jump, 33) * 8 + nbJdiv(nbJmod(jump, 33), 4);
+    jp = jm;
+  }
+  n = jy - jp;
+  leapJ += nbJdiv(n, 33) * 8 + nbJdiv(nbJmod(n, 33) + 3, 4);
+  if (nbJmod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+  var leapG = nbJdiv(gy, 4) - nbJdiv((nbJdiv(gy, 100) + 1) * 3, 4) - 150;
+  if (jump - n < 6) n = n - jump + nbJdiv(jump + 4, 33) * 33;
+  leap = nbJmod(nbJmod(n + 1, 33) - 1, 4);
+  if (leap === -1) leap = 4;
+  return { leap: leap, gy: gy, march: 20 + leapJ - leapG };
+}
+function nbG2d(gy, gm, gd){
+  var d = nbJdiv((gy + nbJdiv(gm - 8, 6) + 100100) * 1461, 4) + nbJdiv(153 * nbJmod(gm + 9, 12) + 2, 5) + gd - 34840408;
+  return d - nbJdiv(nbJdiv(gy + 100100 + nbJdiv(gm - 8, 6), 100) * 3, 4) + 752;
+}
+function nbD2g(jdn){
+  var j = 4 * jdn + 139361631;
+  j = j + nbJdiv(nbJdiv(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
+  var i = nbJdiv(nbJmod(j, 1461), 4) * 5 + 308;
+  var gd = nbJdiv(nbJmod(i, 153), 5) + 1, gm = nbJmod(nbJdiv(i, 153), 12) + 1;
+  return { gy: nbJdiv(j, 1461) - 100100 + nbJdiv(8 - gm, 6), gm: gm, gd: gd };
+}
+function nbJ2d(jy, jm, jd){
+  var r = nbJalCal(jy);
+  return nbG2d(r.gy, 3, r.march) + (jm - 1) * 31 - nbJdiv(jm, 7) * (jm - 7) + jd - 1;
+}
+function nbD2j(jdn){
+  var gy = nbD2g(jdn).gy, jy = gy - 621, r = nbJalCal(jy), jdn1f = nbG2d(gy, 3, r.march), jd, jm, k;
+  k = jdn - jdn1f;
+  if (k >= 0){
+    if (k <= 185){
+      jm = 1 + nbJdiv(k, 31);
+      jd = nbJmod(k, 31) + 1;
+      return { jy: jy, jm: jm, jd: jd };
+    }
+    k -= 186;
+  } else {
+    jy -= 1;
+    k += 179;
+    if (r.leap === 1) k += 1;
+  }
+  jm = 7 + nbJdiv(k, 30);
+  jd = nbJmod(k, 30) + 1;
+  return { jy: jy, jm: jm, jd: jd };
+}
+function nbGToJ(gy, gm, gd){ return nbD2j(nbG2d(gy, gm, gd)); }
+function nbJToG(jy, jm, jd){ return nbD2g(nbJ2d(jy, jm, jd)); }
+function nbPad2(n){ return (n < 10 ? '0' : '') + n; }
+/** Every placeholder a path pattern or a template may use. */
+function nbCtx(date, title, weekStart){
+  var d = date || new Date();
+  var gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
+  var j = nbGToJ(gy, gm, gd);
+  var doy = j.jm <= 6 ? (j.jm - 1) * 31 + j.jd : 186 + (j.jm - 7) * 30 + j.jd;
+  var first = nbJToG(j.jy, 1, 1);
+  var startIdx = { saturday: 0, sunday: 1, monday: 2 }[weekStart || 'saturday'] || 0;
+  var firstDow = new Date(first.gy, first.gm - 1, first.gd).getDay();   // 0 = Sunday
+  var offset = (((firstDow + 1) % 7) - startIdx + 7) % 7;              // days the year starts into week 1
+  var week = Math.floor((doy - 1 + offset) / 7) + 1;
+  var WD = ['یکشنبه', 'دوشنبه', 'سه شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'];
+  return {
+    gy: String(gy), gm: nbPad2(gm), gd: nbPad2(gd), gdate: gy + '-' + nbPad2(gm) + '-' + nbPad2(gd),
+    jy: String(j.jy), jm: nbPad2(j.jm), jd: nbPad2(j.jd), jdate: j.jy + '/' + nbPad2(j.jm) + '/' + nbPad2(j.jd),
+    jw: nbPad2(week), time: nbPad2(d.getHours()) + ':' + nbPad2(d.getMinutes()),
+    weekday: WD[d.getDay()], title: title || ''
+  };
+}
+/** Fills a file-path pattern: {jy} {jm} {jd} {gy} {gm} {gd} {jw} {title}. */
+function nbFillPath(pattern, ctx){
+  return String(pattern || '').replace(/\{(jy|jm|jd|gy|gm|gd|jw|title)\}/g, function(m, k){
+    var v = ctx[k];
+    if (v === undefined || v === '') v = k === 'title' ? 'بدون عنوان' : '';
+    return String(v);
+  }).replace(/\/{2,}/g, '/').replace(/^\/+/, '');
+}
+/** Fills a note template: {{date}} {{jdate}} {{gdate}} {{time}} {{weekday}} {{title}} {{prev}} {{next}} {{cursor}}. */
+function nbFillTemplate(tpl, ctx, extra){
+  var all = Object.assign({}, ctx, extra || {});
+  var text = String(tpl || '').replace(/\{\{(date|jdate|gdate|time|weekday|title|prev|next)\}\}/g, function(m, k){
+    if (k === 'date') return all.gdate || all.jdate || '';
+    var v = all[k];
+    return v === undefined || v === null ? '' : String(v);
+  });
+  var at = text.indexOf('{{cursor}}');
+  if (at === -1) return { text: nbTidyTpl(text), cursor: nbTidyTpl(text).length };
+  var before = nbTidyTpl(text.slice(0, at));
+  return { text: before + nbTidyTpl(text.slice(at + 10)), cursor: before.length };
+}
+/** Drops what an unfilled placeholder leaves behind: `[[ ]]`, a dangling «←» and a stray «·». */
+function nbTidyTpl(text){
+  var out = [];
+  String(text).split('\n').forEach(function(line){
+    var cleaned = line.replace(/\[\[\s*\]\]/g, '').replace(/[ \t]*·[ \t]*$/, '').replace(/[ \t]+$/, '');
+    if (/[←→]/.test(cleaned) && /^[\s·←→—–-]*$/.test(cleaned)) return;   // a link line that lost all its links
+    out.push(cleaned);
+  });
+  var res = out.join('\n');
+  return res.replace(/\n+$/, res.trim() ? '\n' : '');   // a template ends with one newline, not a blank block
+}
+/** Front matter — the simple `key: value` and `key: [a, b]` forms Obsidian writes. */
+function nbParseFm(text){
+  var out = { data: {}, body: String(text), raw: '' };
+  var m = String(text).match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+  if (!m) return out;
+  out.raw = m[1];
+  out.body = String(text).slice(m[0].length);
+  m[1].split(/\r?\n/).forEach(function(line){
+    var kv = line.match(/^\s*([A-Za-z_\u0600-\u06FF][\w\u0600-\u06FF .-]*)\s*:\s*(.*)$/);
+    if (!kv) return;
+    var key = kv[1].trim(), val = kv[2].trim();
+    if (/^\[.*\]$/.test(val)) out.data[key] = val.slice(1, -1).split(',').map(function(s){ return s.trim().replace(/^["']|["']$/g, ''); }).filter(Boolean);
+    else out.data[key] = val.replace(/^["']|["']$/g, '');
+  });
+  return out;
+}
+/** Tags from front matter plus `#tag` in the text (Persian letters allowed). */
+function nbTags(text){
+  var fm = nbParseFm(text), tags = [], seen = {};
+  function add(t){
+    t = String(t).replace(/^#/, '').trim();
+    if (!t || seen[t]) return;
+    seen[t] = 1; tags.push(t);
+  }
+  var v = fm.data.tags || fm.data.tag;
+  if (Array.isArray(v)) v.forEach(add); else if (v) String(v).split(/[,\s]+/).forEach(add);
+  (fm.body.match(/(^|[\s(])#([A-Za-z\u0600-\u06FF][\w\u0600-\u06FF/-]{1,40})/g) || []).forEach(function(m){
+    add(m.replace(/^[\s(]/, ''));
+  });
+  return tags;
+}
+/** A file-name-safe slug that keeps Persian letters. */
+function nbSlug(title, max){
+  var s = String(title || '').replace(/[\\/:*?"<>|#^[\]{}]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.slice(0, max || 80).replace(/[ .]+$/, '') || 'بدون عنوان';
+}
+/** The normalisation search and name matching use: ی/ک, digits, no ZWNJ or diacritics. */
+function nbNorm(s){
+  return String(s == null ? '' : s)
+    .replace(/[\u064A\u0649]/g, '\u06CC').replace(/\u0643/g, '\u06A9').replace(/\u0629/g, '\u0647')
+    .replace(/[\u064B-\u0652\u0670\u200C\u200E\u200F]/g, '')
+    .replace(/[\u06F0-\u06F9]/g, function(d){ return String.fromCharCode(d.charCodeAt(0) - 0x06F0 + 48); })
+    .replace(/[\u0660-\u0669]/g, function(d){ return String.fromCharCode(d.charCodeAt(0) - 0x0660 + 48); })
+    .toLowerCase();
+}
+var nbCrcTable = null;
+function nbCrc32(bytes){
+  if (!nbCrcTable){
+    nbCrcTable = [];
+    for (var n = 0; n < 256; n++){ var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; nbCrcTable[n] = c >>> 0; }
+  }
+  var crc = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) crc = nbCrcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function nbUtf8(s){
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s);
+  var out = [];
+  for (var i = 0; i < s.length; i++){
+    var c = s.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 63));
+    else out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return new Uint8Array(out);
+}
+function nbUtf8Decode(bytes){
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(bytes);
+  var s = '';
+  for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return decodeURIComponent(escape(s));
+}
+function nbBytesOf(any){ return any instanceof Uint8Array ? any : new Uint8Array(any); }
+/** A zip of stored entries — enough for a portable, portable-everywhere bundle of notes. */
+function nbZip(files){
+  var parts = [], central = [], offset = 0, now = new Date();
+  var dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
+  var dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+  function w16(a, v, at){ a[at] = v & 255; a[at + 1] = (v >> 8) & 255; }
+  function w32(a, v, at){ a[at] = v & 255; a[at + 1] = (v >>> 8) & 255; a[at + 2] = (v >>> 16) & 255; a[at + 3] = (v >>> 24) & 255; }
+  files.forEach(function(f){
+    var name = nbUtf8(f.path), data = nbBytesOf(typeof f.text === 'string' ? nbUtf8(f.text) : f.data);
+    var crc = nbCrc32(data);
+    var head = new Uint8Array(30 + name.length);
+    w32(head, 0x04034b50, 0); w16(head, 20, 4); w16(head, 0x0800, 6); w16(head, 0, 8);
+    w16(head, dosTime, 10); w16(head, dosDate, 12); w32(head, crc, 14);
+    w32(head, data.length, 18); w32(head, data.length, 22); w16(head, name.length, 26); w16(head, 0, 28);
+    head.set(name, 30);
+    parts.push(head, data);
+    var cen = new Uint8Array(46 + name.length);
+    w32(cen, 0x02014b50, 0); w16(cen, 20, 4); w16(cen, 20, 6); w16(cen, 0x0800, 8); w16(cen, 0, 10);
+    w16(cen, dosTime, 12); w16(cen, dosDate, 14); w32(cen, crc, 16);
+    w32(cen, data.length, 20); w32(cen, data.length, 24); w16(cen, name.length, 28);
+    w16(cen, 0, 42); w32(cen, offset, 42); cen.set(name, 46);
+    central.push(cen);
+    offset += head.length + data.length;
+  });
+  var cenSize = central.reduce(function(n, c){ return n + c.length; }, 0);
+  var end = new Uint8Array(22);
+  w32(end, 0x06054b50, 0); w16(end, files.length, 8); w16(end, files.length, 10);
+  w32(end, cenSize, 12); w32(end, offset, 16);
+  var all = parts.concat(central, [end]);
+  var total = all.reduce(function(n, p){ return n + p.length; }, 0), out = new Uint8Array(total), at = 0;
+  all.forEach(function(p){ out.set(p, at); at += p.length; });
+  return out;
+}
+/** Reads back what nbZip wrote (or any non-zip64 zip); deflated entries need DecompressionStream. */
+function nbUnzip(bytes){
+  var d = nbBytesOf(bytes), dv = new DataView(d.buffer, d.byteOffset, d.byteLength), i;
+  var eocd = -1;
+  for (i = d.length - 22; i >= 0 && i >= d.length - 66000; i--){
+    if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if (eocd < 0) return Promise.reject(new Error('فایل zip نیست'));
+  var count = dv.getUint16(eocd + 10, true), at = dv.getUint32(eocd + 16, true);
+  var jobs = [];
+  for (i = 0; i < count; i++){
+    var method = dv.getUint16(at + 10, true), compSize = dv.getUint32(at + 20, true);
+    var nameLen = dv.getUint16(at + 28, true), extraLen = dv.getUint16(at + 30, true), commentLen = dv.getUint16(at + 32, true);
+    var local = dv.getUint32(at + 42, true);
+    var name = nbUtf8Decode(d.subarray(at + 46, at + 46 + nameLen));
+    var lNameLen = dv.getUint16(local + 26, true), lExtraLen = dv.getUint16(local + 28, true);
+    var start = local + 30 + lNameLen + lExtraLen;
+    jobs.push({ name: name, method: method, raw: d.subarray(start, start + compSize) });
+    at += 46 + nameLen + extraLen + commentLen;
+  }
+  return Promise.all(jobs.map(function(j){
+    if (j.method === 0) return Promise.resolve({ path: j.name, data: j.raw });
+    if (j.method !== 8) return Promise.reject(new Error('روش فشرده سازی ' + j.method + ' پشتیبانی نمی شود'));
+    if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('این مرورگر zip فشرده را باز نمی کند'));
+    var stream = new Blob([j.raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Response(stream).arrayBuffer().then(function(buf){ return { path: j.name, data: new Uint8Array(buf) }; });
+  }));
+}
+/** Line diff (longest common subsequence) — the base for conflict display and merging. */
+function nbDiffLines(a, b){
+  var A = String(a).split('\n'), B = String(b).split('\n');
+  var n = A.length, m = B.length, i, j;
+  if (n * m > 4000000) return [{ op: 'same', text: String(a) }]; // pathologically long: rather give up than hang
+  var L = [];
+  for (i = 0; i <= n; i++){ L.push(new Array(m + 1)); L[i][m] = 0; }
+  for (j = 0; j <= m; j++) L[n][j] = 0;
+  for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  var ops = [], ai = 0, bi = 0;
+  // `same` lines are never merged: an empty last line would otherwise blur the line count
+  function push(op, text){
+    var last = ops[ops.length - 1];
+    if (last && last.op === op && op !== 'same') last.text += '\n' + text;
+    else ops.push({ op: op, text: text });
+  }
+  while (ai < n && bi < m){
+    if (A[ai] === B[bi]){ push('same', A[ai]); ai++; bi++; }
+    else if (L[ai + 1][bi] >= L[ai][bi + 1]){ push('del', A[ai]); ai++; }
+    else { push('add', B[bi]); bi++; }
+  }
+  while (ai < n) push('del', A[ai++]);
+  while (bi < m) push('add', B[bi++]);
+  return ops;
+}
+/**
+ * Three-way merge on lines: `{text, conflicts}`. Changes that touch different regions merge on
+ * their own; overlapping ones come back as a conflict with both versions, so nothing is lost.
+ */
+function nbMerge3(base, mine, theirs){
+  if (mine === theirs) return { text: mine, conflicts: [] };
+  if (base === mine) return { text: theirs, conflicts: [] };
+  if (base === theirs) return { text: mine, conflicts: [] };
+  var A = String(base).split('\n');
+  function changesOf(other){
+    var ops = nbDiffLines(base, other), at = 0, hunks = [], cur = null;
+    ops.forEach(function(o){
+      var n = o.text.split('\n').length;
+      if (o.op === 'same'){
+        if (cur){ cur.end = at; hunks.push(cur); cur = null; }
+        at += n;
+        return;
+      }
+      if (!cur) cur = { start: at, end: at, range: [], lines: [] };
+      if (o.op === 'del'){
+        for (var k = 0; k < n; k++) cur.range.push(at + k);
+        at += n;
+        cur.end = at;
+      } else {
+        o.text.split('\n').forEach(function(l){ cur.lines.push(l); });
+      }
+    });
+    if (cur){ cur.end = at; hunks.push(cur); }
+    return hunks.filter(function(h){
+      var same = h.lines.length === h.range.length && h.lines.every(function(l, k){ return l === A[h.range[k]]; });
+      return !same;
+    });
+  }
+  var mm = changesOf(mine), tt = changesOf(theirs);
+  var overlap = mm.some(function(a){
+    return tt.some(function(b){ return a.start < b.end && b.start < a.end; });
+  });
+  if (overlap) return { text: mine, conflicts: [{ mine: mine, theirs: theirs, base: base }] };
+  var apply = function(hunks){
+    var out = [], at = 0;
+    hunks.sort(function(a, b){ return a.start - b.start; }).forEach(function(h){
+      out = out.concat(A.slice(at, h.start), h.lines);
+      at = h.range.length ? Math.max(h.start, h.end) : h.start;
+    });
+    return out.concat(A.slice(at)).join('\n');
+  };
+  return { text: apply(mm.concat(tt)), conflicts: [] };
+}
+/** The note title a path carries, and the Persian digits commit messages use. */
+function nbPathTitle(p){ return String(p).split('/').pop().replace(/\.(md|markdown|txt)$/i, ''); }
+function nbFaN(n){ return String(n).replace(/\d/g, function(d){ return String.fromCharCode(0x06F0 + +d); }); }
+/** One commit message for a batch of changes: what was touched, and nothing else. */
+function nbCommitMessage(list){
+  var names = list.map(function(f){ return nbPathTitle(f.path); });
+  var del = list.filter(function(f){ return f.deleted; }).length;
+  var head = list.length === 1 ? (del ? 'حذف ' : 'ویرایش ') + names[0]
+    : nbFaN(list.length) + ' یادداشت' + (del ? ' (' + nbFaN(del) + ' حذف)' : '');
+  return 'دفترچه: ' + head + (list.length > 1 ? ' — ' + names.slice(0, 3).join('، ') + (list.length > 3 ? '…' : '') : '');
+}
+/* NB:PURE:END */
+
+(function(){
+  if (typeof document === 'undefined') return;
+  var NB = {
+    cfg: null, files: {}, paths: [], loaded: false, lastCommit: '', lastSync: 0,
+    dirtyCount: 0, state: 'off', error: '', conflicts: [], busy: false, timer: 0,
+    lastPull: 0, open: false, section: 'notes', expanded: {}, pullTimer: 0,
+    query: '', colFilter: '', tagFilter: '', calMonth: null, focusSearch: false,
+    key: null, unlock: {}, attach: {}, pass: null, attachMeta: {}
+  };
+  var C = null;
+  var NB_DEFAULTS = {
+    repo: '', branch: 'main', token: '', auto: true, idleSeconds: 20, weekStart: 'saturday',
+    calendar: 'jalali', attachments: 'attachments', configPath: '.mizkar/config.json',
+    provider: 'github', profiles: [], active: '', lockToken: false,
+    collections: [
+      { id: 'daily', name: 'روزانه', color: '#6d5efc', calendar: 'day', path: 'روزانه/{jy}/{jm}/{jy}-{jm}-{jd}.md', template: 'templates/daily.md' },
+      { id: 'meeting', name: 'جلسه ها', color: '#f59e0b', calendar: 'many', path: 'جلسه ها/{jy}/{jm}/{jy}-{jm}-{jd} {title}.md', template: 'templates/meeting.md' },
+      { id: 'weekly', name: 'هفتگی', color: '#10b981', calendar: 'week', path: 'هفتگی/{jy}-W{jw}.md', template: 'templates/weekly.md' },
+      { id: 'idea', name: 'ایده ها', color: '#ef4444', calendar: null, path: 'ایده ها/{title}.md', template: 'templates/idea.md' }
+    ]
+  };
+  var NB_TEMPLATES = {
+    'templates/daily.md': '---\ntype: daily\ndate: {{gdate}}\ntags: [روزانه]\n---\n# {{jdate}} — {{weekday}}\n\n## کارها\n- [ ] \n\n## یادداشت ها\n{{cursor}}\n\n← [[{{prev}}]] · [[{{next}}]]\n',
+    'templates/meeting.md': '---\ntype: meeting\ndate: {{gdate}}\ntags: [جلسه]\n---\n# {{title}} — {{jdate}}\n\n**حاضران:** \n**موضوع:** {{cursor}}\n\n## تصمیم ها\n- \n\n## کارها\n- [ ] \n\n← [[{{prev}}]]\n',
+    'templates/weekly.md': '---\ntype: weekly\ndate: {{gdate}}\ntags: [هفتگی]\n---\n# هفته {{jw}} — {{jdate}}\n\n## این هفته\n- \n\n## بعد\n- \n\n{{cursor}}\n',
+    'templates/idea.md': '---\ntype: idea\ndate: {{gdate}}\ntags: [ایده]\n---\n# {{title}}\n\n**جرقه:** {{cursor}}\n\n## چرا\n\n\n## قدم بعدی\n- [ ] \n'
+  };
+  var IGNORE = ['.obsidian/', '.git/'];
+
+  /* --- storage: the working copy lives in IndexedDB, next to the app's own stores --- */
+  function nbCountDirty(){
+    var n = 0;
+    NB.paths.forEach(function(p){ var f = NB.files[p]; if (f && (f.dirty || f.deleted)) n++; });
+    Object.keys(NB.attach || {}).forEach(function(k){ if (NB.attach[k].dirty) n++; });
+    NB.dirtyCount = n;
+    return n;
+  }
+  function nbSaveCfg(){ return idbSet('nb-cfg', C, 'meta'); }
+  /** Every notebook keeps its own working copy, so switching repositories never mixes notes. */
+  function nbStoreSuffix(){ return ':' + (C && C.repo ? C.repo.replace(/[^\w.-]/g, '_') : 'local'); }
+  function nbSaveFiles(){
+    var list = NB.paths.map(function(p){ return NB.files[p]; }).filter(Boolean);
+    nbIdxInvalidate();
+    return idbSet('all' + nbStoreSuffix(), { at: Date.now(), files: list }, 'notes');
+  }
+  function nbSaveAttach(){
+    var list = Object.keys(NB.attach || {}).map(function(k){ return NB.attach[k]; });
+    return idbSet('attach' + nbStoreSuffix(), { at: Date.now(), files: list }, 'queue');
+  }
+  function nbLoadFiles(){
+    NB.files = {}; NB.paths = []; NB.attach = {}; NB.lastCommit = ''; NB.lastSync = 0;
+    return Promise.all([idbGet('all' + nbStoreSuffix(), 'notes'), idbGet('nb-last' + nbStoreSuffix(), 'meta'), idbGet('attach' + nbStoreSuffix(), 'queue')]).then(function(r){
+      if (r[0] && Array.isArray(r[0].files)) r[0].files.forEach(function(f){ if (f && f.path){ NB.files[f.path] = f; if (NB.paths.indexOf(f.path) === -1) NB.paths.push(f.path); } });
+      if (r[1] && typeof r[1] === 'object'){ NB.lastCommit = r[1].commit || ''; NB.lastSync = r[1].at || 0; }
+      if (r[2] && Array.isArray(r[2].files)) r[2].files.forEach(function(a){ if (a && a.path) NB.attach[a.path] = a; });
+      nbIdxInvalidate();
+      return true;
+    });
+  }
+  function nbLoad(){
+    return idbGet('nb-cfg', 'meta').then(function(saved){
+      C = NB.cfg = Object.assign({}, NB_DEFAULTS, saved || {});
+      if (!Array.isArray(C.collections) || !C.collections.length) C.collections = NB_DEFAULTS.collections.slice();
+      if (!Array.isArray(C.profiles)) C.profiles = [];
+      NB.section = 'notes';
+      return nbLoadFiles().then(function(){
+        NB.loaded = true;
+        nbCountDirty(); nbRender(); nbSay(); nbCheckShare();
+        if (C.repo && C.token) nbSchedulePull(1500);
+        return true;
+      });
+    }).catch(function(){ NB.loaded = true; C = NB.cfg = Object.assign({}, NB_DEFAULTS); NB.files = {}; NB.paths = []; NB.attach = {}; nbSay(); return false; });
+  }
+  function nbSchedulePull(ms){
+    clearTimeout(NB.pullTimer);
+    NB.pullTimer = setTimeout(function(){ NB.lastPull = Date.now(); nbPull({ quiet: true }); }, ms || 1500);
+  }
+
+  /* --- GitHub transport (the Git Data API, so many files land in one commit) --- */
+  function nbError(status, msg){ var e = new Error(msg); e.status = status; return e; }
+  function nbIsGL(){ return (C && C.provider) === 'gitlab'; }
+  function nbApi(method, path, body, raw){
+    var url = /^https?:/.test(path) ? path : (nbIsGL() ? 'https://gitlab.com/api/v4' : 'https://api.github.com') + path;
+    var headers = nbIsGL()
+      ? { 'Accept': raw ? 'text/plain' : 'application/json' }
+      : { 'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (C && C.token) headers[nbIsGL() ? 'PRIVATE-TOKEN' : 'Authorization'] = nbIsGL() ? C.token : 'Bearer ' + C.token;
+    var init = { method: method, headers: headers };
+    if (body !== undefined && body !== null){ headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(url, init).then(function(res){
+      var ctype = res.headers.get('content-type') || '';
+      if (raw && res.ok) return res.text();
+      if (ctype.indexOf('json') === -1){
+        if (!res.ok) throw nbError(res.status, 'پاسخ نامنتظر از گیت هاب (' + res.status + ')');
+        return res.text();
+      }
+      return res.json().then(function(data){
+        if (res.ok) return data;
+        var left = res.headers.get('x-ratelimit-remaining');
+        if ((res.status === 403 || res.status === 429) && left === '0') throw nbError(403, 'سهم درخواست های گیت هاب تمام شد — کمی بعد دوباره تلاش کن');
+        var msg = (data && data.message) || ('خطای گیت هاب (' + res.status + ')');
+        if (res.status === 401) msg = 'توکن پذیرفته نشد — توکن را دوباره بررسی کن';
+        if (res.status === 404) msg = 'پیدا نشد — نام مخزن، شاخه یا مسیر را بررسی کن';
+        if (res.status === 409 || res.status === 422) msg = 'نسخهٔ تازه تری روی مخزن هست';
+        throw nbError(res.status, msg);
+      });
+    }, function(){
+      throw nbError(0, 'اتصال به گیت هاب برقرار نشد' + (navigator.onLine === false ? ' — آفلاین هستی' : ''));
+    });
+  }
+  function nbSplitRepo(){
+    var m = String((C && C.repo) || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/, '').replace(/^\/+|\/+$/g, '').split('/');
+    return m.length >= 2 && m[0] && m[1] ? { owner: m[0], name: m[1] } : null;
+  }
+  function nbB64(text){ return btoa(unescape(encodeURIComponent(text))); }
+  function nbEncodePath(p){ return String(p).split('/').map(encodeURIComponent).join('/'); }
+  function nbIsNote(p){
+    for (var i = 0; i < IGNORE.length; i++){ if (p.indexOf(IGNORE[i]) === 0) return false; }
+    return /\.(md|markdown|txt)$/i.test(p) || p === (C && C.configPath);
+  }
+  function nbLine(p, text, sha, extra){ return nbPutFile(p, text, sha, extra); }
+  function nbPutFile(path, text, sha, extra){
+    var f = NB.files[path] || { path: path, text: '', base: '', sha: '', dirty: false, at: 0 };
+    f.text = text; f.sha = sha || ''; f.at = Date.now();
+    if (extra) Object.keys(extra).forEach(function(k){ f[k] = extra[k]; });
+    NB.files[path] = f;
+    if (NB.paths.indexOf(path) === -1) NB.paths.push(path);
+    return f;
+  }
+  function nbFoldersOf(path){
+    var parts = String(path).split('/'), out = [], acc = '';
+    for (var i = 0; i < parts.length - 1; i++){ acc = acc ? acc + '/' + parts[i] : parts[i]; out.push(acc); }
+    return out;
+  }
+  function nbFolders(){ // every folder that exists because a note lives inside it
+    var seen = {};
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (p.slice(-1) === '/' || (f && !f.deleted)) nbFoldersOf(p.slice(-1) === '/' ? p.slice(0, -1) : p).forEach(function(d){ seen[d] = 1; });
+    });
+    NB.paths.forEach(function(p){ if (p.slice(-1) === '/') seen[p.slice(0, -1)] = 1; });
+    return Object.keys(seen);
+  }
+
+  /* --- connection --- */
+  /* --- provider layer: GitHub and GitLab behind the same four calls --- */
+  function nbRepoInfo(){
+    var sp = nbSplitRepo();
+    if (!sp) return Promise.reject(nbError(0, 'نشانی مخزن را مثل «کاربر/مخزن» بنویس'));
+    if (nbIsGL()){
+      var g = nbGL();
+      return nbApi('GET', '/projects/' + g.id).then(function(p){
+        return { name: p.path_with_namespace, private: p.visibility !== 'public', writable: !!(p.permissions && p.permissions.project_access) };
+      });
+    }
+    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name).then(function(info){
+      return { name: info.full_name, private: info.private, writable: !!((info.permissions && info.permissions.push) || info.permissions === undefined) };
+    });
+  }
+  function nbTest(){
+    return nbRepoInfo().then(function(info){
+      return nbRef().then(function(r){
+        return { sha: r.sha, empty: !r.sha, writable: info.writable, name: info.name, private: info.private };
+      }, function(e){
+        if (e.status === 404 || e.status === 409) return { sha: '', empty: true, writable: info.writable, name: info.name, private: info.private };
+        throw e;
+      });
+    }, function(e){
+      if (e.status === 404 && !C.token) throw nbError(404, 'مخزن پیدا نشد — اگر خصوصی است، توکن هم بگذار');
+      throw e;
+    });
+  }
+  function nbRef(){
+    if (nbIsGL()){
+      var g = nbGL();
+      return nbApi('GET', '/projects/' + g.id + '/repository/branches/' + encodeURIComponent(C.branch)).then(function(b){
+        return { sha: b.commit.id };
+      });
+    }
+    var sp = nbSplitRepo();
+    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/git/ref/heads/' + encodeURIComponent(C.branch)).then(function(ref){
+      return { sha: ref.object.sha };
+    });
+  }
+  function nbFileText(path, ref){
+    if (nbIsGL()){
+      var g = nbGL();
+      return nbApi('GET', '/projects/' + g.id + '/repository/files/' + encodeURIComponent(path) + '/raw?ref=' + encodeURIComponent(ref || C.branch), null, true);
+    }
+    var sp = nbSplitRepo();
+    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/contents/' + nbEncodePath(path) + '?ref=' + encodeURIComponent(ref || C.branch), null, true);
+  }
+  function nbHistoryList(path){
+    if (nbIsGL()){
+      var g = nbGL();
+      return nbApi('GET', '/projects/' + g.id + '/repository/commits?per_page=30&ref_name=' + encodeURIComponent(C.branch) + '&path=' + encodeURIComponent(path))
+        .then(function(list){
+          return (list || []).map(function(c){ return { sha: c.id, message: c.title || c.message, date: (c.committed_date || '').slice(0, 10) }; });
+        });
+    }
+    var sp = nbSplitRepo();
+    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/commits?path=' + encodeURIComponent(path) + '&sha=' + encodeURIComponent(C.branch) + '&per_page=30')
+      .then(function(list){
+        return (list || []).map(function(c){ return { sha: c.sha, message: c.commit.message, date: String((c.commit.author && c.commit.author.date) || '').slice(0, 10) }; });
+      });
+  }
+  /** One commit carrying every change, on either provider. */
+  function nbCommitPush(changes, message, baseSha){
+    if (nbIsGL()){
+      var g = nbGL();
+      var actions = changes.map(function(c){
+        if (c.deleted) return { action: 'delete', file_path: c.path };
+        var a = { action: c.exists ? 'update' : 'create', file_path: c.path };
+        if (c.b64){ a.content = c.b64; a.encoding = 'base64'; } else a.content = c.text;
+        return a;
+      });
+      return nbApi('POST', '/projects/' + g.id + '/repository/commits', { branch: C.branch, commit_message: message, actions: actions })
+        .then(function(c){ return { sha: c.id }; });
+    }
+    var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
+    var tree = [], chain = Promise.resolve();
+    changes.forEach(function(c){
+      chain = chain.then(function(){
+        if (c.deleted){ tree.push({ path: c.path, mode: '100644', type: 'blob', sha: null }); return true; }
+        var content = c.b64 || nbB64(c.text);
+        return nbApi('POST', base + '/git/blobs', { content: content, encoding: 'base64' }).then(function(blob){
+          tree.push({ path: c.path, mode: '100644', type: 'blob', sha: blob.sha });
+          return true;
+        });
+      });
+    });
+    return chain
+      .then(function(){
+        var body = { tree: tree };
+        if (baseSha) body.base_tree = baseSha;
+        return nbApi('POST', base + '/git/trees', body);
+      })
+      .then(function(treeRes){
+        return nbApi('POST', base + '/git/commits', { message: message, tree: treeRes.sha, parents: baseSha ? [baseSha] : [] });
+      })
+      .then(function(commit){
+        if (baseSha) return nbApi('PATCH', base + '/git/refs/heads/' + encodeURIComponent(C.branch), { sha: commit.sha }).then(function(){ return commit; });
+        return nbApi('POST', base + '/git/refs', { ref: 'refs/heads/' + C.branch, sha: commit.sha }).then(function(){ return commit; });
+      });
+  }
+
+  /* --- pull: one request for the whole tree, one per changed file --- */
+  function nbTreeOnce(sha, page){
+    if (nbIsGL()){
+      var g = nbGL();
+      return nbApi('GET', '/projects/' + g.id + '/repository/tree?recursive=true&per_page=100&ref=' + encodeURIComponent(sha || C.branch) + (page > 1 ? '&page=' + page : ''))
+        .then(function(list){ return (list || []).map(function(e){ return { path: e.path, type: e.type === 'tree' ? 'tree' : 'blob', sha: e.id }; }); });
+    }
+    var sp = nbSplitRepo();
+    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/git/trees/' + sha + '?recursive=1')
+      .then(function(tree){ return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; }); });
+  }
+  function nbRemoteTree(){
+    return nbRef().then(function(r){
+      var sha = r.sha;
+      if (sha === NB.lastCommit && sha) return { sha: sha, unchanged: true, entries: [] };
+      var all = [];
+      function page(n){
+        return nbTreeOnce(sha, n).then(function(list){
+          all = all.concat(list);
+          var blobs = list.filter(function(e){ return e.type === 'blob'; });
+          if (nbIsGL() && blobs.length >= 100 && n < 6) return page(n + 1);
+          return all;
+        });
+      }
+      return page(1).then(function(entries){
+        return {
+          sha: sha, unchanged: false,
+          entries: entries.filter(function(e){ return e.type === 'blob' && nbIsNote(e.path); }),
+          attach: entries.filter(function(e){ return e.type === 'blob' && nbIsAttachment(e.path) && !/\/$/.test(e.path); })
+        };
+      });
+    }, function(e){
+      if (e.status === 404 || e.status === 409) return { sha: '', unchanged: false, entries: [], empty: true };
+      throw e;
+    });
+  }
+  function nbPull(opts){
+    opts = opts || {};
+    if (NB.busy) return Promise.resolve(false);
+    if (!C || !C.repo){ nbSay('off'); if (opts.loud) toast('اول مخزن را در تنظیمات دفترچه بگذار', 'x'); return Promise.resolve(false); }
+    NB.busy = true; nbSay('sync');
+    return nbRemoteTree().then(function(tree){
+      if (tree.unchanged){ NB.busy = false; nbSay(); if (opts.loud) toast('چیز تازه ای نیست', 'check'); return false; }
+      var remote = {};
+      tree.entries.forEach(function(en){ remote[en.path] = en; });
+      (tree.attach || []).forEach(function(en){
+        var a = NB.attachMeta[en.path];
+        if (!a || a.sha !== en.sha) NB.attachMeta[en.path] = { path: en.path, sha: en.sha, remote: true };
+      });
+      var jobs = tree.entries.filter(function(en){
+        var local = NB.files[en.path];
+        return !(local && local.sha === en.sha && !local.dirty);
+      });
+      var gone = NB.paths.filter(function(p){
+        var f = NB.files[p];
+        return f && !f.deleted && !f.isNew && p.slice(-1) !== '/' && !remote[p];
+      });
+      var chain = Promise.resolve(), pulled = 0, merged = 0;
+      jobs.forEach(function(job){
+        chain = chain.then(function(){
+          var local = NB.files[job.path];
+          return nbFileText(job.path).then(function(text){
+            var enc = nbIsEncrypted(text);
+            if (local && local.enc && local.plain != null){
+              // the local copy of a secret note is plaintext: compare plain to plain
+              var minePlain = local.plain;
+              if (minePlain !== local.base){
+                var mg = nbMerge3(local.base || '', minePlain, text);
+                if (!mg.conflicts.length){
+                  nbPutFile(job.path, text, job.sha, { base: text, dirty: false, enc: true, plain: mg.text, remote: true });
+                  nbRefreshOpenTab(job.path);
+                  merged++;
+                  return true;
+                }
+              }
+              nbPutFile(job.path, text, job.sha, { base: text, dirty: false, enc: true, plain: minePlain, remote: true });
+              nbRefreshOpenTab(job.path);
+              pulled++;
+              return true;
+            }
+            if (local && local.dirty && local.base !== text){
+              // both sides moved: merge what can be merged, and only then ask the user
+              var mg2 = nbMerge3(local.base || '', local.text, text);
+              if (!mg2.conflicts.length){
+                nbPutFile(job.path, mg2.text, job.sha, { base: text, dirty: true, remote: true });
+                nbRefreshOpenTab(job.path);
+                merged++;
+                return true;
+              }
+              NB.conflicts.push({ path: job.path, mine: local.text, theirs: text, base: local.base, theirsSha: job.sha, merged: true });
+              return false;
+            }
+            var keepPlain = enc && local ? local.plain : null;
+            nbPutFile(job.path, enc ? text : text, job.sha, { base: text, dirty: false, isNew: false, enc: enc, plain: enc ? (keepPlain != null ? keepPlain : null) : null, remote: true });
+            nbRefreshOpenTab(job.path);
+            pulled++;
+            return true;
+          }).catch(function(e){
+            if (e.status === 404 || e.status === 403) return false; // too big or gone: leave it as it is
+            throw e;
+          });
+        });
+      });
+      gone.forEach(function(p){
+        chain = chain.then(function(){
+          var f = NB.files[p];
+          if (f.dirty) return false;
+          delete NB.files[p];
+          NB.paths = NB.paths.filter(function(x){ return x !== p; });
+          nbCloseTabFor(p, false);
+          return true;
+        });
+      });
+      return chain.then(function(){
+        NB.lastCommit = tree.sha; NB.lastSync = Date.now(); NB.error = '';
+        idbSet('nb-last' + nbStoreSuffix(), { commit: NB.lastCommit, at: NB.lastSync }, 'meta');
+        return nbSaveFiles();
+      }).then(function(){
+        var n = pulled + gone.length;
+        nbIdxInvalidate();
+        nbCountDirty(); nbRender(); NB.busy = false;
+        if (NB.conflicts.length){ nbSay('conflict'); nbShowConflicts(); }
+        else {
+          nbSay();
+          if (merged && !opts.quiet) toast(faNum(merged) + ' یادداشت خودکار ادغام شد', 'swap');
+          else if (!opts.quiet && n) toast('دفترچه به روز شد — ' + faNum(n) + ' یادداشت', 'check');
+        }
+        return true;
+      });
+    }).catch(function(e){
+      NB.busy = false;
+      NB.error = (e && e.message) || 'خطا';
+      nbSay(navigator.onLine === false ? 'offline' : 'error');
+      if (opts.loud) toast(NB.error, 'x');
+      return false;
+    });
+  }
+  function nbRefreshOpenTab(path){
+    var t = nbTabFor(path), f = NB.files[path];
+    if (!t || !f || f.dirty) return;
+    t.text = nbTextOf(f);
+    if (t.id === activeTab){
+      ta.value = nbTextOf(f);
+      if (typeof render === 'function') render();
+    } else {
+      drawTabs();
+    }
+  }
+
+  /* --- push: blobs -> tree -> commit -> ref, one commit for every pending change --- */
+  function nbDirtyList(){
+    return NB.paths.map(function(p){ return NB.files[p]; }).filter(function(f){ return f && (f.dirty || f.deleted); });
+  }
+  function nbPush(opts){
+    opts = opts || {};
+    if (NB.busy) return Promise.resolve(false);
+    if (NB.conflicts.length && !opts.force){ nbShowConflicts(); toast('اول تعارض ها را حل کن', 'x'); return Promise.resolve(false); }
+    nbSyncActiveNote();
+    var list = nbDirtyList();
+    var atts = Object.keys(NB.attach || {}).filter(function(k){ return NB.attach[k].dirty; });
+    if (!list.length && !atts.length){ if (opts.loud) toast('تغییری برای ارسال نیست', 'check'); return Promise.resolve(false); }
+    if (!C.repo || !C.token){ nbSay('off'); if (opts.loud) toast('اول مخزن و توکن را در تنظیمات دفترچه بگذار', 'x'); return Promise.resolve(false); }
+    NB.busy = true; nbSay('sync');
+    var baseSha = '';
+    return nbRef().then(function(r){
+      baseSha = r.sha;
+      if (NB.lastCommit && baseSha && baseSha !== NB.lastCommit && !opts.retried){
+        // the branch moved after our last pull: take their changes first, then send ours again
+        NB.busy = false;
+        return nbPull({ quiet: true }).then(function(){
+          if (!nbDirtyList().length && !Object.keys(NB.attach).some(function(k){ return NB.attach[k].dirty; })){
+            toast('دیگری جلوتر بود — چیزی برای ارسال نماند', 'check');
+            return false;
+          }
+          return nbPush({ retried: true, force: opts.force, loud: opts.loud });
+        });
+      }
+      return true;
+    }, function(e){
+      if (e.status === 404 || e.status === 409) return true; // brand new repository: no commits yet
+      throw e;
+    }).then(function(go){
+      if (go !== true) return go;
+      var changes = [], chain = Promise.resolve();
+      list.forEach(function(fd){
+        chain = chain.then(function(){
+          if (fd.deleted){ changes.push({ path: fd.path, deleted: true }); return true; }
+          if (fd.enc && fd.plain != null){
+            return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
+              NB.pass = pass;
+              return nbEncrypt(fd.plain, pass || '');
+            }).then(function(ct){
+              changes.push({ path: fd.path, text: ct, exists: !!fd.remote });
+              return true;
+            });
+          }
+          changes.push({ path: fd.path, text: fd.text, exists: !!fd.remote });
+          return true;
+        });
+      });
+      atts.forEach(function(k){
+        chain = chain.then(function(){
+          var a = NB.attach[k];
+          if (a.deleted){ changes.push({ path: k, deleted: true }); return true; }
+          changes.push({ path: k, b64: a.b64, exists: !!(NB.attachMeta[k] && NB.attachMeta[k].remote) });
+          return true;
+        });
+      });
+      var message = nbCommitMessage(list.length ? list : atts.map(function(k){ return { path: k }; }));
+      return chain.then(function(){ return nbCommitPush(changes, message, baseSha); })
+        .then(function(commit){
+          list.forEach(function(fd){
+            if (fd.deleted){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return; }
+            if (fd.enc && fd.plain != null) fd.base = fd.plain;   // the ciphertext is only for the repository
+            else fd.base = fd.text;
+            fd.dirty = false; fd.isNew = false; fd.sha = ''; fd.remote = true; fd.at = Date.now();
+          });
+          Object.keys(NB.attach).forEach(function(k){
+            var a = NB.attach[k];
+            if (a.deleted && a.dirty){ delete NB.attach[k]; return; }
+            a.dirty = false;
+            NB.attachMeta[k] = { path: k, sha: '', remote: true };
+          });
+          NB.lastCommit = commit.sha; NB.lastSync = Date.now(); NB.error = '';
+          idbSet('nb-last' + nbStoreSuffix(), { commit: NB.lastCommit, at: NB.lastSync }, 'meta');
+          return Promise.all([nbSaveFiles(), nbSaveAttach()]);
+        })
+        .then(function(){
+          nbCountDirty(); nbRender(); NB.busy = false; nbSay();
+          if (opts.loud) toast('ارسال شد — ' + message, 'cloud');
+          return true;
+        });
+    }).catch(function(e){
+      NB.busy = false;
+      var conflict = !!(e && (e.status === 409 || e.status === 422));
+      NB.error = conflict ? 'نسخهٔ تازه تری روی مخزن هست' : ((e && e.message) || 'خطا');
+      nbSay(conflict ? 'conflict' : (navigator.onLine === false ? 'offline' : 'error'));
+      toast(NB.error, 'x');
+      return false;
+    });
+  }
+
+
+  /* --- the notes themselves --- */
+  function nbTitle(path){ return String(path).split('/').pop().replace(/\.(md|markdown|txt)$/i, ''); }
+  function nbFolder(path){ var parts = String(path).split('/'); parts.pop(); return parts.join('/'); }
+  function nbFind(path){ return NB.files[path]; }
+  /** A secret note keeps its plaintext in `plain` (what you edit) and its ciphertext in `text` (what git gets). */
+  function nbTextOf(f){ return (f && f.enc && f.plain != null) ? f.plain : (f ? f.text : ''); }
+  function nbStoreText(f, text){
+    if (!f) return;
+    if (f.enc) f.plain = text; else f.text = text;
+    f.dirty = true; f.at = Date.now();
+    nbCountDirty();
+  }
+  var NB_READONLY = /^Claude Sessions\//;
+  function nbApplyReadOnly(){
+    var t = currentTab();
+    var ro = !!(t && t.nb && NB_READONLY.test(t.nb));
+    ta.readOnly = ro;
+    body.classList.toggle('nb-ro', ro);
+    if (ro) toast('«Claude Sessions» فقط خواندنی است — برای ویرایش یک کپی ذخیره کن', 'lock');
+  }
+  function nbWrite(path, text, opts){
+    opts = opts || {};
+    var f = NB.files[path];
+    if (!f){ f = nbPutFile(path, text, '', { base: '', dirty: true, isNew: true, deleted: false }); }
+    else { f.text = text; f.dirty = true; f.deleted = false; f.at = Date.now(); }
+    nbCountDirty(); nbStatus(); nbRender(); nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+    return f;
+  }
+  function nbDeleteOne(path){
+    var f = NB.files[path];
+    if (!f) return false;
+    f.deleted = true; f.dirty = true; f.at = Date.now();
+    nbCloseTabFor(path, false);
+    return true;
+  }
+  function nbDeletePath(path){
+    var n = 0;
+    if (path.slice(-1) === '/' || !NB.files[path]){
+      var prefix = path.replace(/\/$/, '') + '/';
+      NB.paths.slice().forEach(function(p){
+        if (p.slice(-1) === '/' ? p.indexOf(prefix) === 0 || p === prefix : p.indexOf(prefix) === 0){
+          if (p.slice(-1) === '/'){ NB.paths = NB.paths.filter(function(x){ return x !== p; }); }
+          else if (nbDeleteOne(p)) n++;
+        }
+      });
+    } else if (nbDeleteOne(path)) n++;
+    nbCountDirty(); nbRender(); nbStatus(); nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+    return n;
+  }
+  function nbMoveNote(oldPath, newPath){
+    if (!oldPath || !newPath || oldPath === newPath) return false;
+    if (NB.files[newPath]){ toast('یادداشتی با همین نام هست', 'x'); return false; }
+    var f = NB.files[oldPath];
+    if (!f) return false;
+    var wasNew = !!f.isNew;
+    var copy = Object.assign({}, f, { path: newPath, dirty: true, isNew: wasNew, deleted: false, at: Date.now() });
+    NB.files[newPath] = copy;
+    if (NB.paths.indexOf(newPath) === -1) NB.paths.push(newPath);
+    if (wasNew){ delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
+    else { f.deleted = true; f.dirty = true; }
+    nbRetargetTab(oldPath, newPath);
+    nbCountDirty(); nbRender(); nbStatus(); nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+    return true;
+  }
+  function nbNewNote(collection, date, title, opts){
+    opts = opts || {};
+    var col = typeof collection === 'string' ? C.collections.filter(function(c){ return c.id === collection; })[0] : collection;
+    if (!col) col = C.collections[0];
+    var ctx = nbCtx(date, nbSlug(title || ''), C.weekStart);
+    var path = nbFillPath(col.path, ctx);
+    if (opts.folder) path = String(opts.folder).replace(/\/+$/, '') + '/' + path.split('/').pop();
+    if (NB.files[path] && !NB.files[path].deleted && !opts.overwrite) return { path: path, exists: true };
+    var tpl = (col.template && NB.files[col.template]) ? NB.files[col.template].text : (NB_TEMPLATES[col.template] || '');
+    var filled = nbFillTemplate(tpl, ctx, { prev: nbNeighbour(ctx, col, -1), next: nbNeighbour(ctx, col, 1) });
+    nbWrite(path, filled.text);
+    return { path: path, cursor: filled.cursor, exists: false };
+  }
+  function nbNeighbour(ctx, col, dir){
+    if (!/day/.test(col.calendar || '')) return '';
+    var p = (ctx && ctx.gdate ? ctx.gdate : '').split('-');
+    var d = p.length === 3 ? new Date(+p[0], +p[1] - 1, +p[2]) : new Date();
+    for (var step = 0; step < 400; step++){
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + dir);
+      var p2 = nbFillPath(col.path, nbCtx(d, '', C.weekStart));
+      if (NB.files[p2] && !NB.files[p2].deleted) return nbTitle(p2);
+    }
+    return '';
+  }
+
+  /* --- tabs: a notebook note is a tab that knows its path --- */
+  function nbTabFor(path){ return tabs.filter(function(t){ return t.nb === path; })[0]; }
+  function nbRetargetTab(oldPath, newPath){
+    tabs.forEach(function(t){ if (t.nb === oldPath){ t.nb = newPath; t.name = nbTitle(newPath); } });
+    drawTabs();
+  }
+  function nbCloseTabFor(path, silent){
+    var t = nbTabFor(path);
+    if (!t) return false;
+    if (!silent) closeTab(t.id);
+    return true;
+  }
+  function nbOpen(path, at){
+    var f = NB.files[path];
+    if (!f){ toast('این یادداشت پیدا نشد', 'x'); return; }
+    if (f.deleted){ toast('این یادداشت حذف شده', 'x'); return; }
+    if (f.enc && f.plain == null){
+      nbEnsurePlain(path).then(function(ok){ if (ok) nbOpen(path, at); });
+      return;
+    }
+    var t = nbTabFor(path);
+    if (t){
+      switchTab(t.id);
+      nbApplyReadOnly();                       // switchTab may return early when it is already the current tab
+      if (typeof at === 'number'){ ta.focus(); ta.setSelectionRange(at, at); }
+      return;
+    }
+    syncActiveTab();
+    var text = nbTextOf(f);
+    var fresh = { id: tabId(), text: text, fmt: 'markdown', undo: [], redo: [], nb: path, name: nbTitle(path) };
+    var cur = currentTab(), at2 = cur ? tabs.indexOf(cur) : -1;
+    tabs.splice(at2 + 1, 0, fresh);
+    activeTab = fresh.id;
+    ta.value = text;
+    undoStack = fresh.undo; redoStack = fresh.redo;
+    setFormat('markdown');
+    nbApplyReadOnly();
+    drawTabs(); saveState(); render();
+    if (typeof at === 'number'){ ta.focus(); ta.setSelectionRange(at, at); }
+    nbRender();
+  }
+  /** Called after any tab switch (the app's switchTab is patched to call it): secret notes and read-only ones. */
+  function nbAfterSwitch(){
+    var t = currentTab();
+    nbSuggestClose();
+    if (!t || !t.nb){ ta.readOnly = false; body.classList.remove('nb-ro'); return; }
+    var f = NB.files[t.nb];
+    if (f && f.enc && f.plain == null){
+      nbEnsurePlain(t.nb).then(function(ok){
+        if (!ok) return;
+        t.text = nbTextOf(f);
+        if (t.id === activeTab){ ta.value = t.text; render(); }
+        nbApplyReadOnly();
+      });
+      return;
+    }
+    nbApplyReadOnly();
+  }
+  function nbSyncActiveNote(){
+    var t = currentTab();
+    if (!t || !t.nb) return false;
+    var f = NB.files[t.nb];
+    if (!f) return false;
+    if (nbTextOf(f) !== ta.value){ nbStoreText(f, ta.value); nbCountDirty(); }
+    return true;
+  }
+  /* typing in a notebook tab updates the working copy right away; the commit waits for a pause */
+  document.addEventListener('input', function(e){
+    if (e.target !== ta) return;
+    var t = currentTab();
+    if (!t || !t.nb) return;
+    var f = NB.files[t.nb];
+    if (!f) return;
+    nbStoreText(f, ta.value);
+    nbStatus();
+    nbMaybeSuggest();
+    if (NB.open) nbRenderKeep();
+    clearTimeout(nbTypingSave);
+    nbTypingSave = setTimeout(nbSaveFiles, 1500);
+    if (C.auto) nbScheduleCommit();
+  }, true);
+  var nbTypingSave = 0;
+  function nbScheduleCommit(){
+    if (!C || !C.auto) return;
+    clearTimeout(NB.timer);
+    NB.timer = setTimeout(function(){ nbPush({}); }, Math.max(5, +C.idleSeconds || 20) * 1000);
+  }
+
+  /* --- sync state --- */
+  var NB_STATES = {
+    off: { t: 'دفترچه وصل نیست', c: 'nb-off' },
+    sync: { t: 'در حال همگام سازی…', c: 'nb-busy' },
+    ok: { t: 'همگام', c: 'nb-ok' },
+    pending: { t: 'تغییر منتظر ارسال', c: 'nb-pending' },
+    conflict: { t: 'تعارض', c: 'nb-conflict' },
+    offline: { t: 'آفلاین — بعدا ارسال می شود', c: 'nb-off' },
+    error: { t: 'خطای اتصال', c: 'nb-error' }
+  };
+  function nbSay(state){
+    if (state) NB.state = state;
+    else if (NB.busy) NB.state = 'sync';
+    else if (NB.conflicts.length) NB.state = 'conflict';
+    else if (navigator.onLine === false) NB.state = 'offline';
+    else if (nbCountDirty()) NB.state = 'pending';
+    else if (C && C.repo) NB.state = 'ok';   // read-only is fine without a token on a public repository
+    else NB.state = 'off';
+    nbStatus();
+  }
+  /** On a phone the chip has no room for a sentence: a sign and a count are enough. */
+  function nbShortLabel(state, n){
+    if (state === 'ok') return 'همگام';
+    if (state === 'sync') return '…';
+    if (state === 'pending') return '↑' + faNum(n);
+    if (state === 'conflict') return 'تعارض';
+    if (state === 'offline') return 'آفلاین';
+    if (state === 'error') return 'خطا';
+    return 'دفترچه';
+  }
+  function nbStatus(){
+    var el = $('nbSync');
+    if (!el) return;
+    var s = NB_STATES[NB.state] || NB_STATES.off, n = nbCountDirty();
+    el.className = 'st-nb ' + s.c;
+    el.setAttribute('aria-expanded', String(!$('nbSyncPop').hidden));
+    el.title = (NB.state === 'error' && NB.error) ? NB.error : s.t;
+    var full = s.t + ((n && (NB.state === 'pending' || NB.state === 'conflict' || NB.state === 'offline')) ? ' ' + faNum(n) : '');
+    $('nbSyncText').textContent = innerWidth < 700 ? nbShortLabel(NB.state, n || 0) : full;
+    // the chip shows up once the notebook is in use; until then the toolbar button is the way in
+    el.hidden = !(C && (C.repo || NB.paths.length));
+  }
+  function nbAutoTick(){
+    if (document.hidden) return;
+    if (!C || !C.repo || !C.token) return;
+    if (Date.now() - NB.lastPull > 5 * 60 * 1000){ NB.lastPull = Date.now(); nbPull({ quiet: true }); }
+  }
+
+  /* --- sidebar: a drawer from the right, opening right under the tab strip --- */
+  function nbSlot(){
+    var el = $('nb');
+    if (!el) return;
+    var tabsBar = $('tabs'), foot = document.querySelector('footer.status');
+    var top = tabsBar ? Math.max(0, tabsBar.getBoundingClientRect().bottom) : 96;
+    var bot = foot ? Math.max(0, innerHeight - foot.getBoundingClientRect().top) : 28;
+    el.style.setProperty('--nb-top', Math.round(top) + 'px');
+    el.style.setProperty('--nb-bottom', Math.round(bot) + 'px');
+  }
+  function nbSidebar(force){
+    NB.open = force === undefined ? !NB.open : !!force;
+    if (NB.open) nbSlot();
+    body.classList.toggle('nb-open', NB.open);
+    if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
+    if (NB.open) nbRender();
+  }
+  function nbRenderKeep(){
+    if (NB.open) nbRender(); else nbStatus();
+  }
+  function nbTree(){
+    var root = { name: '', folders: {}, notes: [] };
+    function ensure(parts){
+      var node = root;
+      parts.forEach(function(seg){
+        if (!node.folders[seg]) node.folders[seg] = { name: seg, folders: {}, notes: [] };
+        node = node.folders[seg];
+      });
+      return node;
+    }
+    nbFolders().forEach(function(f){ ensure(f.split('/')); });
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (p.slice(-1) === '/' || !f || f.deleted) return;
+      var parts = p.split('/'), file = parts.pop();
+      ensure(parts).notes.push({ path: p, file: f });
+    });
+    var atts = {};
+    Object.keys(NB.attach || {}).forEach(function(k){ atts[k] = 1; });
+    Object.keys(NB.attachMeta || {}).forEach(function(k){ atts[k] = 1; });
+    Object.keys(atts).forEach(function(k){
+      var a = NB.attach[k] || NB.attachMeta[k];
+      if (a && a.deleted) return;
+      var parts = k.split('/'), file = parts.pop();
+      ensure(parts).notes.push({ path: k, file: null, att: true });
+    });
+    return root;
+  }
+  function nbCountUnder(node){
+    var n = node.notes.length;
+    Object.keys(node.folders).forEach(function(k){ n += nbCountUnder(node.folders[k]); });
+    return n;
+  }
+  function nbTreeHtml(node, depth, prefix, activePath){
+    var out = '';
+    Object.keys(node.folders).sort(function(a, b){ return nbNorm(a).localeCompare(nbNorm(b)); }).forEach(function(k){
+      var child = node.folders[k], full = prefix ? prefix + '/' + k : k;
+      var open = NB.expanded[full] !== false, count = nbCountUnder(child);
+      out += '<div class="nb-row nb-dir-row' + (open ? ' open' : '') + '" data-nb-dir="' + escapeHtml(full) + '" tabindex="0" role="button">'
+        + '<span class="nb-caret">' + icon('chev') + '</span>' + icon('folder')
+        + '<span class="nb-name" dir="auto">' + escapeHtml(child.name) + '</span>'
+        + '<span class="nb-count">' + (count ? faNum(count) : '') + '</span></div>';
+      if (open) out += '<div class="nb-kids">' + nbTreeHtml(child, depth + 1, full, activePath) + '</div>';
+    });
+    node.notes.sort(function(a, b){ return nbNorm(a.path).localeCompare(nbNorm(b.path)); }).forEach(function(n){
+      if (n.att){
+        out += '<div class="nb-row nb-note-row nb-att-row" data-nb-att="' + escapeHtml(n.path) + '" tabindex="0" title="' + escapeHtml(n.path) + '">'
+          + icon('image') + '<span class="nb-name" dir="ltr">' + escapeHtml(n.path.split('/').pop()) + '</span>'
+          + ((NB.attach[n.path] && NB.attach[n.path].dirty) ? '<i class="nb-mark"></i>' : '') + '</div>';
+        return;
+      }
+      var f2 = n.file;
+      out += '<div class="nb-row nb-note-row' + (activePath === n.path ? ' active' : '') + (f2.dirty ? ' dirty' : '') + '"'
+        + ' data-nb-note="' + escapeHtml(n.path) + '" tabindex="0" title="' + escapeHtml(n.path) + '">'
+        + icon(f2.enc ? 'lock' : 'file') + '<span class="nb-name" dir="auto">' + escapeHtml(nbTitle(n.path)) + '</span>'
+        + (f2.dirty ? '<i class="nb-mark" title="تغییر ارسال نشده"></i>' : '') + '</div>';
+    });
+    return out;
+  }
+  function nbRender(){
+    var box = $('nbBody');
+    if (!box) return;
+    var t = currentTab(), active = t && t.nb ? t.nb : '';
+    var noteCount = NB.paths.filter(function(p){ return p.slice(-1) !== '/' && NB.files[p] && !NB.files[p].deleted; }).length;
+    var html = '<div class="nb-tabs">'
+      + nbTabBtn('notes', 'tree', 'دفترچه', noteCount)
+      + nbTabBtn('temps', 'file', 'موقت', tabs.length)
+      + nbTabBtn('search', 'search', 'جستجو', 0)
+      + nbTabBtn('cal', 'clock', 'تقویم', 0)
+      + nbTabBtn('tags', 'hash', 'برچسب', 0)
+      + (NB.conflicts.length ? nbTabBtn('conflicts', 'compare', 'تعارض', NB.conflicts.length, true) : '')
+      + '</div><div class="nb-list" id="nbList">';
+    if (NB.section === 'notes'){
+      html += '<div class="nb-actions">'
+        + '<button type="button" class="btn-soft sm" data-nb-act="new">' + icon('plus') + 'یادداشت جدید</button>'
+        + '<button type="button" class="btn-soft sm" data-nb-act="pull" title="گرفتن تغییرهای تازه از مخزن">' + icon('redo') + 'گرفتن</button>'
+        + '<button type="button" class="btn-soft sm" data-nb-act="push" title="ارسال تغییرها به مخزن">' + icon('cloud') + 'ارسال'
+        + (nbCountDirty() ? '<b class="nb-badge">' + faNum(nbCountDirty()) + '</b>' : '') + '</button>'
+        + '<button type="button" class="btn-soft sm" data-nb-act="quick" title="ثبت سریع (یک متن کوتاه، بی عنوان)">' + icon('pen') + 'ثبت سریع</button>'
+        + '</div>';
+      var tree = nbTree(), hasTree = Object.keys(tree.folders).length || tree.notes.length;
+      html += hasTree ? nbTreeHtml(tree, 0, '', active)
+        : '<div class="nb-empty">دفترچه خالی است.<br>«یادداشت جدید» را بزن یا از تنظیمات دفترچه، مخزن گیت هاب را وصل کن'
+          + (C && C.repo ? ' و «گرفتن» را بزن تا یادداشت های مخزن بیایند.' : '.') + '</div>';
+      if (active) html += nbBacklinksHtml(active);
+    } else if (NB.section === 'temps'){
+      html += '<div class="nb-hint">تب ها متن های موقت اند؛ تا «ذخیره در دفترچه» را نزنی به مخزن نمی روند.</div>';
+      html += tabs.map(function(x){
+        return '<div class="nb-row nb-temp-row' + (x.id === activeTab ? ' active' : '') + '" data-nb-temp="' + x.id + '" tabindex="0">'
+          + icon(x.nb ? 'file' : 'text') + '<span class="nb-name" dir="auto">' + escapeHtml(tabLabel(x)) + '</span>'
+          + (x.nb ? '<span class="nb-saved">دفترچه</span>' : '<button type="button" class="elbtn xs" data-nb-save="' + x.id + '">ذخیره در دفترچه</button>')
+          + '</div>';
+      }).join('');
+    } else if (NB.section === 'search'){
+      html += '<div class="nb-search">'
+        + '<input class="nb-input" id="nbFind" type="search" dir="auto" placeholder="جستجو در همهٔ یادداشت ها…" value="' + escapeHtml(NB.query || '') + '">'
+        + '<div class="nb-filters">'
+        + '<select id="nbFindCol"><option value="">همهٔ مجموعه ها</option>'
+        + C.collections.map(function(c){ return '<option value="' + escapeHtml(c.id) + '"' + (NB.colFilter === c.id ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>'; }).join('')
+        + '</select>'
+        + (NB.tagFilter ? '<button type="button" class="nb-chip on" data-nb-tag="">#' + escapeHtml(NB.tagFilter) + ' ×</button>' : '')
+        + '</div>'
+        + '<div class="nb-res" id="nbRes">' + nbSearchHtml() + '</div></div>';
+    } else if (NB.section === 'cal'){
+      html += nbCalHtml();
+    } else if (NB.section === 'tags'){
+      var tags = nbTagCounts();
+      html += tags.length ? '<div class="nb-tags">' + tags.map(function(x){
+        return '<button type="button" class="nb-chip' + (NB.tagFilter === x.tag ? ' on' : '') + '" data-nb-tag="' + escapeHtml(x.tag) + '">#' + escapeHtml(x.tag) + '<b>' + faNum(x.n) + '</b></button>';
+      }).join('') + '</div>' : '<div class="nb-empty">برچسبی پیدا نشد.<br>برچسب ها از فرادادهٔ یادداشت و از #برچسب داخل متن خوانده می شوند.</div>';
+    } else {
+      html += NB.conflicts.map(function(c, i){
+        return '<div class="nb-conflict-row"><b dir="auto">' + escapeHtml(nbTitle(c.path)) + '</b><small dir="auto">' + escapeHtml(c.path) + '</small>'
+          + (c.merged ? '<small class="nb-warn">ادغام خودکار نشد — هر دو نسخه دست نخورده اند</small>' : '')
+          + '<div class="nb-cf-btns">'
+          + '<button type="button" class="btn-soft sm" data-nb-resolve="mine" data-nb-ci="' + i + '">نسخهٔ من</button>'
+          + '<button type="button" class="btn-soft sm" data-nb-resolve="theirs" data-nb-ci="' + i + '">نسخهٔ مخزن</button>'
+          + '<button type="button" class="btn-soft sm" data-nb-resolve="both" data-nb-ci="' + i + '">هر دو در دو تب</button>'
+          + '<button type="button" class="btn-soft sm" data-nb-resolve="auto" data-nb-ci="' + i + '">ادغام خودکار</button>'
+          + '</div></div>';
+      }).join('') || '<div class="nb-empty">تعارضی نیست</div>';
+    }
+    html += '</div><div class="nb-foot" id="nbFoot">'
+      + (nbCountDirty() ? faNum(nbCountDirty()) + ' تغییر منتظر ارسال'
+        : (C && C.repo ? 'آخرین همگام سازی: ' + (NB.lastSync ? relTime((NB.lastSync - Date.now()) / 1000) : '—') : 'مخزن وصل نیست'))
+      + '</div>';
+    var scroll = $('nbList') ? $('nbList').scrollTop : 0;
+    box.innerHTML = html;
+    if ($('nbList')) $('nbList').scrollTop = scroll;
+    if (NB.section === 'search' && NB.focusSearch){ NB.focusSearch = false; var q = $('nbFind'); if (q){ q.focus(); q.select(); } }
+  }
+  function nbTabBtn(sec, ic, label, count, warn){
+    return '<button type="button" class="nb-tab' + (NB.section === sec ? ' on' : '') + (warn ? ' nb-tab-warn' : '') + '" data-nb-sec="' + sec + '">'
+      + icon(ic) + label + (count ? '<b>' + faNum(count) + '</b>' : '') + '</button>';
+  }
+
+  /* --- sidebar events --- */
+  /** Only the result list is redrawn while typing, so the search box keeps focus and caret. */
+  function nbRefreshSearch(){
+    var res = $('nbRes');
+    if (res) res.innerHTML = nbSearchHtml(); else nbRender();
+  }
+  function nbTrap(){
+    var box = $('nb');
+    if (!box) return;
+    box.addEventListener('input', function(e){
+      if (e.target.id === 'nbFind'){ NB.query = e.target.value; nbRefreshSearch(); }
+    });
+    box.addEventListener('change', function(e){
+      if (e.target.id === 'nbFindCol'){ NB.colFilter = e.target.value; nbRefreshSearch(); }
+    });
+    box.addEventListener('click', function(e){
+      var sec = e.target.closest('[data-nb-sec]');
+      if (sec){ NB.section = sec.dataset.nbSec; nbRender(); return; }
+      var act = e.target.closest('[data-nb-act]');
+      if (act){
+        var a = act.dataset.nbAct;
+        if (a === 'new') nbNewDialog();
+        else if (a === 'quick') nbQuickInbox('');
+        else if (a === 'pull') nbPull({ loud: true });
+        else if (a === 'push') nbPush({ loud: true });
+        return;
+      }
+      var att = e.target.closest('[data-nb-att]');
+      if (att){ nbDownloadAttachment(att.dataset.nbAtt); return; }
+      var cal = e.target.closest('[data-nb-cal]');
+      if (cal){
+        var what = cal.dataset.nbCal;
+        if (what === 'today'){ var t0 = nbCtx(new Date(), '', C.weekStart); NB.calMonth = { jy: +t0.jy, jm: +t0.jm }; nbRender(); }
+        else nbCalShift(+what);
+        return;
+      }
+      var day = e.target.closest('[data-nb-day]');
+      if (day){ nbDayClick(day.dataset.nbDay); return; }
+      var tag = e.target.closest('[data-nb-tag]');
+      if (tag){
+        NB.tagFilter = tag.dataset.nbTag || '';
+        NB.query = NB.query || '';
+        if (NB.section !== 'search'){ NB.section = 'search'; NB.focusSearch = true; }
+        nbRender();
+        return;
+      }
+      var dir = e.target.closest('[data-nb-dir]');
+      if (dir){ NB.expanded[dir.dataset.nbDir] = NB.expanded[dir.dataset.nbDir] === false; nbRender(); return; }
+      var save = e.target.closest('[data-nb-save]');
+      if (save){ e.stopPropagation(); nbSaveTabDialog(save.dataset.nbSave); return; }
+      var res = e.target.closest('[data-nb-resolve]');
+      if (res){ nbResolve(NB.conflicts[+res.dataset.nbCi], res.dataset.nbResolve); return; }
+      var note = e.target.closest('[data-nb-note]');
+      if (note){ nbOpen(note.dataset.nbNote); return; }
+      var temp = e.target.closest('[data-nb-temp]');
+      if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); }
+    });
+    box.addEventListener('contextmenu', function(e){
+      var note = e.target.closest('[data-nb-note]'), dir = e.target.closest('[data-nb-dir]'), att = e.target.closest('[data-nb-att]');
+      if (!note && !dir && !att) return;
+      e.preventDefault();
+      if (note){
+        var path = note.dataset.nbNote;
+        nbMenu(e.clientX, e.clientY, [
+          { label: 'باز کردن', act: function(){ nbOpen(path); } },
+          { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
+          { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
+          { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
+          { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
+        { label: 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
+          { label: 'کپی پیوند [[]]', act: function(){
+            var link = '[[' + nbTitle(path) + ']]';
+            copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
+          } },
+          { label: 'دانلود md', act: function(){ nbDownload(path); } },
+          { label: 'حذف', danger: true, act: function(){
+            nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
+              nbDeletePath(path); toast('برای حذف صف شد', 'trash');
+            });
+          } }
+        ]);
+      } else if (att) {
+        var ap = att.dataset.nbAtt;
+        nbMenu(e.clientX, e.clientY, [
+          { label: 'دانلود', act: function(){ nbDownloadAttachment(ap); } },
+          { label: 'حذف از مخزن', danger: true, act: function(){ nbDropAttachment(ap); toast('برای حذف صف شد', 'trash'); } },
+          { label: 'رونوشت مسیر', act: function(){ copyToClipboard('مسیر', ap).then(function(ok){ toast(ok ? 'کپی شد: ' + ap : 'کپی نشد', ok ? 'copy' : 'x'); }); } }
+        ]);
+      } else {
+        var folder = dir.dataset.nbDir;
+        nbMenu(e.clientX, e.clientY, [
+          { label: 'یادداشت جدید در این پوشه', act: function(){ nbNewDialog(null, folder); } },
+          { label: 'پوشهٔ جدید', act: function(){
+            nbPrompt('نام پوشه', '', function(v){
+              if (!v) return;
+              var p = folder + '/' + nbSlug(v) + '/';
+              if (NB.paths.indexOf(p) === -1) NB.paths.push(p);
+              nbRender(); nbSaveFiles();
+            });
+          } },
+          { label: 'دانلود zip این پوشه', act: function(){ nbDownloadZip(folder); } },
+          { label: 'حذف پوشه', danger: true, act: function(){
+            nbConfirm('حذف پوشه', 'همهٔ یادداشت های «' + folder + '» حذف شوند؟', function(){ nbDeletePath(folder + '/'); toast('پوشه برای حذف صف شد', 'trash'); });
+          } }
+        ]);
+      }
+    });
+  }
+
+  /* --- small dialogs, in the app's own style --- */
+  function nbModalBox(title, bodyHtml, footHtml, ico){
+    if (innerWidth < 760) nbSidebar(false);          // on a phone the drawer would be in the way
+    var m = $('nbMini');
+    m.hidden = false;
+    m.innerHTML = '<div class="modal-box nb-mini-box" role="dialog" aria-modal="true">'
+      + '<div class="modal-head"><span class="ph-title">' + icon(ico || 'pen') + escapeHtml(title) + '</span>'
+      + '<button class="ib sm" type="button" data-nb-mini-close aria-label="بستن" style="margin-inline-start:auto">' + icon('x') + '</button></div>'
+      + '<div class="modal-body nb-mini-body">' + bodyHtml + '</div>'
+      + '<div class="modal-foot">' + footHtml + '</div></div>';
+    return m;
+  }
+  function nbCloseMini(){ $('nbMini').hidden = true; }
+  function nbPrompt(title, value, cb){
+    nbModalBox(title, '<input class="nb-input" id="nbMiniInput" dir="auto" value="' + escapeHtml(value || '') + '">',
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">تایید</button>');
+    var input = $('nbMiniInput');
+    input.focus(); input.select();
+    $('nbMiniOk').onclick = function(){ var v = input.value.trim(); nbCloseMini(); cb(v); };
+    input.onkeydown = function(e){ if (e.key === 'Enter'){ e.preventDefault(); $('nbMiniOk').click(); } };
+  }
+  function nbConfirm(title, text, cb){
+    nbModalBox(title, '<p class="nb-mini-text">' + escapeHtml(text) + '</p>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">تایید</button>', 'x');
+    $('nbMiniOk').onclick = function(){ nbCloseMini(); cb(); };
+  }
+  document.addEventListener('click', function(e){
+    if (e.target.closest('[data-nb-mini-close]')) nbCloseMini();
+    else if ($('nbMini') && e.target === $('nbMini')) nbCloseMini();
+  });
+
+  /* --- actions that change the notebook --- */
+  function nbRenameDialog(path, name){
+    var folder = nbFolder(path), ext = /\.(md|markdown|txt)$/i.exec(path);
+    var target = (folder ? folder + '/' : '') + nbSlug(name) + (ext ? ext[0] : '.md');
+    var oldTitle = nbTitle(path);
+    if (nbMoveNote(path, target)){
+      var fixed = nbFixLinks(oldTitle, nbTitle(target));
+      toast('نام عوض شد: ' + nbTitle(target) + (fixed ? ' — ' + faNum(fixed) + ' پیوند هم درست شد' : ''), 'pen');
+    }
+  }
+  function nbMoveDialog(path){
+    nbPrompt('پوشهٔ تازه (خالی = ریشه)', nbFolder(path), function(folder){
+      var target = (folder ? folder.replace(/^\/+|\/+$/g, '') + '/' : '') + path.split('/').pop();
+      if (nbMoveNote(path, target)) toast('جابه جا شد — ' + target, 'folder');
+    });
+  }
+  function nbDuplicate(path){
+    var f = NB.files[path];
+    if (!f) return;
+    var ext = /\.(md|markdown|txt)$/i.exec(path) || ['.md'];
+    var base = path.replace(/\.(md|markdown|txt)$/i, '');
+    var target = base + ' کپی' + ext[0], n = 2;
+    while (NB.files[target]){ target = base + ' کپی ' + n + ext[0]; n++; }
+    nbWrite(target, f.text);
+    toast('تکثیر شد: ' + nbTitle(target), 'copy');
+  }
+  /** Attachments live in the repository as blobs; a click downloads them. */
+  function nbDownloadAttachment(path){
+    var local = NB.attach[path];
+    if (local && local.b64){
+      downloadBlob(new Blob([nbBytesB64(local.b64)], { type: local.mime || guessMime(path) }), path.split('/').pop());
+      return;
+    }
+    var sp = nbSplitRepo();
+    if (!sp){ toast('مخزن وصل نیست', 'x'); return; }
+    nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/contents/' + nbEncodePath(path) + '?ref=' + encodeURIComponent(C.branch))
+      .then(function(info){
+        downloadBlob(new Blob([nbBytesB64(info.content.replace(/\s/g, ''))], { type: guessMime(path) }), path.split('/').pop());
+      }).catch(function(e){ toast('پیوست گرفته نشد: ' + e.message, 'x'); });
+  }
+  function nbDownload(path){
+    var f = NB.files[path];
+    if (!f) return;
+    downloadBlob(new Blob([f.text], { type: 'text/markdown;charset=utf-8' }), nbTitle(path) + '.md');
+  }
+  function nbDownloadZip(folder){
+    var prefix = folder ? folder.replace(/\/$/, '') + '/' : '';
+    var files = NB.paths.filter(function(p){
+      return p.slice(-1) !== '/' && NB.files[p] && !NB.files[p].deleted && (!prefix || p.indexOf(prefix) === 0);
+    }).map(function(p){ return { path: prefix ? p.slice(prefix.length) : p, text: NB.files[p].text }; });
+    if (!files.length){ toast('چیزی برای خروجی نیست', 'x'); return; }
+    downloadBlob(new Blob([nbZip(files)], { type: 'application/zip' }), (folder ? nbTitle(prefix) : 'دفترچه') + '.zip');
+    toast(faNum(files.length) + ' یادداشت در zip', 'download');
+  }
+  function nbSaveTabDialog(tabId){
+    var t = tabs.filter(function(x){ return x.id === tabId; })[0];
+    if (!t) return;
+    var body = '<p class="nb-mini-text">متن این تب در دفترچه ذخیره شود؟</p>'
+      + '<div class="nb-field"><label>مجموعه</label><select id="nbSaveCol">'
+      + C.collections.map(function(c){ return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div class="nb-field"><label>عنوان</label><input class="nb-input" id="nbSaveTitle" dir="auto" value="' + escapeHtml(t.name || textTitle(t.text)) + '"></div>';
+    nbModalBox('ذخیره در دفترچه', body,
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">ذخیره</button>', 'cloud');
+    $('nbMiniOk').onclick = function(){
+      var made = nbNewNote($('nbSaveCol').value, new Date(), $('nbSaveTitle').value.trim() || 'بدون عنوان');
+      nbCloseMini();
+      if (made.exists){ toast('یادداشتی با همین نام بود', 'x'); nbOpen(made.path); }
+      else {
+        nbWrite(made.path, t.text);
+        t.nb = made.path; t.name = nbTitle(made.path);
+        NB.section = 'notes';
+      }
+      drawTabs(); saveState(); nbRender();
+      if (!made.exists) toast('در دفترچه ذخیره شد: ' + made.path, 'check');
+    };
+  }
+  function nbResolve(c, how){
+    if (!c) return;
+    var t = nbTabFor(c.path);
+    if (how === 'theirs'){
+      nbPutFile(c.path, c.theirs, c.theirsSha, { base: c.theirs, dirty: false, isNew: false });
+      if (t){ t.text = c.theirs; if (t.id === activeTab){ ta.value = c.theirs; render(); } }
+    } else if (how === 'auto'){
+      var mg = nbMerge3(c.base || '', c.mine, c.theirs);
+      nbPutFile(c.path, mg.text, c.theirsSha, { base: c.theirs, dirty: true });
+      if (t){ t.text = mg.text; if (t.id === activeTab){ ta.value = mg.text; render(); } }
+      toast(mg.conflicts.length ? 'ادغام کامل نشد — نسخهٔ من با علامت های تعارض نگه داشته شد' : 'ادغام شد', mg.conflicts.length ? 'x' : 'swap');
+    } else if (how === 'mine'){
+      var f = NB.files[c.path];
+      if (f){
+        f.dirty = true; f.at = Date.now(); f.sha = c.theirsSha; f.base = c.base;
+        if (t){                                   // keep the open tab and the editor in step with the choice
+          t.text = f.text;
+          if (t.id === activeTab){ ta.value = f.text; render(); }
+        }
+      }
+    } else {
+      openTab(c.theirs, 'markdown', 'نسخهٔ مخزن در تب تازه — مقایسه کن و درست را نگه دار');
+      var fresh = currentTab();
+      if (fresh && !fresh.nb) fresh.name = nbTitle(c.path) + ' (مخزن)';
+      drawTabs();
+    }
+    NB.conflicts = NB.conflicts.filter(function(x){ return x !== c; });
+    nbCountDirty(); nbRender(); nbSaveFiles(); nbSay();
+    if (!NB.conflicts.length){
+      toast('تعارض حل شد', 'check');
+      if (how !== 'both') nbPush({});
+    }
+  }
+  function nbShowConflicts(){
+    NB.section = 'conflicts';
+    if (!NB.open) nbSidebar(true); else nbRender();
+    toast('تعارض: ' + faNum(NB.conflicts.length) + ' یادداشت هم اینجا و هم روی مخزن عوض شده', 'x');
+  }
+  /* --- new note dialog --- */
+  function nbNewDialog(colId, folder, date){
+    var body = '<div class="nb-field"><label>مجموعه</label><div class="nb-inline-row"><select id="nbPanelCol">'
+      + C.collections.map(function(c){ return '<option value="' + escapeHtml(c.id) + '"' + (c.id === (colId || (C.collections[0] || {}).id) ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>'; }).join('')
+      + '</select><button type="button" class="elbtn xs" id="nbColNew" title="مجموعهٔ تازه بساز">مجموعهٔ جدید…</button></div></div>'
+      + '<div class="nb-field"><label>تاریخ</label><input class="nb-input" id="nbPanelDate" dir="ltr" type="date" value="' + nbCtx(date || new Date(), '', C.weekStart).gdate + '"></div>'
+      + '<div class="nb-field"><label>عنوان</label><input class="nb-input" id="nbPanelTitle" dir="auto" placeholder="خالی بگذار تا از الگو پر شود"></div>'
+      + (folder ? '<p class="nb-mini-text">پوشه: <b dir="auto">' + escapeHtml(folder) + '</b></p>' : '')
+      + '<p class="nb-mini-text" id="nbPanelPath"></p>';
+    nbModalBox('یادداشت جدید', body,
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">بساز</button>', 'plus');
+    function col(){ return C.collections.filter(function(c){ return c.id === $('nbPanelCol').value; })[0] || C.collections[0]; }
+    function preview(){
+      var v = $('nbPanelDate').value;
+      var d = v ? new Date(v + 'T12:00:00') : new Date();
+      var p = nbFillPath(col().path, nbCtx(d, nbSlug($('nbPanelTitle').value || ''), C.weekStart));
+      var full = folder ? folder.replace(/\/+$/, '') + '/' + p.split('/').pop() : p;
+      $('nbPanelPath').innerHTML = 'مسیر: <b dir="auto">' + escapeHtml(full) + '</b>'
+        + (NB.files[full] && !NB.files[full].deleted ? ' <span class="nb-warn">— از قبل هست</span>' : '');
+      return { date: d, full: full };
+    }
+    ['nbPanelCol', 'nbPanelDate', 'nbPanelTitle'].forEach(function(id){
+      $(id).addEventListener('input', preview);
+      $(id).addEventListener('change', preview);
+    });
+    preview();
+    $('nbColNew').onclick = function(){
+      nbPrompt('نام مجموعهٔ تازه', '', function(name){
+        if (!name) return;
+        var id = 'c' + Date.now().toString(36);
+        C.collections.push({ id: id, name: name, path: nbSlug(name) + '/{title}.md', template: '', calendar: '', color: '#6d5efc' });
+        nbSaveCfg();
+        nbPrompt('الگوی مسیر این مجموعه', nbSlug(name) + '/{title}.md', function(path){
+          var c = C.collections.filter(function(x){ return x.id === id; })[0];
+          if (c && path) c.path = path;
+          nbSaveCfg();
+          nbNewDialog(id, folder);
+          toast('مجموعه ساخته شد: ' + name + ' — قالب و تقویمش را در تنظیمات دفترچه بگذار', 'plus');
+        });
+      });
+    };
+    $('nbMiniOk').onclick = function(){
+      var pv = preview();
+      var made = nbNewNote(col(), pv.date, $('nbPanelTitle').value.trim(), { folder: folder });
+      nbCloseMini();
+      if (made.exists){ toast('از قبل بود — بازش کردم', 'x'); nbOpen(made.path); return; }
+      nbOpen(made.path, made.cursor);
+      toast('ساخته شد: ' + made.path, 'plus');
+    };
+  }
+
+  /* --- floating context menu --- */
+  function nbMenu(x, y, items){
+    var m = $('nbMenu');
+    m.innerHTML = items.map(function(it, i){
+      return '<button type="button" class="mi' + (it.danger ? ' danger' : '') + '" data-nb-mi="' + i + '"><span>' + escapeHtml(it.label) + '</span></button>';
+    }).join('');
+    m.hidden = false;
+    m.style.left = Math.max(6, Math.min(x, innerWidth - m.offsetWidth - 6)) + 'px';
+    m.style.top = Math.max(6, Math.min(y, innerHeight - m.offsetHeight - 6)) + 'px';
+    m.onclick = function(e){
+      var b = e.target.closest('[data-nb-mi]');
+      if (!b) return;
+      m.hidden = true;
+      items[+b.dataset.nbMi].act();
+    };
+  }
+  document.addEventListener('click', function(e){
+    var m = $('nbMenu');
+    if (m && !m.hidden && !e.target.closest('#nbMenu')) m.hidden = true;
+  });
+
+  /* --- settings --- */
+  function nbDrawSettings(){
+    var m = $('nbModal');
+    m.hidden = false;
+    $('nbModalBody').innerHTML = '<div class="nb-sec"><h4>اتصال</h4>'
+      + '<div class="nb-field"><label>سرویس</label><select id="nbProvider">'
+      + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<option value="' + o[0] + '"' + ((C.provider || 'github') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></div>'
+      + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
+        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
+        + '</select></div>' : '')
+      + '<div class="nb-field"><label>مخزن</label><input class="nb-input" id="nbRepo" dir="ltr" placeholder="user/notes" value="' + escapeHtml(C.repo) + '"></div>'
+      + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
+      + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="github_pat_…" value="' + escapeHtml(C.token) + '"></div>'
+      + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن). توکن فقط در همین مرورگر می ماند و در لینک اشتراک یا خروجی نمی آید.</p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">ساخت قالب های پیش فرض</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="config">ساخت config.json</button></div>'
+      + '<p class="nb-hint" id="nbTestOut"></p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
+      + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
+      + '</div>'
+      + '<p class="nb-hint">هر دفترچه نسخهٔ کاری خودش را جدا نگه می دارد؛ با عوض کردن دفترچه، یادداشت های آن یکی می آیند. برای گیت لب، توکن با دسترسی <b dir="ltr">api</b> بساز.</p></div>'
+      + '<div class="nb-sec"><h4>ارسال</h4>'
+      + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
+      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>بعد از چند ثانیه بی کاری، همهٔ تغییرها با یک commit</small></span></label>'
+      + '<div class="nb-field"><label>ثانیه بی کاری</label><input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '"></div>'
+      + '<div class="nb-field"><label>شروع هفته</label><select id="nbWeekStart">'
+      + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></div></div>'
+      + '<div class="nb-sec"><h4>مجموعه ها</h4><div class="nb-cols">'
+      + C.collections.map(function(c, i){
+        return '<div class="nb-col">'
+          + '<div class="nb-field"><label>نام</label><input class="nb-input" data-nb-col="' + i + '" data-k="name" value="' + escapeHtml(c.name) + '"></div>'
+          + '<div class="nb-field"><label>الگوی مسیر</label><input class="nb-input" dir="auto" data-nb-col="' + i + '" data-k="path" value="' + escapeHtml(c.path) + '"></div>'
+          + '<div class="nb-field"><label>قالب</label><input class="nb-input" dir="ltr" data-nb-col="' + i + '" data-k="template" value="' + escapeHtml(c.template || '') + '"></div>'
+          + '<div class="nb-field"><label>تقویم</label><select data-nb-col="' + i + '" data-k="calendar">'
+          + [['day', 'روزانه'], ['week', 'هفتگی'], ['many', 'چند در روز'], ['', 'بدون تقویم']].map(function(o){ return '<option value="' + o[0] + '"' + ((c.calendar || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+          + '</select></div></div>';
+      }).join('')
+      + '</div><div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="addcol">افزودن مجموعه</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="delcol">حذف آخرین</button></div>'
+      + '<p class="nb-hint">جای خالی های مسیر: {jy} {jm} {jd} شمسی · {gy} {gm} {gd} میلادی · {jw} شمارهٔ هفته · {title} عنوان</p></div>'
+      + '<div class="nb-sec"><h4>خروجی و ورودی</h4><div class="nb-actions">'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
+      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label>'
+      + '</div><p class="nb-hint">فایل های .md را هم با «باز کردن فایل» وارد کن؛ در تب باز می شوند و با «ذخیره در دفترچه» به مخزن می روند.</p></div>';
+    function apply(){
+      C.repo = $('nbRepo').value.trim();
+      C.branch = $('nbBranch').value.trim() || 'main';
+      C.token = $('nbToken').value.trim();
+      if ($('nbProvider')) C.provider = $('nbProvider').value;
+      if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
+      C.auto = $('nbAuto').checked;
+      C.idleSeconds = +$('nbIdle').value || 20;
+      C.weekStart = $('nbWeekStart').value;
+      Array.prototype.forEach.call(m.querySelectorAll('[data-nb-col]'), function(el){
+        var c = C.collections[+el.dataset.nbCol];
+        if (c) c[el.dataset.k] = el.value;
+      });
+      nbSaveCfg(); nbSay();
+    }
+    m.addEventListener('input', apply);
+    m.addEventListener('change', function(e){
+      if (e.target.id === 'nbProf' && e.target.value){
+        apply();
+        nbUseProfile(e.target.value);
+        nbCloseSettings();
+        return;
+      }
+      apply();
+    });
+    m.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-nb-cfg]');
+      if (!btn) return;
+      var what = btn.dataset.nbCfg;
+      if (what === 'test'){
+        apply();
+        $('nbTestOut').textContent = 'در حال آزمایش…';
+        nbTest().then(function(r){
+          $('nbTestOut').innerHTML = 'اوکی — <b dir="ltr">' + escapeHtml(r.name) + '</b>' + (r.private ? ' (خصوصی)' : ' (عمومی)')
+            + (r.empty ? ' · هنوز commit ندارد' : ' · ' + escapeHtml(r.sha.slice(0, 7)))
+            + (r.writable ? '' : ' · <span class="nb-warn">توکن اجازهٔ نوشتن ندارد</span>');
+          NB.error = ''; nbSay();
+          if (!r.empty) nbPull({});
+        }).catch(function(err){ $('nbTestOut').innerHTML = '<span class="nb-warn">' + escapeHtml(err.message) + '</span>'; nbSay('error'); });
+      } else if (what === 'addcol'){
+        apply();
+        C.collections.push({ id: 'c' + Date.now().toString(36), name: 'مجموعه', path: 'پوشه/{title}.md', template: '', calendar: '', color: '#6d5efc' });
+        nbSaveCfg(); nbDrawSettings();
+      } else if (what === 'delcol'){
+        if (C.collections.length <= 1) return;
+        C.collections.pop(); nbSaveCfg(); nbDrawSettings();
+      } else if (what === 'tpl'){
+        apply();
+        var n = 0;
+        Object.keys(NB_TEMPLATES).forEach(function(p){ if (!NB.files[p]){ nbWrite(p, NB_TEMPLATES[p]); n++; } });
+        toast(n ? faNum(n) + ' قالب ساخته شد — با «ارسال» به مخزن می رود' : 'قالب ها از قبل بودند', 'check');
+      } else if (what === 'config'){
+        apply();
+        nbWrite(C.configPath, JSON.stringify({
+          version: 1, calendar: C.calendar || 'jalali', weekStart: C.weekStart, collections: C.collections,
+          commit: { auto: C.auto, idleSeconds: C.idleSeconds }, attachments: C.attachments
+        }, null, 2) + '\n');
+        toast('config.json ساخته شد — با «ارسال» به مخزن می رود', 'check');
+      } else if (what === 'zip'){
+        nbDownloadZip('');
+      } else if (what === 'saveprof'){
+        apply();
+        nbPrompt('نام این دفترچه', C.active || '', function(name){
+          if (!name) return;
+          nbSaveProfile(name);
+          toast('دفترچه ذخیره شد: ' + name, 'check');
+          nbDrawSettings();
+        });
+      } else if (what === 'delprof'){
+        var drop = C.active;
+        C.profiles = nbProfiles().filter(function(p){ return p.name !== drop; });
+        C.active = '';
+        nbSaveCfg(); nbDrawSettings();
+        toast('دفترچه حذف شد (یادداشت هایش روی مخزن دست نخورده اند)', 'trash');
+      }
+    });
+    var zi = $('nbZipIn');
+    if (zi) zi.addEventListener('change', function(){
+      var file = zi.files[0];
+      if (!file) return;
+      file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
+        var n = 0;
+        entries.forEach(function(en){
+          if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
+          if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
+          nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
+          n++;
+        });
+        toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
+      }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
+      zi.value = '';
+    });
+  }
+  function nbOpenSettings(){
+    if (innerWidth < 760) nbSidebar(false);
+    nbDrawSettings();
+  }
+  function nbCloseSettings(){ $('nbModal').hidden = true; }
+
+  /* --- wiring --- */
+  function nbActivePath(){ var t = currentTab(); return t && t.nb ? t.nb : ''; }
+  nbTrap();
+  /* the toolbar button carries data-action="notebook", so the app's own dispatch opens the drawer —
+     a second listener here would toggle it twice and it would never look open */
+  $('nbClose').addEventListener('click', function(){ nbSidebar(false); });
+  $('nbBack').addEventListener('click', function(){ nbSidebar(false); });
+  addEventListener('resize', function(){ if (NB.open) nbSlot(); nbStatus(); });
+  /* the drawer remembers its width */
+  (function(){
+    var grip = $('nbGrip'), w = parseInt(storeGet('fs2-nbw') || '', 10);
+    if (w >= 240 && w <= 720) document.documentElement.style.setProperty('--nb-w', w + 'px');
+    if (!grip) return;
+    var dragging = false;
+    grip.addEventListener('mousedown', function(e){
+      dragging = true; e.preventDefault();
+      document.body.style.userSelect = 'none';
+      grip.style.cursor = 'col-resize';
+    });
+    addEventListener('mousemove', function(e){
+      if (!dragging) return;
+      var w2 = Math.max(240, Math.min(720, e.clientX - document.documentElement.getBoundingClientRect().left));
+      document.documentElement.style.setProperty('--nb-w', Math.round(w2) + 'px');
+    });
+    addEventListener('mouseup', function(){
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      var cur = getComputedStyle(document.documentElement).getPropertyValue('--nb-w').trim();
+      storeSet('fs2-nbw', String(parseInt(cur, 10) || 328));
+    });
+  })();
+  $('nbSync').addEventListener('click', function(e){
+    e.stopPropagation();
+    var m = $('nbSyncPop');
+    m.hidden = !m.hidden;
+    if (m.hidden) return;
+    var n = nbCountDirty();
+    m.innerHTML = '<div class="pop-title">دفترچه</div>'
+      + '<div class="nb-sync-info">' + (NB_STATES[NB.state] || NB_STATES.off).t
+      + (NB.error ? '<br><span class="nb-warn">' + escapeHtml(NB.error) + '</span>' : '')
+      + '<br><small dir="ltr">' + (C && C.repo ? escapeHtml(C.repo) + ' · ' + escapeHtml(C.branch) : 'no repository')
+      + (n ? ' · ' + faNum(n) + ' pending' : '') + '</small></div>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="push">ارسال</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات دفترچه</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>';
+    m.onclick = function(ev){
+      var b = ev.target.closest('[data-nb-pop]');
+      if (!b) return;
+      var w = b.dataset.nbPop;
+      m.hidden = true;
+      if (w === 'settings') nbOpenSettings();
+      else if (w === 'pull') nbPull({ loud: true });
+      else if (w === 'push') nbPush({ loud: true });
+      else nbSidebar();
+    };
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#nbSyncPop') && !e.target.closest('#nbSync')){
+      var m = $('nbSyncPop');
+      if (m) m.hidden = true;
+    }
+  });
+  addEventListener('online', function(){
+    nbSay();
+    nbPull({ quiet: true }).then(function(){ if (nbCountDirty()) nbPush({}); });
+  });
+  addEventListener('offline', function(){ nbSay('offline'); });
+  setInterval(nbAutoTick, 60000);
+  document.addEventListener('visibilitychange', nbAutoTick);
+  addEventListener('keydown', function(e){
+    if (e.key === 'Escape'){
+      var mini = $('nbMini'), menu = $('nbMenu'), mod = $('nbModal');
+      if (menu && !menu.hidden){ menu.hidden = true; return; }
+      if (mini && !mini.hidden){ nbCloseMini(); return; }
+      if (mod && !mod.hidden){ nbCloseSettings(); return; }
+      if (NB.open && document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')){ nbSidebar(false); }
+      return;
+    }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = (e.key || '').toLowerCase();
+    if (k === 's' || (e.key === '\\' && !e.shiftKey)){
+      if (k === 's' && !nbActivePath() && !e.shiftKey) return;   // plain Ctrl+S keeps exporting the page
+      e.preventDefault(); e.stopPropagation();
+      nbSyncActiveNote(); nbPush({ loud: true });
+      return;
+    }
+    if (e.key === '\\'){ e.preventDefault(); e.stopPropagation(); nbSidebar(); }
+  }, true);
+
+  /* --- palette and toolbar actions --- */
+  ACTIONS['notebook'] = { label: 'دفترچه (یادداشت ها روی گیت هاب)', icon: 'tree', kbd: 'Ctrl \\', kw: 'notebook notes git markdown nb', run: function(){ nbSidebar(); } };
+  ACTIONS['nb-settings'] = { label: 'تنظیمات دفترچه (مخزن، توکن، مجموعه ها)', icon: 'cloud', kw: 'notebook settings repo token git', run: nbOpenSettings };
+  ACTIONS['nb-close'] = { label: 'بستن', icon: 'x', hidden: true, run: nbCloseSettings };
+  ACTIONS['nb-new'] = { label: 'یادداشت تازه در دفترچه', icon: 'plus', kw: 'notebook new note daily', run: function(){ if (!NB.open) nbSidebar(true); nbSectionNotes(); nbNewDialog(); } };
+  ACTIONS['nb-today'] = { label: 'یادداشت امروز (روزانه)', icon: 'clock', kw: 'notebook today daily journal', run: function(){
+    var col = C.collections.filter(function(c){ return c.calendar === 'day'; })[0] || C.collections[0];
+    var made = nbNewNote(col, new Date(), '');
+    nbOpen(made.path, made.cursor);
+    if (made.exists) toast('یادداشت امروز از قبل بود', 'x');
+  } };
+  ACTIONS['nb-push'] = { label: 'ارسال تغییرهای دفترچه به گیت هاب', icon: 'cloud', kw: 'notebook commit push sync git', run: function(){ nbSyncActiveNote(); nbPush({ loud: true }); } };
+  ACTIONS['nb-pull'] = { label: 'گرفتن تغییرهای تازه از گیت هاب', icon: 'redo', kw: 'notebook pull fetch sync git', run: function(){ nbPull({ loud: true }); } };
+  ACTIONS['nb-save-tab'] = { label: 'ذخیرهٔ تب فعلی در دفترچه', icon: 'cloud', kw: 'notebook save tab temp', run: function(){ nbSaveTabDialog(activeTab); } };
+  ACTIONS['nb-zip'] = { label: 'دانلود دفترچه به صورت zip', icon: 'download', kw: 'notebook zip export backup', run: function(){ nbDownloadZip(''); } };
+  ACTIONS['nb-find'] = { label: 'جستجو در یادداشت های دفترچه', icon: 'search', kbd: 'Ctrl Shift F', kw: 'notebook search find grep', run: function(){
+    NB.section = 'search'; NB.focusSearch = true;
+    if (!NB.open) nbSidebar(true); else nbRender();
+  } };
+  ACTIONS['nb-cal'] = { label: 'تقویم دفترچه (شمسی)', icon: 'clock', kw: 'notebook calendar jalali month', run: function(){
+    NB.section = 'cal';
+    if (!NB.open) nbSidebar(true); else nbRender();
+  } };
+  ACTIONS['nb-tags'] = { label: 'برچسب های دفترچه', icon: 'hash', kw: 'notebook tags', run: function(){
+    NB.section = 'tags';
+    if (!NB.open) nbSidebar(true); else nbRender();
+  } };
+  ACTIONS['nb-link'] = { label: 'درج پیوند به یادداشت [[…]]', icon: 'link', kw: 'notebook link wikilink', run: function(){
+    if (!nbActivePath()){ toast('اول یک یادداشت دفترچه را باز کن', 'x'); return; }
+    ta.focus();
+    document.execCommand && document.execCommand('insertText', false, '[[');
+    NB.query = '';
+    nbSuggestOpen(nbIndex().slice(0, 6), ta.selectionStart);
+  } };
+  function nbSectionNotes(){ NB.section = 'notes'; nbRender(); }
+
+  /* ================= جستجو، برچسب و ارجاع ها ================= */
+  var nbIdxCache = null, nbSearchCache = null, nbSearchKey = '';
+  function nbIdxInvalidate(){ nbIdxCache = null; nbSearchCache = null; }
+  /** Which collection a path was made by (so the calendar and the filters can colour it). */
+  var nbColRe = {};
+  function nbCollectionOf(path){
+    for (var i = 0; i < C.collections.length; i++){
+      var col = C.collections[i];
+      if (!col.path) continue;
+      if (!nbColRe[col.id]) nbColRe[col.id] = new RegExp('^' + String(col.path).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{[a-z]+\\\}/g, '[^/]+') + '$');
+      if (nbColRe[col.id].test(path)) return col;
+    }
+    return null;
+  }
+  function nbIndex(){
+    if (nbIdxCache) return nbIdxCache;
+    var list = [];
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (!f || f.deleted || p.slice(-1) === '/') return;
+      var col = nbCollectionOf(p);
+      var locked = !!(f.enc && f.plain == null);
+      var text = locked ? '' : nbTextOf(f);
+      list.push({ path: p, title: nbTitle(p), col: col ? col.id : '', text: text, dirty: !!f.dirty, locked: locked,
+        tags: locked ? [] : nbTags(text), hay: nbNorm(nbTitle(p) + ' ' + p + ' ' + text + (locked ? ' رمزدار' : '')) });
+    });
+    nbIdxCache = list;
+    return list;
+  }
+  function nbSnippet(text, query){
+    if (!query) return '';
+    var i = nbNorm(text).indexOf(nbNorm(query));
+    var at = i < 0 ? 0 : Math.max(0, i - 30);
+    var s = text.replace(/\s+/g, ' ').slice(at, at + 130);
+    return (at > 0 ? '…' : '') + s + (at + 130 < text.length ? '…' : '');
+  }
+  function nbSearchResults(){
+    var q = nbNorm(NB.query || ''), out = [];
+    var key = q + '|' + (NB.colFilter || '') + '|' + (NB.tagFilter || '');
+    if (nbSearchCache && nbSearchKey === key) return nbSearchCache;
+    nbIndex().forEach(function(n){
+      if (NB.colFilter && n.col !== NB.colFilter) return;
+      if (NB.tagFilter && n.tags.indexOf(NB.tagFilter) === -1) return;
+      if (q){
+        var hit = n.hay.indexOf(q) !== -1;
+        if (!hit) return;
+        n.score = nbNorm(n.title).indexOf(q) === 0 ? 0 : nbNorm(n.title).indexOf(q) !== -1 ? 1 : 2;
+      } else n.score = 3;
+      out.push(n);
+    });
+    out.sort(function(a, b){ return a.score - b.score || nbNorm(a.title).localeCompare(nbNorm(b.title)); });
+    nbSearchCache = out.slice(0, 200); nbSearchKey = key;
+    return nbSearchCache;
+  }
+  function nbSearchHtml(){
+    if (!NB.query && !NB.colFilter && !NB.tagFilter) return '<div class="nb-empty">چیزی بنویس تا در متن همهٔ یادداشت ها بگردم.<br>ی «ی» و ک «ک» و نیم فاصله هم در نظر گرفته می شوند.</div>';
+    var res = nbSearchResults();
+    if (!res.length) return '<div class="nb-empty">چیزی پیدا نشد</div>';
+    return '<div class="nb-hint">' + faNum(res.length) + ' یادداشت</div>' + res.map(function(n){
+      return '<div class="nb-row nb-note-row nb-res-row" data-nb-note="' + escapeHtml(n.path) + '" tabindex="0">'
+        + icon('file') + '<span class="nb-res-main"><b dir="auto">' + escapeHtml(n.title) + '</b>'
+        + '<small dir="auto">' + escapeHtml(nbSnippet(n.text, NB.query)) + '</small></span>'
+        + (n.dirty ? '<i class="nb-mark"></i>' : '') + '</div>';
+    }).join('');
+  }
+  function nbTagCounts(){
+    var m = {}, out = [];
+    nbIndex().forEach(function(n){ n.tags.forEach(function(t){ m[t] = (m[t] || 0) + 1; }); });
+    Object.keys(m).forEach(function(t){ out.push({ tag: t, n: m[t] }); });
+    out.sort(function(a, b){ return b.n - a.n || nbNorm(a.tag).localeCompare(nbNorm(b.tag)); });
+    return out;
+  }
+  function nbByTitle(name){
+    var want = nbNorm(String(name).replace(/\.(md|markdown|txt)$/i, '').replace(/^.*\//, ''));
+    var hits = nbIndex().filter(function(n){ return nbNorm(n.title) === want || nbNorm(n.title) === nbNorm(name); });
+    if (hits.length) return hits[0].path;
+    var loose = nbIndex().filter(function(n){ return nbNorm(n.title).indexOf(want) !== -1 && want; });
+    return loose.length ? loose[0].path : '';
+  }
+  function nbBacklinks(path){
+    var title = nbNorm(nbTitle(path));
+    return nbIndex().filter(function(n){
+      if (n.path === path) return false;
+      return n.text.split('\n').some(function(line){
+        return (line.match(/\[\[([^\[\]|]{1,140})(?:\|[^\[\]]*)?\]\]/g) || []).some(function(link){
+          var target = nbNorm(link.slice(2, -2).split('|')[0]);
+          return target === title || target === nbNorm(n.path);
+        });
+      });
+    });
+  }
+  function nbBacklinksHtml(path){
+    var back = nbBacklinks(path);
+    if (!back.length) return '';
+    return '<div class="nb-back"><div class="nb-back-title">ارجاع ها به این یادداشت (' + faNum(back.length) + ')</div>'
+      + back.map(function(n){
+        return '<div class="nb-row nb-note-row" data-nb-note="' + escapeHtml(n.path) + '" tabindex="0">'
+          + icon('link') + '<span class="nb-name" dir="auto">' + escapeHtml(n.title) + '</span></div>';
+      }).join('') + '</div>';
+  }
+
+  /* ================= پیوند [[…]] ================= */
+  /** Opens what a `[[link]]` points at; a note that does not exist yet is made next to the current one. */
+  function nbWikiOpen(name, fromPath){
+    var path = nbByTitle(name);
+    if (path){ nbOpen(path); return path; }
+    var folder = fromPath ? nbFolder(fromPath) : '';
+    var target = (folder ? folder + '/' : '') + nbSlug(name) + '.md';
+    nbWrite(target, '---\ntype: note\ndate: ' + nbCtx(new Date(), '', C.weekStart).gdate + '\ntags: []\n---\n# ' + name + '\n\n');
+    nbOpen(target);
+    toast('یادداشت تازه ساخته شد: ' + name, 'plus');
+    return target;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('#zoomWrap a.nb-wlink, #zoomWrap a[data-nb-link]');
+    if (!a) return;
+    e.preventDefault();
+    var raw = a.dataset.nbLink ? decodeURIComponent(a.dataset.nbLink) : a.textContent;
+    var name = String(raw).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    nbWikiOpen(name, nbActivePath());
+  });
+  /** Typing `[[` suggests the notes that already exist. */
+  var nbSugBox = null, nbSugState = { at: -1, items: [], idx: 0 };
+  function nbSuggestClose(){ if (nbSugBox){ nbSugBox.hidden = true; nbSugBox.innerHTML = ''; } nbSugState.at = -1; }
+  function nbSuggestOpen(items, at){
+    if (!nbSugBox){
+      nbSugBox = document.createElement('div');
+      nbSugBox.className = 'nb-sug';
+      nbSugBox.hidden = true;
+      document.body.appendChild(nbSugBox);
+    }
+    nbSugState.items = items; nbSugState.at = at; nbSugState.idx = 0;
+    var r = ta.getBoundingClientRect();
+    nbSugBox.style.left = Math.round(r.left + 10) + 'px';
+    nbSugBox.style.width = Math.round(Math.min(360, r.width - 20)) + 'px';
+    nbSugBox.style.top = Math.round(Math.max(60, r.bottom - 42 - Math.min(6, items.length) * 30)) + 'px';
+    nbSuggestDraw();
+    nbSugBox.hidden = false;
+  }
+  function nbSuggestDraw(){
+    nbSugBox.innerHTML = nbSugState.items.map(function(it, i){
+      return '<button type="button" class="nb-sug-row' + (i === nbSugState.idx ? ' on' : '') + '" data-nb-sug="' + i + '">'
+        + icon('file') + '<span dir="auto">' + escapeHtml(it.title) + '</span><small dir="auto">' + escapeHtml(nbFolder(it.path)) + '</small></button>';
+    }).join('');
+  }
+  function nbSuggestAccept(i){
+    var it = nbSugState.items[i === undefined ? nbSugState.idx : i];
+    if (!it) return nbSuggestClose();
+    var v = ta.value, caret = ta.selectionStart;
+    var before = v.slice(0, caret), m = before.match(/\[\[([^\[\]|]*)$/);
+    var start = m ? caret - m[1].length - 2 : caret;
+    var insert = '[[' + it.title + ']]';
+    ta.setSelectionRange(start, caret);
+    var ok = false;
+    try { ok = document.execCommand('insertText', false, insert); } catch(e){}
+    if (!ok){ ta.setRangeText(insert, start, caret, 'end'); ta.dispatchEvent(new Event('input', { bubbles: true })); }
+    nbSuggestClose();
+    ta.focus();
+  }
+  document.addEventListener('click', function(e){
+    if (nbSugBox && !nbSugBox.hidden){
+      var row = e.target.closest('[data-nb-sug]');
+      if (row){ e.preventDefault(); nbSuggestAccept(+row.dataset.nbSug); return; }
+      if (!e.target.closest('.nb-sug')) nbSuggestClose();
+    }
+  });
+  document.addEventListener('keydown', function(e){
+    if (!nbSugBox || nbSugBox.hidden) return;
+    if (e.key === 'ArrowDown'){ nbSugState.idx = (nbSugState.idx + 1) % nbSugState.items.length; nbSuggestDraw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp'){ nbSugState.idx = (nbSugState.idx - 1 + nbSugState.items.length) % nbSugState.items.length; nbSuggestDraw(); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === 'Tab'){ nbSuggestAccept(); e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === 'Escape'){ nbSuggestClose(); e.stopPropagation(); }
+  }, true);
+  function nbMaybeSuggest(){
+    var t = currentTab();
+    if (!t || !t.nb) return nbSuggestClose();
+    var before = ta.value.slice(0, ta.selectionStart);
+    var m = before.match(/\[\[([^\[\]|]{0,60})$/);
+    if (!m) return nbSuggestClose();
+    var q = nbNorm(m[1]);
+    var items = nbIndex().filter(function(n){ return !q || nbNorm(n.title).indexOf(q) !== -1; })
+      .sort(function(a, b){ return nbNorm(a.title).indexOf(q) - nbNorm(b.title).indexOf(q); }).slice(0, 6);
+    if (!items.length) return nbSuggestClose();
+    nbSuggestOpen(items, ta.selectionStart - m[1].length);
+  }
+  /** Renaming a note rewrites `[[links]]` that point at it. */
+  function nbFixLinks(oldTitle, newTitle){
+    var from = nbNorm(oldTitle), to = nbNorm(newTitle), n = 0;
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (!f || f.deleted || p.slice(-1) === '/') return;
+      if (from === to) return;
+      var text = f.text.replace(/\[\[([^\[\]|]{1,140})(\|[^\[\]]*)?\]\]/g, function(m, target, label){
+        if (nbNorm(target) !== from) return m;
+        n++;
+        return '[[' + newTitle + (label || '') + ']]';
+      });
+      if (text !== f.text){ f.text = text; f.dirty = true; f.at = Date.now(); nbRefreshOpenTab(p); }
+    });
+    if (n){ nbCountDirty(); nbSaveFiles(); nbRender(); }
+    return n;
+  }
+
+  /* ================= تقویم شمسی ================= */
+  var NB_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+  var NB_WD = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
+  function nbCalShift(delta){
+    var m = NB.calMonth.jm + delta, y = NB.calMonth.jy;
+    while (m > 12){ m -= 12; y++; }
+    while (m < 1){ m += 12; y--; }
+    NB.calMonth = { jy: y, jm: m };
+    nbRender();
+  }
+  function nbCalCells(){
+    var jy = NB.calMonth.jy, jm = NB.calMonth.jm;
+    var len = nbJ2d(jy, jm + 1, 1) - nbJ2d(jy, jm, 1);
+    var firstG = nbJToG(jy, jm, 1);
+    var startIdx = { saturday: 0, sunday: 1, monday: 2 }[C.weekStart] || 0;
+    var lead = (((new Date(firstG.gy, firstG.gm - 1, firstG.gd).getDay() + 1) % 7) - startIdx + 7) % 7;
+    var cells = [], i;
+    for (i = 0; i < lead; i++) cells.push(null);
+    for (i = 1; i <= len; i++){
+      var g = nbJToG(jy, jm, i);
+      cells.push({ jy: jy, jm: jm, jd: i, gy: g.gy, gm: g.gm, gd: g.gd, today: nbIsToday(g) });
+    }
+    while (cells.length % 7) cells.push(null);
+    return cells;
+  }
+  function nbIsToday(g){
+    var n = new Date();
+    return n.getFullYear() === g.gy && n.getMonth() + 1 === g.gm && n.getDate() === g.gd;
+  }
+  /** Notes that a day already has: one path per collection whose pattern lands on that date. */
+  function nbDayNotes(d){
+    var date = new Date(d.gy, d.gm - 1, d.gd, 12, 0);
+    var out = [];
+    C.collections.forEach(function(col){
+      if (!col.calendar || !col.path) return;
+      var pattern = String(col.path);
+      if (pattern.indexOf('{title}') !== -1) return;              // «many per day»: only a dot when a note matches
+      var p = nbFillPath(pattern, nbCtx(date, '', C.weekStart));
+      if (NB.files[p] && !NB.files[p].deleted) out.push({ path: p, col: col });
+      else if (pattern.indexOf('{title}') !== -1) out.push(null);
+    });
+    if (!out.length){
+      // a day may still hold notes whose title carries the date (جلسه ها/…)
+      var stamp = nbCtx(date, '', C.weekStart).jdate.replace(/\//g, '/');
+      NB.paths.forEach(function(p){
+        var f = NB.files[p];
+        if (!f || f.deleted || p.slice(-1) === '/') return;
+        if (p.indexOf(String(d.gy) + '-') !== -1 && p.indexOf(nbPad2(d.gm) + '-' + nbPad2(d.gd)) !== -1) out.push({ path: p, col: nbCollectionOf(p) });
+      });
+    }
+    return out.filter(Boolean);
+  }
+  function nbCalHtml(){
+    if (!NB.calMonth){
+      var t = nbCtx(new Date(), '', C.weekStart);
+      NB.calMonth = { jy: +t.jy, jm: +t.jm };
+    }
+    var cells = nbCalCells();
+    var html = '<div class="nb-cal-head">'
+      + '<button type="button" class="ib sm" data-nb-cal="-1" aria-label="ماه قبل">' + icon('chev') + '</button>'
+      + '<b>' + escapeHtml(NB_MONTHS[NB.calMonth.jm - 1]) + ' ' + nbFaN(NB.calMonth.jy) + '</b>'
+      + '<button type="button" class="ib sm" data-nb-cal="1" aria-label="ماه بعد"><span style="display:inline-flex;transform:rotate(180deg)">' + icon('chev') + '</span></button>'
+      + '<button type="button" class="elbtn xs" data-nb-cal="today">امروز</button>'
+      + '</div>'
+      + '<div class="nb-cal-grid">' + NB_WD.map(function(w){ return '<span class="nb-cal-wd">' + w + '</span>'; }).join('') + '</div>'
+      + '<div class="nb-cal-grid nb-cal-days">';
+    cells.forEach(function(c){
+      if (!c){ html += '<span class="nb-cal-cell empty"></span>'; return; }
+      var notes = nbDayNotes(c);
+      var dots = notes.slice(0, 4).map(function(n){
+        var col = n.col ? n.col.color : '#6d5efc';
+        return '<i class="nb-cal-dot" style="background:' + escapeHtml(col || '#6d5efc') + '"></i>';
+      }).join('');
+      html += '<span class="nb-cal-cell' + (c.today ? ' today' : '') + (notes.length ? ' has' : '') + '" data-nb-day="' + c.gy + '-' + nbPad2(c.gm) + '-' + nbPad2(c.gd) + '" title="' + (notes.length ? notes.map(function(n){ return nbTitle(n.path); }).join(' · ') : 'خالی') + '">'
+        + faNum(c.jd) + '<span class="nb-cal-dots">' + dots + '</span></span>';
+    });
+    html += '</div>'
+      + '<div class="nb-cal-legend">' + C.collections.map(function(col){
+        return '<span class="nb-cal-lg"><i style="background:' + escapeHtml(col.color || '#6d5efc') + '"></i>' + escapeHtml(col.name) + '</span>';
+      }).join('') + '</div>'
+      + '<div class="nb-hint">روی هر روز بزن: یادداشت همان روز باز می شود، یا با انتخاب مجموعه ساخته می شود. نقطه ها رنگ مجموعه را دارند.</div>';
+    return html;
+  }
+  function nbDayClick(stamp){
+    var p = String(stamp).split('-');
+    var date = new Date(+p[0], +p[1] - 1, +p[2], 12, 0);
+    var day = { gy: +p[0], gm: +p[1], gd: +p[2], jy: 0 };
+    var notes = nbDayNotes({ gy: +p[0], gm: +p[1], gd: +p[2] });
+    if (notes.length === 1){ nbOpen(notes[0].path); return; }
+    if (notes.length > 1){ nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, notes.map(function(n){ return { label: nbTitle(n.path), act: function(){ nbOpen(n.path); } }; })); return; }
+    var candidates = C.collections.filter(function(c){ return c.calendar && c.calendar !== 'week'; });
+    if (!candidates.length){ toast('مجموعه ای با تقویم روزانه نداری — در تنظیمات دفترچه بساز', 'x'); return; }
+    if (candidates.length === 1){ nbMakeOnDate(candidates[0], date); return; }
+    nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, candidates.map(function(c){
+      return { label: 'یادداشت در «' + c.name + '»', act: function(){ nbMakeOnDate(c, date); } };
+    }));
+  }
+  function nbMakeOnDate(col, date){
+    if (col.calendar === 'many' || String(col.path).indexOf('{title}') !== -1){
+      nbNewDialog(col.id, null, date);
+      return;
+    }
+    var made = nbNewNote(col, date, '');
+    if (made.exists){ toast('همان روز یادداشت دارد — بازش کردم', 'x'); nbOpen(made.path); return; }
+    nbOpen(made.path, made.cursor);
+    toast('ساخته شد: ' + made.path, 'plus');
+  }
+
+  /* ================= تاریخچه با مقایسه و بازگرداندن ================= */
+  function nbShowHistory(path){
+    var sp = nbSplitRepo();
+    if (!sp){ toast('مخزن وصل نیست', 'x'); return; }
+    nbModalBox('تاریخچهٔ ' + nbTitle(path), '<div class="nb-hist" id="nbHistList"><p class="nb-mini-text">در حال خواندن…</p></div>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'clock');
+    nbHistoryList(path)
+      .then(function(list){
+        var box = $('nbHistList');
+        if (!box) return;
+        if (!list.length){ box.innerHTML = '<p class="nb-mini-text">تاریخچه ای نیست — یادداشت هنوز ارسال نشده.</p>'; return; }
+        box.innerHTML = list.map(function(cm){
+          return '<div class="nb-hist-row"><b dir="auto">' + escapeHtml(String(cm.message || '').split('\n')[0]) + '</b>'
+            + '<small dir="ltr">' + escapeHtml(cm.sha.slice(0, 7)) + ' · ' + escapeHtml(cm.date || '') + '</small>'
+            + '<span class="nb-hist-btns"><button type="button" class="elbtn xs" data-nb-hist="' + escapeHtml(cm.sha) + '">دیدن</button>'
+            + '<button type="button" class="elbtn xs" data-nb-hist-cmp="' + escapeHtml(cm.sha) + '">مقایسه</button>'
+            + '<button type="button" class="elbtn xs" data-nb-hist-back="' + escapeHtml(cm.sha) + '">برگرداندن</button></span></div>';
+        }).join('');
+        box.onclick = function(e){
+          var btn = e.target.closest('[data-nb-hist], [data-nb-hist-cmp], [data-nb-hist-back]');
+          if (!btn) return;
+          var sha = btn.dataset.nbHist || btn.dataset.nbHistCmp || btn.dataset.nbHistBack;
+          nbFileText(path, sha).then(function(old){
+            if (btn.dataset.nbHist){
+              openTab(old, 'markdown', 'نسخهٔ قدیمی در تب تازه باز شد');
+              var fresh = currentTab();
+              if (fresh && !fresh.nb) fresh.name = nbTitle(path) + ' (' + sha.slice(0, 7) + ')';
+              drawTabs(); nbCloseMini();
+              return;
+            }
+            if (btn.dataset.nbHistCmp){
+              var f = NB.files[path];
+              var ops = nbDiffLines(old, (f ? f.text : '')).filter(function(o){ return o.op !== 'same'; });
+              $('nbHistList').innerHTML = '<div class="nb-diff">' + ops.map(function(o){
+                return o.text.split('\n').map(function(line){
+                  return '<div class="nb-diff-line ' + o.op + '"><span>' + (o.op === 'add' ? '+' : '-') + '</span><code dir="auto">' + escapeHtml(line) + '</code></div>';
+                }).join('');
+              }).join('') + '</div>';
+              return;
+            }
+            nbConfirm('برگرداندن این نسخه', 'متن یادداشت به نسخهٔ ' + sha.slice(0, 7) + ' برگردد؟ (به عنوان یک تغییر تازه ذخیره می شود و با «ارسال» به مخزن می رود)', function(){
+              nbWrite(path, old);
+              var t2 = nbTabFor(path);
+              if (t2){ t2.text = old; if (t2.id === activeTab){ ta.value = old; render(); } }
+              nbCloseMini();
+              toast('نسخه برگردانده شد — با ارسال ثبت می شود', 'undo');
+            });
+          }).catch(function(err){ toast(err.message, 'x'); });
+        };
+      })
+      .catch(function(e){ if ($('nbHistList')) $('nbHistList').innerHTML = '<p class="nb-mini-text nb-warn">' + escapeHtml(e.message) + '</p>'; });
+  }
+
+  /* ================= پیوست ها و تصویرهای مخزن خصوصی ================= */
+  var nbImgUrls = {}, nbImgBusy = {};
+  function nbAttachDir(){ return (C.attachments || 'attachments').replace(/\/$/, '') + '/'; }
+  function nbIsAttachment(p){ return String(p).indexOf(nbAttachDir()) === 0; }
+  function nbStamp(d){
+    d = d || new Date();
+    return d.getFullYear() + '-' + nbPad2(d.getMonth() + 1) + '-' + nbPad2(d.getDate()) + '-' + nbPad2(d.getHours()) + nbPad2(d.getMinutes()) + nbPad2(d.getSeconds());
+  }
+  /** Stores a pasted or dropped file next to the notes; it rides up with the next commit. */
+  function nbAddAttachment(name, base64, mime){
+    var path = nbAttachDir() + nbSlug(name || nbStamp() + '.png');
+    if (NB.attach[path] && !NB.attach[path].dirty){
+      var n = 2, ext = /(\.[a-z0-9]+)$/i.exec(path);
+      while (NB.attach[path + '']) { path = nbAttachDir() + nbStamp() + '-' + n + (ext ? ext[1] : '.png'); n++; }
+    }
+    NB.attach[path] = { path: path, b64: base64, mime: mime || 'image/png', dirty: true, at: Date.now() };
+    nbSaveAttach();
+    nbCountDirty();
+    return path;
+  }
+  function nbDropAttachment(path){
+    if (!NB.attach[path]) return false;
+    NB.attach[path].deleted = true; NB.attach[path].dirty = true;
+    nbSaveAttach();
+    nbCountDirty();
+    return true;
+  }
+  function nbFileToBase64(file){
+    return new Promise(function(resolve, reject){
+      var fr = new FileReader();
+      fr.onload = function(){ resolve(String(fr.result).split(',')[1] || ''); };
+      fr.onerror = function(){ reject(fr.error); };
+      fr.readAsDataURL(file);
+    });
+  }
+  /** A private repository's images need the token, so they are fetched once and shown as blob URLs. */
+  function nbFixImages(){
+    var imgs = zoomWrap ? zoomWrap.querySelectorAll('img') : [];
+    Array.prototype.forEach.call(imgs, function(img){
+      var src = img.getAttribute('src') || '';
+      if (!src || /^(https?:|data:|blob:)/.test(src)) return;
+      var path = src.replace(/^\.\//, '');
+      if (nbImgUrls[path]){ img.src = nbImgUrls[path]; img.setAttribute('data-nb-img', '1'); return; }
+      if (nbImgBusy[path]) return;
+      nbImgBusy[path] = true;
+      var local = NB.attach[path];
+      if (local && local.b64){ img.src = 'data:' + (local.mime || 'image/png') + ';base64,' + local.b64; nbImgUrls[path] = img.src; return; }
+      var sp = nbSplitRepo();
+      if (!sp){ return; }
+      nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/contents/' + nbEncodePath(path) + '?ref=' + encodeURIComponent(C.branch))
+        .then(function(info){
+          if (!info || !info.content) throw new Error('no content');
+          var data = 'data:' + (info.encoding === 'base64' ? (guessMime(path)) : 'image/png') + ';base64,' + info.content.replace(/\s/g, '');
+          nbImgUrls[path] = data;
+          img.src = data;
+          img.setAttribute('data-nb-img', '1');
+        })
+        .catch(function(){ img.classList.add('nb-img-missing'); })
+        .then(function(){ nbImgBusy[path] = false; });
+    });
+  }
+  function guessMime(p){
+    var e = (/\.[a-z0-9]+$/i.exec(p) || [''])[0].toLowerCase();
+    return { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml' }[e] || 'application/octet-stream';
+  }
+  if (typeof MutationObserver !== 'undefined'){
+    var nbImgTimer = 0;
+    new MutationObserver(function(){
+      clearTimeout(nbImgTimer);
+      nbImgTimer = setTimeout(nbFixImages, 200);
+    }).observe(zoomWrap, { childList: true, subtree: true });
+  }
+  /* pasting an image into a notebook note uploads it and writes the reference */
+  ta.addEventListener('paste', function(e){
+    var t = currentTab();
+    if (!t || !t.nb) return;
+    var items = (e.clipboardData && e.clipboardData.files) || [];
+    var file = null;
+    for (var i = 0; i < items.length; i++){ if (/^image\//.test(items[i].type)){ file = items[i]; break; } }
+    if (!file) return;
+    e.preventDefault();
+    toast('تصویر در حال افزودن…', 'image');
+    nbFileToBase64(file).then(function(b64){
+      var path = nbAddAttachment(nbStamp() + (file.type === 'image/jpeg' ? '.jpg' : '.png'), b64, file.type);
+      var insert = '![' + path.split('/').pop().replace(/\.[a-z0-9]+$/i, '') + '](' + path + ')';
+      document.execCommand && document.execCommand('insertText', false, insert);
+      if (ta.value.indexOf(path) === -1) ta.dispatchEvent(new Event('input', { bubbles: true }));
+      nbSyncActiveNote();
+      nbFixImages();
+      toast('تصویر پیوست شد — با ارسال به مخزن می رود', 'image');
+    }).catch(function(){ toast('تصویر خوانده نشد', 'x'); });
+  }, true);
+
+  /* ================= ثبت سریع و دریافت از «اشتراک گذاری» ================= */
+  function nbQuickInbox(prefill){
+    var body = '<div class="nb-field"><label>متن</label><textarea class="nb-input nb-ta" id="nbQuickText" dir="auto" rows="6" placeholder="هر چه هست را بریز اینجا…">' + escapeHtml(prefill || '') + '</textarea></div>'
+      + '<div class="nb-field"><label>مجموعه</label><select id="nbQuickCol">'
+      + C.collections.map(function(c, i){ return '<option value="' + escapeHtml(c.id) + '"' + (i === 0 ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div class="nb-field"><label>عنوان</label><input class="nb-input" id="nbQuickTitle" dir="auto" placeholder="خالی = از خط اول متن"></div>';
+    nbModalBox('ثبت سریع', body,
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">ذخیره در دفترچه</button>', 'plus');
+    $('nbMiniOk').onclick = function(){
+      var text = $('nbQuickText').value.trim();
+      if (!text){ toast('متنی نیست', 'x'); return; }
+      var title = $('nbQuickTitle').value.trim() || textTitle(text);
+      var col = C.collections.filter(function(c){ return c.id === $('nbQuickCol').value; })[0] || C.collections[0];
+      var made = nbNewNote(col, new Date(), title);
+      if (made.exists) nbWrite(made.path, text);
+      else {
+        var f = NB.files[made.path];
+        var fm = nbParseFm(f.text);
+        nbWrite(made.path, f.text.replace(fm.raw, fm.raw) + '\n' + text + '\n');
+      }
+      nbCloseMini();
+      nbOpen(made.path, made.cursor);
+      toast('ثبت شد: ' + made.path, 'check');
+    };
+    $('nbQuickText').focus();
+    if (!prefill){ try { navigator.clipboard.readText().then(function(clip){ if (clip && clipboardLooksUseful(clip)) $('nbQuickText').value = clip; }, function(){}); } catch(e){} }
+  }
+  function clipboardLooksUseful(s){ return s && s.trim().length > 24 && s.length < 20000; }
+  /** Android/iOS «share» lands here as a POST (see sw.js and manifest.webmanifest). */
+  function nbCheckShare(){
+    idbGet('inbox-share', 'meta').then(function(item){
+      if (!item || Date.now() - item.at > 600000) return;
+      idbSet('inbox-share', null, 'meta');
+      NB.section = 'notes';
+      nbQuickInbox([item.title, item.text].filter(Boolean).join('\n\n'));
+    }).catch(function(){});
+  }
+
+  /* ================= چند دفترچه ================= */
+  function nbProfiles(){
+    if (!Array.isArray(C.profiles)) C.profiles = [];
+    return C.profiles;
+  }
+  function nbUseProfile(name){
+    var p = nbProfiles().filter(function(x){ return x.name === name; })[0];
+    if (!p){ toast('این دفترچه پیدا نشد', 'x'); return; }
+    nbSaveFiles().then(function(){                  // everything in flight goes to its own store first
+      C.repo = p.repo; C.branch = p.branch || 'main'; C.token = p.token || '';
+      if (Array.isArray(p.collections) && p.collections.length) C.collections = p.collections;
+      C.active = name;
+      NB.files = {}; NB.paths = []; NB.conflicts = []; NB.lastCommit = ''; NB.lastSync = 0;
+      nbSaveCfg();
+      nbReloadFiles();
+      toast('دفترچه: ' + name, 'folder');
+    });
+  }
+  function nbReloadFiles(){
+    nbIdxInvalidate();
+    return nbLoadFiles().then(function(){
+      nbCountDirty(); nbRender(); nbSay();
+      if (C.repo) nbSchedulePull(600);
+    });
+  }
+  function nbSaveProfile(name){
+    var list = nbProfiles().filter(function(x){ return x.name !== name; });
+    list.push({ name: name, repo: C.repo, branch: C.branch, token: C.token, collections: C.collections });
+    C.profiles = list; C.active = name;
+    nbSaveCfg();
+  }
+  function nbStoreSuffix(){ return ':' + (C.repo || 'local').replace(/[^\w.-]/g, '_'); }
+
+  /* ================= یادداشت رمزدار ================= */
+  var NB_ENC_HEAD = 'mizkar-enc';
+  function nbIsEncrypted(text){ return String(text).indexOf('---\n' + NB_ENC_HEAD + ':') === 0 || String(text).indexOf(NB_ENC_HEAD + ':') === 0; }
+  function nbB64Bytes(buf){
+    var b = new Uint8Array(buf), s = '';
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  }
+  function nbBytesB64(b64){
+    var s = atob(b64), out = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+  function nbAskPass(first){
+    return new Promise(function(resolve){
+      nbPrompt(first ? 'گذرواژهٔ یادداشت های رمزدار' : 'گذرواژه', '', function(v){ resolve(v || null); });
+      var el = $('nbMiniInput');
+      if (el) el.type = 'password';
+    });
+  }
+  function nbKeyFromPass(pass, salt){
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(pass), { name: 'PBKDF2' }, false, ['deriveKey'])
+      .then(function(base){
+        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 150000, hash: 'SHA-256' }, base,
+          { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      });
+  }
+  function nbEncrypt(text, pass){
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    return nbKeyFromPass(pass, salt).then(function(key){
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text));
+    }).then(function(ct){
+      return '---\n' + NB_ENC_HEAD + ': 1\nkdf: PBKDF2-150000\nsalt: ' + nbB64Bytes(salt) + '\niv: ' + nbB64Bytes(iv) + '\n---\n'
+        + nbB64Bytes(ct).replace(/(.{76})/g, '$1\n') + '\n';
+    });
+  }
+  function nbDecrypt(text, pass){
+    var salt = /salt: ([^\n]+)/.exec(text), iv = /iv: ([^\n]+)/.exec(text);
+    if (!salt || !iv) return Promise.reject(new Error('قالب یادداشت رمزدار خوانده نشد'));
+    var body = text.split(/\n---\n/).slice(1).join('\n---\n').replace(/\s+/g, '');
+    return nbKeyFromPass(pass, nbBytesB64(salt[1])).then(function(key){
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: nbBytesB64(iv[1]) }, key, nbBytesB64(body));
+    }).then(function(plain){ return new TextDecoder().decode(plain); });
+  }
+  /** Turns a note into a secret one (or back): the working copy keeps plaintext, git gets ciphertext. */
+  function nbToggleEncrypt(path){
+    var f = NB.files[path];
+    if (!f) return;
+    if (f.enc){
+      f.enc = false;
+      if (f.plain != null){ f.text = f.plain; f.plain = null; }
+      toast('رمزگذاری برداشته شد — با ارسال، متن ساده روی مخزن می رود', 'x');
+    } else {
+      f.enc = true;
+      f.plain = f.plain != null ? f.plain : f.text;
+      if (!NB.pass) nbAskPass(true).then(function(p){ NB.pass = p; toast('رمزگذاری فعال شد — از «ارسال» به بعد رمزدار می رود', 'check'); });
+      else toast('رمزگذاری فعال شد — از «ارسال» به بعد رمزدار می رود', 'check');
+    }
+    f.dirty = true; f.at = Date.now();
+    nbCountDirty(); nbRender(); nbSaveFiles();
+  }
+  function nbEnsurePlain(path){
+    var f = NB.files[path];
+    if (!f || !f.enc) return Promise.resolve(true);
+    if (f.plain != null) return Promise.resolve(true);
+    return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
+      if (!pass) return false;
+      NB.pass = pass;
+      return nbDecrypt(f.text, pass).then(function(plain){ f.plain = plain; return true; },
+        function(e){ toast('رمزگشایی نشد — گذرواژه درست است؟ (' + e.message + ')', 'x'); return false; });
+    });
+  }
+
+  /* ================= گیت لب ================= */
+  function nbGL(){
+    var sp = nbSplitRepo();
+    return { id: sp ? encodeURIComponent(sp.owner + '/' + sp.name) : '', project: sp ? sp.owner + '/' + sp.name : '' };
+  }
+  function nbTools(){ return { api: nbApi, split: nbSplitRepo, gl: nbGL, merge: nbMerge3, index: nbIndex }; }
+
+  /* The soft keyboard shrinks the visual viewport: the sheets step up so nothing hides under it. */
+  if (window.visualViewport){
+    var nbKb = function(){
+      var vv = window.visualViewport;
+      var kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+      document.documentElement.style.setProperty('--nb-kb', (kb > 60 ? kb : 0) + 'px');
+    };
+    visualViewport.addEventListener('resize', nbKb);
+    visualViewport.addEventListener('scroll', nbKb);
+    nbKb();
+  }
+
+  /* --- init --- */
+  document.getElementById('appStyle').textContent += '\n' + NB_CSS;
+  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); });
+  NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
+  NB.ui = {
+    open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,
+    dirty: nbDirtyList, resolve: nbResolve, write: nbWrite, push: nbPush, pull: nbPull, del: nbDeletePath,
+    afterSwitch: nbAfterSwitch, section: function(s){ NB.section = s || NB.section; nbRender(); return NB.section; },
+    search: function(q, col, tag){ NB.query = q || ''; NB.colFilter = col || ''; NB.tagFilter = tag || ''; return nbSearchResults().map(function(n){ return n.path; }); },
+    backlinks: nbBacklinks, tags: nbTagCounts, index: nbIndex, wikiOpen: nbWikiOpen, fixLinks: nbFixLinks,
+    calendar: function(){ return { cells: (NB.calMonth = NB.calMonth || (function(){ var t = nbCtx(new Date(), '', C.weekStart); return { jy: +t.jy, jm: +t.jm }; })()), day: function(stamp){ return nbDayNotes({ gy: +stamp.split('-')[0], gm: +stamp.split('-')[1], gd: +stamp.split('-')[2] }).map(function(n){ return n.path; }); } }; },
+    dayNotes: nbDayNotes, calShift: nbCalShift, makeOnDate: nbMakeOnDate,
+    quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
+    attach: nbAddAttachment, attachments: function(){ return NB.attach; }, downloadAttachment: nbDownloadAttachment,
+    profiles: nbProfiles, useProfile: nbUseProfile, saveProfile: nbSaveProfile, reload: nbReloadFiles,
+    provider: function(p){ if (p) C.provider = p; return C.provider; }, ref: nbRef, tree: nbRemoteTree, fileText: nbFileText, history: nbHistoryList,
+    state: function(){ return NB; },
+    files: function(){ return NB.files; },
+    cfg: function(o){ if (o){ Object.assign(C, o); nbSaveCfg(); nbSay(); } return C; }
+  };
+  window.mizkarNotebook = NB;
+})();
