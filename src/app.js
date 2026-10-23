@@ -441,10 +441,8 @@ var APP_CSS = [
   '.tp-cell{width:18px;height:18px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);cursor:pointer;padding:0;}',
   '.tp-cell.on{background:color-mix(in srgb,var(--accent) 35%,transparent);border-color:var(--accent);}',
   '.tp-size{margin-top:8px;font-size:.76rem;color:var(--muted);text-align:center;}',
-  /* isolate + dir=rtl: Persian lines stay RTL even when they begin with "## ۳. box …".
-     plaintext (first-strong) is only for dir=ltr code formats — otherwise "box" flips the whole heading. */
-  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);unicode-bidi:isolate;text-align:start;}',
-  'textarea#input[dir="ltr"]{unicode-bidi:plaintext;}',
+  /* plaintext: each line follows its first strong char — full-English lines go left, Persian stay right */
+  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);unicode-bidi:plaintext;text-align:start;}',
   'textarea#input::placeholder{color:var(--muted);opacity:.7;}',
   '.divider{position:relative;cursor:col-resize;touch-action:none;}',
   '.divider::before{content:"";position:absolute;top:50%;left:4px;right:4px;height:56px;transform:translateY(-50%);border-radius:4px;background:var(--border-strong);transition:background .15s,height .15s;}',
@@ -4456,9 +4454,9 @@ if (typeof document !== 'undefined'){
     processMermaid(theme, null, false);
   }
   /**
-   * The editor must not use dir="auto": that attribute looks only at the first strong character, so a
-   * Persian note that begins with "## ۳. box …" or "box‌ای …" flips the whole textarea to LTR. Preview
-   * already uses textDir(); here we keep RTL for Persian prose and LTR only for code-like formats.
+   * Buffer dir is a fallback; CSS unicode-bidi:plaintext gives each line its own direction from the
+   * first strong character, so a full-English paragraph goes left and a Persian one stays right.
+   * Code-only formats force LTR for the whole buffer.
    */
   function syncInputDir(){
     if (!ta) return;
@@ -4468,7 +4466,6 @@ if (typeof document !== 'undefined'){
       var fmt = (typeof effectiveFormat === 'function' ? effectiveFormat() : state.fmt) || 'auto';
       var codeLike = /^(json|yaml|yml|toml|ini|xml|sql|csv|log|diff|jwt|cron|js|ts|css|html|code)$/i.test(fmt);
       var sample = (ta.value || '').slice(0, 8000);
-      // Persian notes: dir=rtl + unicode-bidi:isolate (CSS). Code-only formats: dir=ltr + plaintext.
       dir = (codeLike && typeof hasRTL === 'function' && !hasRTL(sample)) ? 'ltr' : 'rtl';
     }
     ta.setAttribute('dir', dir);
@@ -7480,8 +7477,7 @@ var NB_CSS = [
   /* transparent fill breaks native word-select in WebKit; ::selection must force visible ink */
   'body.ip-tint textarea#input::selection{color:var(--ink)!important;-webkit-text-fill-color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
   'body.ip-tint textarea#input::-moz-selection{color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:isolate;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
-  '.ta-md[dir="ltr"]{unicode-bidi:plaintext;}',
+  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[hidden]{display:none;}',
   '.ta-md .mk-h{color:var(--accent);}',
   '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
