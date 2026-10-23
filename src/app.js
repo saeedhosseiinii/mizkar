@@ -6995,18 +6995,21 @@ if (typeof document !== 'undefined'){
     toast('از منوی مرورگر گزینهٔ «Install» یا «Add to Home Screen» را بزنید', 'install');
   }
   /* --- version and updates: version.json (a few bytes) is checked on load, every 30 minutes and on demand --- */
-  /** Numeric build («2.41») or legacy ISO stamp → sortable number. Old date stamps count as older than any 2.x. */
+  /** Numeric build («2.43») or legacy ISO stamp → sortable number. Numeric 2.x sits above 2026 ISO epochs. */
   function verNum(v){
     v = String(v || '').trim();
     if (!v) return 0;
-    if (/^\d{4}-\d{2}-\d{2}/.test(v) || /T\d{2}:/.test(v)) return 0;
-    var parts = v.replace(/^v/i, '').split(/[.+]/).map(function(x){ return parseInt(x, 10) || 0; });
-    var n = 0, i;
-    for (i = 0; i < Math.min(parts.length, 4); i++) n = n * 1000 + parts[i];
-    return n;
+    if (/^\d+(\.\d+)*$/.test(v)){
+      var parts = v.split('.').map(function(x){ return parseInt(x, 10) || 0; });
+      var n = 0, i;
+      for (i = 0; i < Math.min(parts.length, 4); i++) n = n * 1000 + parts[i];
+      return 2000000000000 + n;
+    }
+    var ms = Date.parse(v);
+    return isNaN(ms) ? 0 : ms;
   }
   function verNewer(a, b){ return verNum(a) > verNum(b); }
-  /** What we show in the UI: «۲٫۴۱» for numeric builds; legacy ISO still as a short date. */
+  /** UI label: «۲٫۴۳» for numeric; short date for legacy ISO. */
   function updLabel(v){
     v = String(v || '');
     if (/^\d+(\.\d+)*$/.test(v)){
@@ -7014,6 +7017,17 @@ if (typeof document !== 'undefined'){
     }
     var ms = Date.parse(v);
     return isNaN(ms) ? (v || 'نامشخص') : faDateTime(ms, 'Asia/Tehran', { weekday: undefined });
+  }
+  /** version.json may carry `release` (2.43) for the UI and `version` (ISO) so older clients' string compare still works. */
+  function updRemoteOf(v){
+    if (!v || typeof v !== 'object') return '';
+    return v.release || v.version || '';
+  }
+  function updIsNewer(remoteDoc, local){
+    if (!local || !remoteDoc) return false;
+    if (remoteDoc.release && verNewer(remoteDoc.release, local)) return true;
+    if (remoteDoc.version && verNewer(remoteDoc.version, local)) return true;
+    return false;
   }
   function drawUpd(){
     var s = upd.state, dot = $('updDot'), txt = $('updText');
@@ -7031,7 +7045,7 @@ if (typeof document !== 'undefined'){
       offline: ['', 'اینترنت وصل نیست؛ میزکار آفلاین کار می‌کند و وقتی وصل شوی دوباره بررسی می‌کند.']
     }[s] || ['', 'هنوز بررسی نشده.'];
     var newer = upd.changes.filter(function(c){ return APP_VERSION && verNewer(c.v, APP_VERSION); });
-    var older = upd.changes.filter(function(c){ return !(APP_VERSION && verNewer(c.v, APP_VERSION)); }).slice(0, 3);
+    var older = upd.changes.filter(function(c){ return !(APP_VERSION && verNewer(c.v, APP_VERSION)); }).slice(0, 5);
     var notes = function(list, fresh){
       return list.map(function(c){
         return '<div' + (fresh ? ' class="fresh"' : '') + '><h5>' + escapeHtml(updLabel(c.v)) + (fresh ? ' · تازه' : '') + '</h5><ul>'
@@ -7056,11 +7070,16 @@ if (typeof document !== 'undefined'){
     var was = upd.state;
     upd.state = 'checking';
     drawUpd();
-    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : Promise.reject(new Error(r.status)); }).then(function(v){
-      upd.remote = v.version || '';
+    var bust = Date.now();
+    // nudge the worker so a new sw.js can install; version.json itself bypasses the SW
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration){
+      navigator.serviceWorker.getRegistration().then(function(reg){ if (reg) reg.update(); }).catch(function(){});
+    }
+    fetch('version.json?t=' + bust, { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : Promise.reject(new Error(r.status)); }).then(function(v){
+      upd.remote = updRemoteOf(v);
       upd.changes = Array.isArray(v.changes) ? v.changes : [];
       upd.checkedAt = Date.now();
-      var newer = !!APP_VERSION && verNewer(upd.remote, APP_VERSION);
+      var newer = !!APP_VERSION && updIsNewer(v, APP_VERSION);
       upd.state = !newer ? 'latest' : was === 'ready' ? 'ready' : 'available';
       drawUpd();
       if (newer && was !== 'available' && was !== 'ready' && !manual) toast('نسخهٔ جدید میزکار منتشر شده', 'redo', { label: 'به‌روزرسانی', icon: 'redo', run: applyUpdate });
@@ -7070,27 +7089,31 @@ if (typeof document !== 'undefined'){
       drawUpd();
     });
   }
-  /** Puts the new page into the offline cache, then reloads; the saved texts and tabs are untouched. */
+  /** Drop offline caches + worker, then hard-reload so index.html and app.js both refresh (tabs/texts stay in storage). */
   function applyUpdate(){
     upd.state = 'downloading';
     drawUpd();
     saveState();
-    // ?v=… keeps an older offline worker from answering this with its own cached copy, and the fresh page goes
-    // into every cache that already holds one (the betas' caches are not named mizkar-*)
-    fetch('index.html?v=' + Date.now(), { cache: 'no-store' }).then(function(r){
-      if (!r.ok) throw new Error(r.status);
-      return (window.caches ? caches.keys() : Promise.resolve([])).then(function(keys){
-        return Promise.all(keys.map(function(k){
-          return caches.open(k).then(function(c){
-            return c.match('index.html').then(function(hit){ return hit ? c.put('index.html', r.clone()) : null; });
-          });
-        }));
-      });
+    var bust = Date.now();
+    function get(path){ return fetch(path + (path.indexOf('?') >= 0 ? '&' : '?') + 'v=' + bust, { cache: 'no-store' }); }
+    Promise.all([get('index.html'), get('app.js'), get('sw.js'), get('version.json')]).then(function(rs){
+      if (rs.some(function(r){ return !r.ok; })) throw new Error('bad');
+      var wipe = window.caches
+        ? caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+        : Promise.resolve();
+      var dropSw = (navigator.serviceWorker && navigator.serviceWorker.getRegistration)
+        ? navigator.serviceWorker.getRegistration().then(function(reg){ return reg ? reg.unregister() : null; })
+        : Promise.resolve();
+      return Promise.all([wipe, dropSw]);
     }).then(function(){
       upd.state = 'ready';
       drawUpd();
       toast('نسخهٔ جدید دریافت شد — صفحه تازه می‌شود…', 'check');
-      setTimeout(function(){ location.reload(); }, 700);
+      setTimeout(function(){
+        var u = new URL(location.href);
+        u.searchParams.set('_mz', String(bust));
+        location.replace(u.href);
+      }, 400);
     }).catch(function(){
       upd.state = 'error';
       upd.error = 'دریافت نسخهٔ جدید ممکن نشد؛ دوباره امتحان کن.';
@@ -7495,23 +7518,8 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
-  /* tint behind transparent glyphs; while a range is selected, hide tint and show real ink (RTL select otherwise doubles/jumps) */
-  'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);overflow-anchor:none;}',
-  'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  'body.ip-tint textarea#input::selection{color:transparent;-webkit-text-fill-color:transparent;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
-  'body.ip-tint textarea#input::-moz-selection{color:transparent;background:color-mix(in srgb,var(--accent) 38%,transparent);}',
-  'body.ip-tint.ip-has-sel textarea#input{color:var(--ink);-webkit-text-fill-color:var(--ink);}',
-  'body.ip-tint.ip-has-sel textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 38%,transparent);}',
-  'body.ip-tint.ip-has-sel textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 38%,transparent);}',
-  'body.ip-tint.ip-has-sel .ta-md{visibility:hidden;}',
-  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
-  '.ta-md[hidden]{display:none;}',
-  '.ta-md .mk-h{color:var(--accent);}',
-  '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
-  '.ta-md .mk-c{color:var(--tok-str,#047857);}',
-  '.ta-md .mk-l{color:var(--tok-fn,#0369a1);}',
-  '.ta-md .mk-t{color:#d97706;}',
-  '.ta-md .mk-fm{color:var(--muted);}',
+  /* ip-tint = phone chrome only (تمام). Markdown colour overlay removed: dual glyphs broke RTL select/jump. */
+  '.ta-md{display:none!important;}',
   'body.ip-on #zoomWrap li.task > .box{cursor:pointer;}',
   'body.ip-on #zoomWrap{cursor:text;}',
   '',
@@ -13628,7 +13636,6 @@ function nbCommitMessage(list){
     } else {
       ta.scrollTop = keepScroll;
     }
-    if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop;
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
@@ -13737,59 +13744,13 @@ function nbCommitMessage(list){
       return m;
     });
   }
-  function ipSelSync(){
-    if (!body.classList.contains('ip-tint') || document.activeElement !== ta){
-      if (body.classList.contains('ip-has-sel')) body.classList.remove('ip-has-sel');
-      return;
-    }
-    var has = ta.selectionStart !== ta.selectionEnd;
-    if (has !== body.classList.contains('ip-has-sel')) body.classList.toggle('ip-has-sel', has);
-  }
   function ipTint(){
+    /* Keep ip-tint for phone chrome; never draw the markdown overlay (it desynced wrap from the textarea). */
     var on = !!ipTab() && state.view === 'editor';
     body.classList.toggle('ip-tint', on);
-    if (!on){ body.classList.remove('ip-has-sel'); if (ip.md) ip.md.hidden = true; return; }
-    /* selecting: keep real glyphs only — rebuilding the overlay here was the scroll/colour jump */
-    if (ta.selectionStart !== ta.selectionEnd){
-      body.classList.add('ip-has-sel');
-      return;
-    }
     body.classList.remove('ip-has-sel');
-    if (!ip.md){
-      ip.md = document.createElement('div');
-      ip.md.className = 'ta-md';
-      ip.md.setAttribute('aria-hidden', 'true');
-      ta.parentNode.insertBefore(ip.md, ta);
-    }
-    var keepScroll = ta.scrollTop;
-    var cs = getComputedStyle(ta);
-    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-      'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'].forEach(function(k){ ip.md.style[k] = cs[k]; });
-    ip.md.style.top = ta.offsetTop + 'px'; ip.md.style.left = ta.offsetLeft + 'px';
-    ip.md.style.width = ta.clientWidth + 'px'; ip.md.style.height = ta.clientHeight + 'px';
-    var st = { fence: false, fm: false }, lines = ta.value.split('\n');
-    ip.md.innerHTML = lines.map(function(line, i){
-      if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
-      if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
-      var html = ipTintLine(line, st);
-      /* only fences get an LTR wrap — per-line dir on prose desyncs wrap from the textarea */
-      if (st.fence || /^\s*(```|~~~)/.test(line)) return '<span dir="ltr">' + html + '</span>';
-      return html;
-    }).join('\n') + '\n ';
-    ip.md.hidden = false;
-    ta.scrollTop = keepScroll;
-    ip.md.scrollTop = keepScroll;
+    if (ip.md){ ip.md.hidden = true; try { ip.md.remove(); } catch(e){} ip.md = null; }
   }
-  document.addEventListener('selectionchange', ipSelSync);
-  ta.addEventListener('keyup', ipSelSync);
-  ta.addEventListener('mouseup', ipSelSync);
-  ta.addEventListener('blur', function(){ body.classList.remove('ip-has-sel'); });
-  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } ipSelSync(); });
-  ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
-  if (window.ResizeObserver) new ResizeObserver(function(){
-    if (!body.classList.contains('ip-tint') || body.classList.contains('ip-has-sel')) return;
-    cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint);
-  }).observe(ta);
   /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
   function ipArm(){
     var t = ipTab();
