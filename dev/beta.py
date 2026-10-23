@@ -82,7 +82,7 @@ def main():
     (OUT / 'index.html').write_text(html, encoding='utf-8')
 
     sw = (DEV / 'sw.js').read_text(encoding='utf-8')
-    sw = once(sw, "var CACHE = 'mizkar-v3';", "var CACHE = 'mzbeta-v1';", 'sw cache')
+    sw = once(sw, "var CACHE = 'mizkar-v3';", "var CACHE = 'mzbeta-" + VERSION.replace(':', '').replace('-', '') + "';", 'sw cache')
     sw = once(sw, "/^mizkar-/.test(k)", "/^mzbeta-/.test(k)", 'sw cleanup')
     sw = once(sw, "SHARE_DB = 'mizkar'", "SHARE_DB = 'mizkar-beta'", 'sw share db')
     (OUT / 'sw.js').write_text(sw, encoding='utf-8')
