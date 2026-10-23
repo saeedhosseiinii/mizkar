@@ -7479,11 +7479,15 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
+  /* tint behind transparent glyphs; while selecting, hide tint and show real text so dblclick does not double/garble */
   'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}',
   'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  /* transparent fill breaks native word-select in WebKit; ::selection must force visible ink */
-  'body.ip-tint textarea#input::selection{color:var(--ink)!important;-webkit-text-fill-color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  'body.ip-tint textarea#input::-moz-selection{color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint textarea#input::selection{color:transparent;-webkit-text-fill-color:transparent;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint textarea#input::-moz-selection{color:transparent;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint.ip-has-sel textarea#input{color:var(--ink);-webkit-text-fill-color:var(--ink);}',
+  'body.ip-tint.ip-has-sel textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint.ip-has-sel textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint.ip-has-sel .ta-md{visibility:hidden;}',
   '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[hidden]{display:none;}',
   '.ta-md .mk-h{color:var(--accent);}',
@@ -13709,10 +13713,17 @@ function nbCommitMessage(list){
       return m;
     });
   }
+  function ipSelSync(){
+    if (!body.classList.contains('ip-tint') || document.activeElement !== ta){
+      body.classList.remove('ip-has-sel');
+      return;
+    }
+    body.classList.toggle('ip-has-sel', ta.selectionStart !== ta.selectionEnd);
+  }
   function ipTint(){
     var on = !!ipTab() && state.view === 'editor';
     body.classList.toggle('ip-tint', on);
-    if (!on){ if (ip.md) ip.md.hidden = true; return; }
+    if (!on){ body.classList.remove('ip-has-sel'); if (ip.md) ip.md.hidden = true; return; }
     if (!ip.md){
       ip.md = document.createElement('div');
       ip.md.className = 'ta-md';
@@ -13736,53 +13747,12 @@ function nbCommitMessage(list){
     ip.md.hidden = false;
     ip.md.scrollTop = ta.scrollTop;
   }
-  /** Word under offset: Latin / digits / Persian (incl. ZWNJ). */
-  function taWordAt(text, i){
-    var n = text.length;
-    if (!n) return [0, 0];
-    i = Math.max(0, Math.min(i | 0, n - 1));
-    function isW(ch){
-      return !!ch && /[A-Za-z0-9_\u00C0-\u024F\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u200c\u200d\uFB50-\uFDFF\uFE70-\uFEFF]/.test(ch);
-    }
-    if (!isW(text.charAt(i))){
-      if (i > 0 && isW(text.charAt(i - 1))) i--;
-      else return [i, i];
-    }
-    var a = i, b = i + 1;
-    while (a > 0 && isW(text.charAt(a - 1))) a--;
-    while (b < n && isW(text.charAt(b))) b++;
-    return [a, b];
-  }
-  function taSelectWordAt(at){
-    var w = taWordAt(ta.value, at);
-    if (w[1] <= w[0]) return false;
-    try {
-      ta.focus();
-      ta.setSelectionRange(w[0], w[1]);
-    } catch(e){ return false; }
-    return true;
-  }
-  /* native dblclick word-select is unreliable with transparent RTL text — do it ourselves */
-  ta.addEventListener('dblclick', function(){
-    if (state.view === 'preview') return;
-    var from = ta.selectionStart, to = ta.selectionEnd;
-    var at = from === to ? from : (from + ((to - from) >> 1));
-    setTimeout(function(){ taSelectWordAt(at); }, 0);
-  });
-  (function(){
-    var t0 = 0, p0 = -1;
-    ta.addEventListener('touchend', function(){
-      if (state.view === 'preview') return;
-      var now = Date.now(), pos = ta.selectionStart;
-      if (now - t0 < 420 && Math.abs(pos - p0) <= 2){
-        t0 = 0;
-        setTimeout(function(){ taSelectWordAt(pos); }, 0);
-        return;
-      }
-      t0 = now; p0 = pos;
-    }, { passive: true });
-  })();
-  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } });
+  /* selection: hide the tint layer so glyphs are not drawn twice (that was the «بهم‌ریختگی») */
+  document.addEventListener('selectionchange', ipSelSync);
+  ta.addEventListener('keyup', ipSelSync);
+  ta.addEventListener('mouseup', ipSelSync);
+  ta.addEventListener('blur', function(){ body.classList.remove('ip-has-sel'); });
+  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } ipSelSync(); });
   ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
   if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
   /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
