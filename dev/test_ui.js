@@ -648,6 +648,14 @@ async function until(fn, ms = 3000) {
   doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'e', code: 'KeyE', bubbles: true }));
   await sleep(30);
   ok('E edits too', viewOf() === 'editor', viewOf());
+  taEl.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, button: 0 }));
+  doc.querySelector('.mdbar') && doc.querySelector('.mdbar').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, button: 0 }));
+  ok('pressing inside the text or on its toolbar keeps editing', viewOf() === 'editor', viewOf());
+  doc.getElementById('inCard').dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, button: 0 }));
+  await sleep(30);
+  ok('pressing outside the text box goes back to reading', viewOf() === 'preview', viewOf());
+  doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'e', code: 'KeyE', bubbles: true }));
+  await sleep(30);
   taEl.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
   await sleep(30);
   const boxes = doc.querySelectorAll('#zoomWrap li.task > .box');
