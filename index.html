@@ -11280,6 +11280,9 @@ var NB_CSS = [
   '',
   '/* ================= §4 موبایل: حس اپ ================= */',
   '/* the pull-to-refresh hint */',
+  '.nb-pop-ver{                                                                 /* which build am I looking at? */',
+  '  margin:8px 0 0;font-size:.74rem;color:var(--muted);text-align:center;direction:ltr;',
+  '}',
   '.nb-pull-hint{',
   '  position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;',
   '  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px 6px;border-radius:99px;opacity:.85;',
@@ -16016,6 +16019,11 @@ function nbCommitMessage(list){
     t.name = nbTitle(path) + ' (بسته شد)';
     drawTabs();
   }
+  /** The build stamped into this page (see the shell's «بیشتر» for the phone). */
+  function nbBuildVersion(){
+    var m = document.querySelector('meta[name="app-version"]');
+    return m && m.content ? m.content : '?';
+  }
   function nbSyncPopHtml(){
     var rows = nbPendingRows();
     var n = nbCountDirty();
@@ -16031,7 +16039,8 @@ function nbCommitMessage(list){
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
       + '<button class="btn-primary sm" type="button" data-nb-pop="push">ارسال همه</button>'
       + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>';
+      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>'
+      + '<p class="nb-pop-ver">نسخه: ' + escapeHtml(nbBuildVersion()) + '</p>';
   }
   function nbSyncPopWire(){
     var m = $('nbSyncPop');
@@ -16744,6 +16753,11 @@ function nbCommitMessage(list){
     var again = function(){ try{ location.reload(); }catch(e){} };
     Promise.all([workersGone, cachesGone]).then(again, again);
   }
+  /** The build stamped into this page — the fastest way to tell an old copy from a fresh one. */
+  function nbBuild(){
+    var m = document.querySelector('meta[name="app-version"]');
+    return m && m.content ? m.content : 'نامعلوم';
+  }
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
@@ -16760,7 +16774,10 @@ function nbCommitMessage(list){
       null,
       { label: 'تازه سازی کامل (پاک کردن کش)', act: nbHardRefresh },
       { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
-      { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } }
+      { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } },
+      null,
+      // which build is this phone actually running? (it answers «why don't I see the new version»)
+      { label: 'نسخهٔ میزکار: ' + nbBuild(), act: function(){ var b = $('btnUpd'); if (b) b.click(); } }
     ];
   }
   var nbShellSync = (function(){

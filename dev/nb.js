@@ -4130,6 +4130,11 @@ function nbCommitMessage(list){
     t.name = nbTitle(path) + ' (بسته شد)';
     drawTabs();
   }
+  /** The build stamped into this page (see the shell's «بیشتر» for the phone). */
+  function nbBuildVersion(){
+    var m = document.querySelector('meta[name="app-version"]');
+    return m && m.content ? m.content : '?';
+  }
   function nbSyncPopHtml(){
     var rows = nbPendingRows();
     var n = nbCountDirty();
@@ -4145,7 +4150,8 @@ function nbCommitMessage(list){
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
       + '<button class="btn-primary sm" type="button" data-nb-pop="push">ارسال همه</button>'
       + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>';
+      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>'
+      + '<p class="nb-pop-ver">نسخه: ' + escapeHtml(nbBuildVersion()) + '</p>';
   }
   function nbSyncPopWire(){
     var m = $('nbSyncPop');

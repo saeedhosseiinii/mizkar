@@ -25,6 +25,11 @@
     var again = function(){ try{ location.reload(); }catch(e){} };
     Promise.all([workersGone, cachesGone]).then(again, again);
   }
+  /** The build stamped into this page — the fastest way to tell an old copy from a fresh one. */
+  function nbBuild(){
+    var m = document.querySelector('meta[name="app-version"]');
+    return m && m.content ? m.content : 'نامعلوم';
+  }
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
@@ -41,7 +46,10 @@
       null,
       { label: 'تازه سازی کامل (پاک کردن کش)', act: nbHardRefresh },
       { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
-      { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } }
+      { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } },
+      null,
+      // which build is this phone actually running? (it answers «why don't I see the new version»)
+      { label: 'نسخهٔ میزکار: ' + nbBuild(), act: function(){ var b = $('btnUpd'); if (b) b.click(); } }
     ];
   }
   var nbShellSync = (function(){

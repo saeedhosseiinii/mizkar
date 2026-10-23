@@ -2065,6 +2065,17 @@ async function until(fn, ms = 3000) {
   dueField.selectionStart = dueField.selectionEnd = plainNow + 2;
   eq('a long press on ordinary text stays with the browser', nb.ui.longPressAt(60, 60, dueField), false);
 
+  console.log('\n— the phone can say which build it is —');
+  const build = (doc.querySelector('meta[name="app-version"]') || {}).content;
+  ok('the app carries a build stamp', !!build, build);
+  doc.querySelector('#nbNav [data-nb-nav="more"]').click();
+  await sleep(60);
+  ok('the «بیشتر» menu shows it', doc.getElementById('nbMenu').textContent.indexOf('نسخهٔ میزکار: ' + build) > -1);
+  doc.getElementById('nbMenu').hidden = true;
+  doc.getElementById('nbSync').click();
+  await sleep(60);
+  ok('and the sync popover shows it too', doc.getElementById('nbSyncPop').textContent.indexOf('نسخه: ' + build) > -1);
+
   console.log('\n— the worker asks the network for the page first —');
   const swSrc = fs.readFileSync(require('path').join(require('path').dirname(HTML), 'sw.js'), 'utf8');
   ok('a navigation goes to the network (with the saved copy as the fallback, not the other way round)',

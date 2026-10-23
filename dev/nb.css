@@ -212,6 +212,9 @@ body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]
 
 /* ================= §4 موبایل: حس اپ ================= */
 /* the pull-to-refresh hint */
+.nb-pop-ver{                                                                 /* which build am I looking at? */
+  margin:8px 0 0;font-size:.74rem;color:var(--muted);text-align:center;direction:ltr;
+}
 .nb-pull-hint{
   position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;
   background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px 6px;border-radius:99px;opacity:.85;
