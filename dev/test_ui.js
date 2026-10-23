@@ -2065,6 +2065,25 @@ async function until(fn, ms = 3000) {
   dueField.selectionStart = dueField.selectionEnd = plainNow + 2;
   eq('a long press on ordinary text stays with the browser', nb.ui.longPressAt(60, 60, dueField), false);
 
+  console.log('\n— two taps on the text (even a slow pair) go into the editor —');
+  nb.ui.open('عنوانها/ب.md');
+  await sleep(60);
+  nb.ui.sidebar(false);
+  await sleep(40);
+  const tapTarget = doc.querySelector('#zoomWrap p') || doc.querySelector('#zoomWrap h1');
+  ok('there is text to tap', !!tapTarget);
+  if (tapTarget){
+    if (doc.getElementById('work').dataset.view !== 'preview') doc.querySelector('#nbTop [data-nb-top="edit"]').click();
+    await sleep(60);
+    tapTarget.dispatchEvent(tev('touchstart', 120, 300));
+    await sleep(520);                                     // a deliberate pair, not a quick double tap
+    tapTarget.dispatchEvent(tev('touchstart', 124, 303));
+    await sleep(100);
+    ok('the second tap opened the editor', doc.getElementById('work').dataset.view !== 'preview', doc.getElementById('work').dataset.view);
+    if (doc.getElementById('work').dataset.view !== 'preview') doc.querySelector('#nbTop [data-nb-top="edit"]').click();
+    await sleep(60);
+  }
+
   console.log('\n— the phone can say which build it is —');
   const build = (doc.querySelector('meta[name="app-version"]') || {}).content;
   ok('the app carries a build stamp', !!build, build);

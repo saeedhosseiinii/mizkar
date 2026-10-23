@@ -4592,12 +4592,12 @@ function nbCommitMessage(list){
   (function(){
     var last = 0, lx = 0, ly = 0, done = 0;
     document.addEventListener('touchstart', function(e){
-      if (!(window.matchMedia && matchMedia('(max-width: 760px)').matches)) return;
+      if (!('ontouchstart' in window) && !(window.matchMedia && matchMedia('(max-width: 760px)').matches)) return;
       if (e.touches.length !== 1) return;
       var t = e.target;
       if (!t || !t.closest || t.closest('a,button,input,textarea,[contenteditable],.mdbar,.status,#nbTop,#nbNav,#nbMenu,#nb,#m3Fab,[data-ui],.mdc')) return;
       var now = Date.now(), x = e.touches[0].clientX, y = e.touches[0].clientY;
-      var twice = now - last < 360 && Math.abs(x - lx) < 28 && Math.abs(y - ly) < 28;
+      var twice = now - last < 750 && Math.abs(x - lx) < 40 && Math.abs(y - ly) < 40;
       last = now; lx = x; ly = y;
       if (!twice || now < done) return;
       done = now + 900;
