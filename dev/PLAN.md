@@ -3,6 +3,17 @@
 This plan is for the model that implements the next round on the `notebook` branch. Read `dev/README.md`
 first: it explains the build (`dev/apply.py`), the beta (`dev/beta.py`) and the tests.
 
+## Status (2026-10-23)
+
+Done and on the beta: §1–§8 (with the review fixes), §9 Gist sharing, §10 the new shell (phone ≤ 760 pages with
+a bottom bar and a note top bar, tablet 761–1099 panel over the page, desktop ≥ 1100 panel beside it; one layer
+list `NB_LAYERS` for Esc/Back/shortcuts; settings as a page — `shell.js`, `shell.css`, the settings code in `nb.js`).
+Also: trash («سطل بازیافت»), the front-matter form («ویژگی‌ها»), «جایگزینی با نسخهٔ مخزن», sync on reconnect,
+the first send to an empty repository, and the branch hint in «آزمایش اتصال».
+
+Still open: dropping a note link at the exact drop point in the editor (a textarea gives no caret from a point),
+attachments following a folder merge, and a look at every screen on a real phone (the tests have no layout).
+
 ## Ground rules
 
 - **Never edit `index.html` by hand.** Change `dev/*.js|css|html` and rebuild with `python3 dev/apply.py`.
@@ -240,7 +251,7 @@ only ciphertext for the two encrypted modes; «اشتراک‌ها» lists all t
 link shows, and «برداشتن» makes the link say it was removed. Tests: the fake GitHub in `dev/test_ui.js` gets
 `/gists` (create, list, patch, delete, get); the crypto round-trip and the link parsing go in `dev/test_nb.js`.
 
-## 10. A mobile-first app shell (proposed — starts only after the user says go)
+## 10. A mobile-first app shell (done — see Status)
 
 **Why:** the shell grew from a desktop page by patches. Today there are 7 different width breakpoints (600, 640,
 700, 760, 900, 1099, 1100), 8+ separate overlay systems (`.pop`, `.ctx-menu`, `#nbMenu`, `#nbMini`, `#nbMini2`,
