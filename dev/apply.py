@@ -161,6 +161,14 @@ PATCHES = [
         "tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: t.nb || undefined, secret: !!t.secret, undo: [], redo: [] }; });",
         "restore nb (IndexedDB)",
     ),
+    # the app's tab menu gains the notebook's own entries (dev/nb.js publishes nbTabMenuItems)
+    (
+        """if (closedTabs.length) items.push(null, ['undo', 'بازگرداندن آخرین تب بسته‌شده', '', reopenTab]);
+""",
+        """if (closedTabs.length) items.push(null, ['undo', 'بازگرداندن آخرین تب بسته‌شده', '', reopenTab]);
+    if (typeof nbTabMenuItems === 'function') items = items.concat(nbTabMenuItems(t));\n""",
+        "tab menu items",
+    ),
 ]
 
 

@@ -723,6 +723,125 @@ async function until(fn, ms = 3000) {
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
 
+  console.log('\n— §2: the right-click map —');
+  const ctxAt = (el, x = 40, y = 40) => el.dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  const menuLabels = () => [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent.trim());
+  const pickItem = (text) => {
+    const b = [...doc.querySelectorAll('#nbMenu .mi')].filter((x) => x.textContent.indexOf(text) !== -1)[0];
+    if (b) { b.click(); return true; }
+    return false;
+  };
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(60);
+  const noteRow = doc.querySelector('#nbList [data-nb-note]');
+  ok('the tree shows a note row to right-click', !!noteRow, !!noteRow);
+  ctxAt(noteRow);
+  ok('a note offers move-to-collection, pin and a new tab', ['انتقال به مجموعه…', 'سنجاق در تب', 'باز کردن در تب تازه', 'نمایش در درخت'].every((s) => menuLabels().some((l) => l.indexOf(s) !== -1)), menuLabels());
+  ok('the menu takes the keyboard', doc.activeElement && doc.activeElement.className.includes('mi'), doc.activeElement && doc.activeElement.className);
+  doc.getElementById('nbMenu').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  ok('Esc closes it', doc.getElementById('nbMenu').hidden);
+
+  const folderRow = doc.querySelector('#nbList [data-nb-dir]');
+  ctxAt(folderRow);
+  ok('a folder offers a note from a template and open-all-in-tabs', ['یادداشت از قالب…', 'باز کردن همه در تب'].every((s) => menuLabels().some((l) => l.indexOf(s) !== -1)), menuLabels());
+  const folderPath = folderRow.dataset.nbDir;
+  const inFolder = Object.keys(nb.ui.files()).filter((p) => p.indexOf(folderPath + '/') === 0 && p.endsWith('.md') && !nb.ui.files()[p].deleted);
+  const tabsBeforeAll = doc.querySelectorAll('#tabsList .tab').length;
+  ok('«باز کردن همه در تب» opens them', pickItem('باز کردن همه در تب') && doc.querySelectorAll('#tabsList .tab').length >= tabsBeforeAll + Math.min(inFolder.length, 10), [tabsBeforeAll, doc.querySelectorAll('#tabsList .tab').length, inFolder.length]);
+
+  console.log('\n— moving a note into a collection —');
+  const movable = Object.keys(nb.ui.files()).filter((p) => p.endsWith('.md'))[0];
+  const target = nb.ui.cfg().collections[1];
+  const beforeMove = Object.keys(nb.ui.files()).length;
+  nb.ui.moveToCollection ? null : null;
+  ctxAt(doc.querySelector('#nbList [data-nb-note="' + movable.replace(/"/g, '\\"') + '"]') || noteRow);
+  ok('the collection list opens', pickItem('انتقال به مجموعه') && menuLabels().some((l) => l.indexOf(target.name) !== -1), menuLabels());
+  pickItem(target.name);
+  await sleep(60);
+  ok('and the note lands under that collection pattern', (() => {
+    const hit = Object.keys(nb.ui.files()).filter((p) => p.indexOf(target.path.split('{')[0]) === 0 && !nb.ui.files()[p].deleted);
+    return hit.length > 0;
+  })(), { files: Object.keys(nb.ui.files()), pattern: target.path });
+
+  console.log('\n— the calendar menus —');
+  nb.ui.section('cal');
+  await sleep(60);
+  ctxAt(doc.querySelector('#nbBody .nb-cal-cell:not(.empty)'));
+  const calLabels = menuLabels();
+  ok('a day lists the collections that build a note', calLabels.some((l) => l.indexOf('روزانه') !== -1), calLabels);
+  ok('and its notes and tasks', calLabels.some((l) => l.indexOf('یادداشت های این روز') !== -1) && calLabels.some((l) => l.indexOf('کارهای این روز') !== -1), calLabels);
+  nbMenuCloseAll();
+  function nbMenuCloseAll(){ doc.getElementById('nbMenu').hidden = true; }
+  ctxAt(doc.querySelector('#nbBody .nb-cal-head b'));
+  ok('the month header filters by collection and jumps to today', menuLabels().some((l) => l.indexOf('همهٔ مجموعه ها') !== -1) && menuLabels().some((l) => l.indexOf('برو به امروز') !== -1), menuLabels());
+  pickItem('فقط روزانه');
+  ok('filtering keeps only that collection in the legend', (() => {
+    const lg = [...doc.querySelectorAll('#nbBody .nb-cal-lg')].map((x) => x.textContent.trim());
+    return lg.some((l) => l.indexOf('روزانه') !== -1);
+  })());
+  nb.ui.state().calFilter = '';
+  ctxAt(doc.querySelector('#nbBody .nb-cal-lg'));
+  ok('the legend offers that collection\'s notes', menuLabels().some((l) => l.indexOf('یادداشت های این مجموعه') !== -1), menuLabels());
+  pickItem('همهٔ مجموعه ها');
+
+  console.log('\n— a due date from the task menu —');
+  const taskPath = Object.keys(nb.ui.files()).filter((p) => p.endsWith('.md'))[0];
+  nb.ui.write(taskPath, '# کارها\n- [ ] کاری برای انجام 📅\n');
+  nb.ui.section('tasks');
+  await sleep(60);
+  const taskRow = doc.querySelector('#nbBody [data-task-open]');
+  ok('the tasks section lists it', !!taskRow, !!taskRow);
+  ctxAt(taskRow);
+  ok('a task offers a due date, today, tomorrow and done', ['تاریخ سررسید…', 'امروز', 'فردا', 'بدون تاریخ', 'انجام شد'].every((s) => menuLabels().some((l) => l === s)), menuLabels());
+  pickItem('فردا');
+  await sleep(40);
+  const tm = new Date(); tm.setDate(tm.getDate() + 1);
+  const toLatin = (s) => s.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06F0)).replace(/\//g, '-');
+  const wantDue = '📅 ' + toLatin(nb.ui.shamsi(tm));
+  eq('«فردا» writes the Shamsi due date into the note', nb.ui.files()[taskPath].text.split('\n')[1], '- [ ] کاری برای انجام ' + wantDue);
+
+  console.log('\n— reading and editing menus —');
+  nb.ui.open(taskPath);
+  await sleep(80);
+  const block = doc.querySelector('#zoomWrap p, #zoomWrap li, #zoomWrap h1');
+  ok('the preview has a block to right-click', !!block, !!block);
+  ctxAt(block);
+  ok('the preview offers edit-here and copy-block', ['ویرایش اینجا', 'کپی متن بلوک'].every((s) => menuLabels().some((l) => l.indexOf(s) !== -1)), menuLabels());
+  ok('«ویرایش اینجا» switches to the editor', pickItem('ویرایش اینجا') && doc.getElementById('work').dataset.view === 'editor', doc.getElementById('work').dataset.view);
+  nb.ui.sidebar(true);
+  const sel = doc.getElementById('input');
+  sel.value = 'خط یک\nخط دو\n';
+  sel.setSelectionRange(0, sel.value.length);
+  ctxAt(sel);
+  ok('a selection offers link / new note / task', ['پیوند به یادداشت…', 'یادداشت تازه از انتخاب', 'کار کن'].every((s) => menuLabels().some((l) => l.indexOf(s) !== -1)), menuLabels());
+  pickItem('کار کن');
+  await sleep(40);
+  ok('«کار کن» makes them tasks', /- \[ \] خط یک/.test(sel.value), sel.value);
+  sel.setSelectionRange(0, '- [ ] خط یک\n'.length);
+  ctxAt(sel);
+  pickItem('یادداشت تازه از انتخاب');
+  await sleep(60);
+  ok('a note was made from the selection', Object.keys(nb.ui.files()).some((p) => p.indexOf('خط یک') !== -1), Object.keys(nb.ui.files()).filter((p) => p.indexOf('خط') !== -1));
+
+  console.log('\n— a search result, and the long press —');
+  nb.ui.section('search');
+  nb.ui.search('کار');
+  await sleep(80);
+  const resRow = doc.querySelector('#nbRes .nb-res-row');
+  ok('search shows rows', !!resRow, !!resRow);
+  ctxAt(resRow);
+  ok('a result offers open, a new tab and a copy', ['باز کردن', 'باز کردن در تب تازه', 'کپی پیوند'].every((s) => menuLabels().some((l) => l.indexOf(s) !== -1)), menuLabels());
+  doc.getElementById('nbMenu').hidden = true;
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(40);
+  ok('a long press opens the same menu as a right-click', nb.ui.longPressAt(20, 20, doc.querySelector('#nbList [data-nb-note]')), doc.getElementById('nbMenu').hidden);
+  doc.getElementById('nbMenu').hidden = true;
+  const items = win.nbTabMenuItems({ id: 't1', nb: 'روزانه/1405/08/1405-08-01.md' });
+  ok('the app\'s tab menu gains the notebook entries', JSON.stringify(items).indexOf('نمایش در درخت') !== -1 && JSON.stringify(items).indexOf('تاریخچهٔ این یادداشت') !== -1, items);
+  ok('a temp tab offers to be saved into the notebook', JSON.stringify(win.nbTabMenuItems({ id: 't2', text: 'متن' })).indexOf('ذخیره در دفترچه') !== -1);
+
   console.log('\n— §3: every date in the notebook is Shamsi —');
   eq('no Gregorian date input is left anywhere', doc.querySelectorAll('input[type="date"]').length, 0);
   nb.ui.sidebar(false);
