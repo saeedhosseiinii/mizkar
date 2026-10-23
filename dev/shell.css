@@ -1,0 +1,194 @@
+/* === SHELL (shell.js): one layout per size — phone ≤ 760, tablet 761–1099, desktop ≥ 1100 ===
+   The layers stack in this one order; nothing else in the notebook sets a z-index for a layer. */
+:root{
+  --z-panel-docked:25; --z-backdrop:205; --z-panel:210; --z-nav:215;
+  --z-settings:410; --z-dialog:420; --z-suggest:425; --z-menu:430; --z-ghost:440; --z-toast:450;
+  --nb-nav-h:0px;
+}
+.toast{ z-index:var(--z-toast); }
+#nbModal{ z-index:var(--z-settings); }
+#nbMini, #nbMini2, #nbSyncPop{ z-index:var(--z-dialog); }
+#nbSyncPop:not([hidden]){ display:block; }          /* the app's .pop shows only with .open; this one goes by hidden */
+#nbSyncPop{ position:fixed; width:min(380px, calc(100vw - 16px)); max-height:min(70dvh, 560px); overflow:auto; }
+.nb-sug{ z-index:var(--z-suggest); }
+#nbMenu{ z-index:var(--z-menu); }
+.nb-drag-ghost{ z-index:var(--z-ghost); }
+.nb-rtl-back{ transform:rotate(-90deg); }           /* the chevron points down; «back» in a right-to-left page points right */
+#nbNav, #nbTop{ display:none; }
+
+/* --- the panel --- */
+#nb{
+  position:fixed; z-index:var(--z-panel); top:var(--nb-top, 96px); bottom:var(--nb-bottom, 28px); right:0;
+  width:var(--nb-w, 340px); max-width:92vw; display:flex; flex-direction:column; overflow:hidden;
+  background:var(--surface); border-left:1px solid var(--border); box-shadow:-18px 0 40px -24px rgba(15,23,42,.35);
+  transition:transform .22s ease, visibility 0s;
+}
+body:not(.nb-open) #nb{ transform:translateX(102%); visibility:hidden; transition:transform .22s ease, visibility 0s .22s; }
+#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; z-index:2; }
+#nbBack{ position:fixed; inset:0; z-index:var(--z-backdrop); background:rgba(6,10,18,.42); opacity:0; pointer-events:none; transition:opacity .2s ease; }
+body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
+#btnNotebook[aria-pressed="true"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
+
+/* desktop: beside the page, under every popover and dialog */
+@media (min-width:1100px){
+  #nbBack{ display:none; }
+  #nb{ z-index:var(--z-panel-docked); box-shadow:none; }
+  body.nb-open .work{ margin-right:var(--nb-w, 340px); }        /* the panel is on the right; inline-end would be the left in RTL */
+}
+/* tablet: over the page, the whole height */
+@media (min-width:761px) and (max-width:1099px){
+  #nb{ top:0; bottom:0; width:min(400px, 88vw); border-radius:16px 0 0 16px; }
+  #nb .nb-grip{ display:none; }
+}
+
+/* --- phone: pages, a bottom bar, a note top bar, sheets --- */
+@media (max-width:760px){
+  html, body{ height:100dvh; }
+  body.app{ height:100dvh !important; overflow:hidden !important; box-sizing:border-box; }
+  body.nb-nav-on{ --nb-nav-h:56px; padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important; }
+  /* typing: the bottom bar steps aside for the keyboard and the Markdown toolbar */
+  body.nb-nav-on.ip-tint, body.nb-nav-on:has(textarea#input:focus){ --nb-nav-h:0px; }
+  body.ip-tint #nbNav, body:has(textarea#input:focus) #nbNav{ display:none !important; }
+
+  /* the page: one column filling the space between the top bar and the bottom bar */
+  .tabs, .status, #btnNotebook{ display:none !important; }
+  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{
+    display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:minmax(0,1fr) !important;
+    gap:0 !important; padding:0 !important; flex:1; min-height:0;
+  }
+  body.nb-nav-on .divider{ display:none !important; }
+  body.nb-nav-on .pane{ height:auto !important; border-radius:0; border-inline:0; box-shadow:none; }
+  body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }
+  .preview, #nbList, #nbBody, textarea#input{ overscroll-behavior:contain; }
+
+  /* the top bar: one row; its popovers come up from the bottom */
+  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; padding:6px 10px; position:relative;
+    backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--surface); }
+  body.ui-calm .brand-name{ display:none; }
+  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }
+  body.ui-calm .bar .pop{ position:fixed; top:auto !important; left:8px !important; right:8px !important; width:auto !important; min-width:0;
+    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)); max-height:70dvh; overflow:auto; }
+
+  /* a note is a page: its own top bar instead of the app's */
+  body.nb-note-page .bar{ display:none !important; }
+  body.nb-note-page #nbTop{ display:flex; }
+  #nbTop{
+    flex:none; position:relative; z-index:30; align-items:center; gap:2px; min-height:52px;
+    padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);
+  }
+  #nbTop .ib{ min-width:44px; min-height:44px; }
+  .nb-top-t{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.02rem; padding-inline:4px; }
+  .nb-top-sync{ border:0; background:none; width:36px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .nb-top-sync i{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .nb-top-sync.nb-ok i{ background:#16a34a; }
+  .nb-top-sync.nb-pending i{ background:var(--accent); }
+  .nb-top-sync.nb-busy i{ background:#f59e0b; animation:nb-pulse 1s infinite; }
+  .nb-top-sync.nb-conflict i, .nb-top-sync.nb-error i{ background:#dc2626; }
+  #nbTop [data-nb-top="edit"][aria-pressed="true"]{ color:var(--accent); }
+
+  /* the panel is a page */
+  #nb{
+    top:0 !important; bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important; left:0; right:0;
+    width:auto !important; max-width:none; border:0; border-radius:0; box-shadow:none; transform:none !important; transition:none;
+    padding-top:env(safe-area-inset-top, 0px);
+  }
+  body:not(.nb-open) #nb{ display:none; }
+  #nbBack, #nb .nb-grip, #nbClose, #nb .nb-tabs{ display:none !important; }
+  #nb .nb-head{ min-height:52px; padding:6px 10px 6px 6px; background:var(--surface); }
+  #nb .nb-head .nb-h-title{ font-size:1.08rem; }
+  #nb .nb-head .ib.sm{ min-width:44px; min-height:44px; }
+  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }
+  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:40px; }
+  .nb-row-acts, .nb-act, .nb-note-acts, .nb-hist-btns{ opacity:1 !important; }
+
+  /* the bottom bar */
+  #nbNav{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:var(--z-nav);
+    height:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); padding-bottom:env(safe-area-inset-bottom, 0px);
+    background:var(--surface); border-top:1px solid var(--border); align-items:stretch; justify-content:space-around;
+  }
+  .nb-nav-b{
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    border:0; background:none; color:var(--muted); font:inherit; font-size:.68rem; font-weight:600; cursor:pointer; padding:6px 2px;
+  }
+  .nb-nav-b .i{ width:22px; height:22px; }
+  .nb-nav-b[aria-pressed="true"]{ color:var(--accent); }
+  .nb-nav-b[aria-pressed="true"] .i{ background:color-mix(in srgb, var(--accent) 14%, transparent); border-radius:99px; padding:2px 14px; width:52px; box-sizing:border-box; }
+
+  /* every layer is a sheet from the bottom, above the bottom bar */
+  #nbMenu{
+    left:8px !important; right:8px !important; top:auto !important; min-width:0;
+    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)) !important; max-height:70dvh; border-radius:16px; padding:6px;
+  }
+  #nbMenu .mi{ min-height:46px; font-size:.95rem; }
+  #nbSyncPop{ left:8px !important; right:8px !important; top:auto !important; width:auto;
+    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)) !important; }
+  #nbMini, #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); transition:padding .15s; }
+  #nbMini .modal-box, #nbMini2 .modal-box{
+    width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:calc(100dvh - var(--nb-kb, 0px) - 12px);
+    animation:nb-sheet .2s cubic-bezier(.2,.9,.3,1.1);
+  }
+  #nbMini .nb-mini-body{ max-height:46vh; }
+  .nb-sug{ max-height:34vh; }
+  .toast{ bottom:calc(var(--nb-nav-h) + 12px + env(safe-area-inset-bottom, 0px)); }
+
+  /* the Markdown toolbar sits on the keyboard (or on the bottom bar) */
+  .pane.editor .mdbar{
+    position:fixed; left:0; right:0; z-index:var(--z-nav);
+    bottom:calc(var(--nb-kb, 0px) + var(--nb-nav-h) + env(safe-area-inset-bottom, 0px));
+    background:var(--surface); border-top:1px solid var(--border); border-bottom:0; padding:6px 8px;
+    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);
+  }
+  .mdbar .mdb{ min-width:36px; min-height:36px; }
+  textarea#input{ padding-bottom:64px; font-size:16px; }     /* 16px: the phone does not zoom into the field */
+  .nb-input, #nbBody input, #nbBody select{ font-size:16px; }
+
+  /* what has no use without a mouse */
+  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],
+  [data-action="present"], [data-action="fs"], #btnOutline, .split{ display:none !important; }
+}
+
+/* --- the settings page --- */
+#nbModal .nb-set-box{ width:min(940px, 100%) !important; height:min(680px, calc(100dvh - 40px)); display:flex; flex-direction:column; }
+.nb-set-main{ flex:1; min-height:0; display:grid; grid-template-columns:250px minmax(0,1fr); }
+.nb-set-nav{ overflow:auto; padding:8px; background:var(--surface-2); border-left:1px solid var(--border); }
+.nb-set-item{
+  display:flex; gap:10px; align-items:center; width:100%; text-align:start; padding:10px; border:0; background:none;
+  border-radius:12px; cursor:pointer; color:var(--ink); font:inherit;
+}
+.nb-set-item:hover{ background:var(--soft); }
+.nb-set-item .i{ flex:none; color:var(--muted); }
+.nb-set-item b{ display:block; font-size:.88rem; }
+.nb-set-item small{ display:block; color:var(--muted); font-size:.7rem; }
+.nb-set-item[aria-current="page"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); }
+.nb-set-item[aria-current="page"] .i, .nb-set-item[aria-current="page"] b{ color:var(--accent); }
+#nbModal .nb-set-body{ overflow:auto; padding:16px 20px 24px; max-height:none; }
+.nb-set-body h5{ margin:18px 0 8px; font-size:.78rem; color:var(--muted); }
+.nb-set-body .sw{ margin-block:6px; }
+.nb-set-back{ display:none !important; }
+.nb-steps{ margin:4px 0 10px; padding-inline-start:20px; font-size:.82rem; line-height:2; color:var(--ink-2); }
+.nb-seg{ display:inline-flex; }
+.nb-seg button[aria-pressed="true"]{ background:var(--accent); color:#fff; }
+.nb-set-app .pop-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; flex-wrap:wrap; }
+@media (max-width:760px){
+  #nbModal{ padding:0; align-items:stretch; }
+  #nbModal .nb-set-box{ width:100% !important; max-width:none; height:100dvh; max-height:none; border-radius:0; }
+  .nb-set-main{ grid-template-columns:minmax(0,1fr); }
+  .nb-set-nav{ border:0; background:none; padding:6px 8px; }
+  .nb-set-item{ min-height:58px; }
+  #nbModal:not(.nb-set-in) .nb-set-body{ display:none; }
+  #nbModal.nb-set-in .nb-set-nav{ display:none; }
+  #nbModal.nb-set-in .nb-set-back{ display:inline-flex !important; min-width:44px; min-height:44px; }
+  #nbModal .nb-set-body{ padding:12px 14px 32px; }
+}
+
+/* --- reading mode, the slides and print show the page alone --- */
+body.readmode #nb, body.readmode #nbNav, body.readmode #nbBack, body.readmode #nbTop,
+body:has(#deck:not([hidden])) #nb, body:has(#deck:not([hidden])) #nbNav,
+body:has(#deck:not([hidden])) #nbBack, body:has(#deck:not([hidden])) #nbTop{ display:none !important; }
+body.readmode .work{ margin-right:0 !important; }
+@media print{
+  #nb, #nbNav, #nbTop, #nbBack, #nbMenu, #nbMini, #nbMini2, #nbModal, #nbSyncPop, .nb-drag-ghost, .ta-md{ display:none !important; }
+  .work{ margin-right:0 !important; }
+  body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }
+}

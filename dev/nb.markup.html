@@ -10,10 +10,11 @@
 <aside id="nb" aria-label="دفترچه">
   <div class="nb-grip" id="nbGrip" title="کشیدن: تغییر عرض نوار"></div>
   <div class="nb-head">
-    <span class="nb-h-title"><svg class="i"><use href="#i-tree"/></svg>دفترچه</span>
+    <span class="nb-h-title"><svg class="i"><use href="#i-tree"/></svg><span id="nbHeadTitle">دفترچه</span></span>
     <span class="nb-h-sp"></span>
-    <button class="ib sm" type="button" data-action="nb-today" title="یادداشت امروز" aria-label="یادداشت امروز"><svg class="i"><use href="#i-clock"/></svg></button>
-    <button class="ib sm" type="button" data-action="nb-settings" title="تنظیمات دفترچه" aria-label="تنظیمات دفترچه"><svg class="i"><use href="#i-sliders"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-new" title="یادداشت تازه" aria-label="یادداشت تازه"><svg class="i"><use href="#i-plus"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-today" title="یادداشت امروز" aria-label="یادداشت امروز"><svg class="i"><use href="#i-sun"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-settings" title="تنظیمات" aria-label="تنظیمات"><svg class="i"><use href="#i-sliders"/></svg></button>
     <button class="ib sm" type="button" id="nbClose" title="بستن" aria-label="بستن"><svg class="i"><use href="#i-x"/></svg></button>
   </div>
   <div class="nb-body" id="nbBody"></div>
@@ -21,12 +22,16 @@
 <div id="nbMenu" hidden role="menu" aria-label="گزینه ها"></div>
 <div class="modal" id="nbMini" hidden></div>
 <div class="modal" id="nbMini2" hidden></div>
-<div class="modal" id="nbModal" hidden>
-  <div class="modal-box" role="dialog" aria-modal="true" aria-label="دفترچه روی گیت هاب" style="width:min(780px,100%)">
+<div class="modal nb-set" id="nbModal" hidden>
+  <div class="modal-box nb-set-box" role="dialog" aria-modal="true" aria-label="تنظیمات">
     <div class="modal-head">
-      <span class="ph-title"><svg class="i"><use href="#i-cloud"/></svg>دفترچه روی گیت هاب</span>
+      <button class="ib sm nb-set-back" type="button" data-nb-set-back aria-label="همهٔ تنظیمات"><svg class="i nb-rtl-back"><use href="#i-chev"/></svg></button>
+      <span class="ph-title"><svg class="i"><use href="#i-sliders"/></svg><span id="nbSetTitle">تنظیمات</span></span>
       <button class="ib sm" type="button" data-action="nb-close" aria-label="بستن" style="margin-inline-start:auto"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
-    <div class="modal-body" id="nbModalBody"></div>
+    <div class="nb-set-main">
+      <nav class="nb-set-nav" id="nbSetNav" aria-label="بخش های تنظیمات"></nav>
+      <div class="modal-body nb-set-body" id="nbModalBody"></div>
+    </div>
   </div>
 </div>

@@ -1108,6 +1108,7 @@ function nbCommitMessage(list){
     var f = NB.files[path];
     if (!f){ toast('این یادداشت پیدا نشد', 'x'); return; }
     if (f.deleted){ toast('این یادداشت حذف شده', 'x'); return; }
+    nbPhoneLeavePanel();
     if (f.enc && f.plain == null){
       nbEnsurePlain(path).then(function(ok){ if (ok) nbOpen(path, at); });
       return;
@@ -1254,7 +1255,7 @@ function nbCommitMessage(list){
     var tabsBar = $('tabs'), foot = document.querySelector('footer.status');
     var top = tabsBar ? Math.max(0, tabsBar.getBoundingClientRect().bottom) : 96;
     var bot = foot ? Math.max(0, innerHeight - foot.getBoundingClientRect().top) : 28;
-    ['nb', 'nbRail'].forEach(function(id){
+    ['nb'].forEach(function(id){
       var el = $(id);
       if (!el) return;
       el.style.setProperty('--nb-top', Math.round(top) + 'px');
@@ -1471,13 +1472,13 @@ function nbCommitMessage(list){
       var empty = e.target.closest('[data-nb-empty]');
       if (empty){ nbEmptyAct(empty.dataset.nbEmpty); return; }
       var temp = e.target.closest('[data-nb-temp]');
-      if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); return; }
+      if (temp){ nbPhoneLeavePanel(); switchTab(temp.dataset.nbTemp); nbRender(); return; }
       var hs = e.target.closest('[data-nb-hist-save]');
       if (hs){ nbHistSaveToNotebook(+hs.dataset.nbHistSave); return; }
       var hd = e.target.closest('[data-nb-hist-del]');
       if (hd){ nbHistDelete(+hd.dataset.nbHistDel); return; }
       var hist = e.target.closest('[data-nb-hist-item]');
-      if (hist){ nbHistOpen(+hist.dataset.nbHistItem); nbRender(); return; }
+      if (hist){ nbPhoneLeavePanel(); nbHistOpen(+hist.dataset.nbHistItem); nbRender(); return; }
       var clr = e.target.closest('[data-nb-hist-clear]');
       if (clr){
         nbConfirm('پاک کردن متن های اخیر', 'همهٔ متن های اخیر پاک شوند؟ (تب های باز دست نمی خورند)', function(){
@@ -1517,30 +1518,7 @@ function nbCommitMessage(list){
       }
       e.preventDefault();
       if (note){
-        var path = note.dataset.nbNote;
-        nbMenu(e.clientX, e.clientY, [
-          { label: 'باز کردن', act: function(){ nbOpen(path); } },
-          { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
-          { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
-          { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
-          { label: 'باز کردن در تب تازه', act: function(){ nbOpenInNewTab(path); } },
-          { label: 'سنجاق در تب', act: function(){ nbPinNoteTab(path); } },
-          { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
-          { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
-          null,
-          { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
-          { label: 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
-          { label: 'کپی پیوند [[]]', act: function(){
-            var link = '[[' + nbTitle(path) + ']]';
-            copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
-          } },
-          { label: 'دانلود md', act: function(){ nbDownload(path); } },
-          { label: 'حذف', danger: true, act: function(){
-            nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
-              nbDeletePath(path); toast('برای حذف صف شد', 'trash');
-            });
-          } }
-        ]);
+        nbMenu(e.clientX, e.clientY, nbNoteMenuItems(note.dataset.nbNote));
       } else if (att) {
         var ap = att.dataset.nbAtt;
         nbMenu(e.clientX, e.clientY, [
@@ -1571,6 +1549,32 @@ function nbCommitMessage(list){
     });
   }
 
+  /** Everything that can be done to one note: the tree's right-click, the note page's ⋯ on a phone. */
+  function nbNoteMenuItems(path){
+    return [
+      { label: 'باز کردن', act: function(){ nbOpen(path); } },
+      { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
+      { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
+      { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
+      { label: 'باز کردن در تب تازه', act: function(){ nbOpenInNewTab(path); } },
+      { label: 'سنجاق در تب', act: function(){ nbPinNoteTab(path); } },
+      { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
+      { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
+      null,
+      { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
+      { label: NB.files[path] && NB.files[path].enc ? 'برداشتن رمز' : 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
+      { label: 'کپی پیوند [[]]', act: function(){
+        var link = '[[' + nbTitle(path) + ']]';
+        copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
+      } },
+      { label: 'دانلود md', act: function(){ nbDownload(path); } },
+      { label: 'حذف', danger: true, act: function(){
+        nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
+          nbDeletePath(path); toast('برای حذف صف شد', 'trash');
+        });
+      } }
+    ];
+  }
   /* --- small dialogs, in the app's own style --- */
   function nbModalBox(title, bodyHtml, footHtml, ico, target){
     if (innerWidth <= 760) nbSidebar(false);                     // on a phone the drawer would be in the way
@@ -1996,20 +2000,64 @@ function nbCommitMessage(list){
   });
 
   /* --- settings --- */
-  function nbDrawSettings(){
-    var m = $('nbModal');
-    m.hidden = false;
-    $('nbModalBody').innerHTML = '<div class="nb-sec"><h4>اتصال</h4>'
-      + '<div class="nb-field"><label>مخزن</label><input class="nb-input" id="nbRepo" dir="ltr" placeholder="user/notes" value="' + escapeHtml(C.repo) + '"></div>'
-      + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="' + (NB.locked ? 'قفل است' : 'github_pat_…') + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '"></div>'
+  /* ================= تنظیمات: یک صفحه، چند بخش ================= */
+  var NB_SET = [
+    ['connect', 'cloud', 'اتصال', 'مخزن گیت هاب یا گیت لب'],
+    ['sync', 'redo', 'همگام سازی', 'ارسال خودکار، گرفتن، پشتیبان'],
+    ['cols', 'folder', 'مجموعه ها', 'پوشه + تقویم + قالب'],
+    ['notes', 'clock', 'یادداشت ها و تقویم', 'هفته، پیوست ها، فقط خواندنی'],
+    ['view', 'sliders', 'متن و ظاهر', 'اندازه، رنگ، تم، جهت'],
+    ['security', 'lock', 'امنیت', 'قفل توکن، یادداشت های رمزدار'],
+    ['about', 'file', 'درباره', 'نسخه، کلیدهای میانبر']
+  ];
+  var nbSetView = null;           // the app's own settings controls, moved here once (their listeners come along)
+  function nbSetViewBox(){
+    if (nbSetView) return nbSetView;
+    nbSetView = document.createElement('div');
+    nbSetView.className = 'nb-set-app';
+    var pop = $('popSettings');
+    if (pop) Array.prototype.slice.call(pop.children).forEach(function(ch){ if (!ch.classList.contains('pop-title')) nbSetView.appendChild(ch); });
+    return nbSetView;
+  }
+  function nbSw(id, on, title, sub, disabled){
+    return '<label class="sw"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + (disabled ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>' + title + '</b>'
+      + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>';
+  }
+  function nbField(label, inner, hint){
+    return '<div class="nb-field"><label>' + label + '</label>' + inner + (hint ? '<small class="nb-mini-text">' + hint + '</small>' : '') + '</div>';
+  }
+  function nbSetSectionHtml(sec){
+    var gl = (C.provider || 'github') === 'gitlab';
+    if (sec === 'connect') return ''
+      + nbField('سرویس', '<div class="seg nb-seg" id="nbProvSeg">'
+        + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<button type="button" data-nb-prov="' + o[0] + '" aria-pressed="' + ((C.provider || 'github') === o[0]) + '">' + o[1] + '</button>'; }).join('')
+        + '</div><input type="hidden" id="nbProvider" value="' + escapeHtml(C.provider || 'github') + '">')
+      + nbField('مخزن', '<input class="nb-input" id="nbRepo" dir="ltr" placeholder="' + (gl ? 'group/notes' : 'user/notes') + '" value="' + escapeHtml(C.repo) + '">')
+      + nbField('توکن', '<input class="nb-input" id="nbToken" dir="ltr" type="password" autocomplete="off" placeholder="' + (NB.locked ? 'قفل است' : (gl ? 'glpat-…' : 'github_pat_…')) + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '">')
       + (NB.locked ? '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="unlock">باز کردن قفل توکن</button></div>' : '')
-      + '<label class="sw"><input type="checkbox" id="nbLock"' + (C.lockToken ? ' checked' : '') + (NB.locked ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>قفل توکن با گذرواژه</b><small>توکن فقط رمزشده در مرورگر می ماند؛ هر بار باز شدن صفحه، با کلیک روی «قفل» باز می شود</small></span></label>'
-      + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن).</p>'
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
+      + '<ol class="nb-steps">' + (gl
+        ? '<li>در گیت لب یک مخزن (حتی خالی) بساز.</li><li><a href="https://gitlab.com/-/user_settings/personal_access_tokens" target="_blank" rel="noopener">توکن تازه</a> با دسترسی <b dir="ltr">api</b> بساز.</li>'
+        : '<li>در گیت هاب یک مخزن خصوصی (حتی خالی) بساز.</li><li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">توکن fine-grained</a> بساز: فقط همین مخزن، دسترسی <b>Contents: Read and write</b>.</li>')
+      + '<li>مخزن و توکن را اینجا بگذار و «آزمایش اتصال» را بزن.</li></ol>'
+      + '<div class="nb-actions"><button class="btn-primary sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
       + '<p class="nb-hint" id="nbTestOut"></p>'
-      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند</small></span></label>'
-      + '<label class="sw"><input type="checkbox" id="nbSyncOnline"' + (C.syncOnline !== false ? ' checked' : '') + '><span class="sw-ui"></span><span><b>همگام سازی وقتی اینترنت برگشت</b><small>اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود</small></span></label></div>'
-      + '<div class="nb-sec"><h4>مجموعه ها <small>پوشه + تقویم + قالب</small></h4><div class="nb-collist">'
+      + nbField('شاخه', '<input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '">')
+      + '<h5>چند دفترچه</h5>'
+      + (nbProfiles().length ? nbField('دفترچهٔ فعال', '<select id="nbProf"><option value="">—</option>'
+        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
+        + '</select>') : '')
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
+      + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
+      + '</div>';
+    if (sec === 'sync') return ''
+      + nbSw('nbAuto', C.auto, 'ارسال خودکار', 'چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند')
+      + nbField('ثانیه تا ارسال خودکار', '<input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '">')
+      + nbSw('nbSyncOnline', C.syncOnline !== false, 'همگام سازی وقتی اینترنت برگشت', 'اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود')
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="pull">گرفتن الان</button><button class="btn-soft sm" type="button" data-nb-cfg="push">ارسال الان</button></div>'
+      + '<h5>پشتیبان</h5><div class="nb-actions">'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
+      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label></div>';
+    if (sec === 'cols') return '<div class="nb-collist">'
       + C.collections.map(function(c, i){
         var kind = (NB_CAL_KINDS.filter(function(k){ return k[0] === (c.calendar || ''); })[0] || ['', ''])[1];
         return '<div class="nb-colrow"><i class="hm-dot" style="background:' + escapeHtml(c.color || 'var(--accent)') + '"></i>'
@@ -2018,50 +2066,72 @@ function nbCommitMessage(list){
       }).join('')
       + '</div><div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="addcol">مجموعهٔ جدید…</button>'
       + (Object.keys(NB_TEMPLATES).some(function(p){ return !NB.files[p]; }) ? '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">قالب های نمونه را بساز</button>' : '')
-      + '</div></div>'
-      + '<details class="nb-sec nb-adv"><summary>پیشرفته</summary>'
-      + '<div class="nb-field"><label>سرویس</label><select id="nbProvider">'
-      + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<option value="' + o[0] + '"' + ((C.provider || 'github') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div>'
-      + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
-      + '<div class="nb-field"><label>ثانیه تا ارسال خودکار</label><input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '"></div>'
-      + '<label class="sw"><input type="checkbox" id="nbGreg"' + (C.showGregorian ? ' checked' : '') + '><span class="sw-ui"></span><span><b>نمایش تاریخ میلادی کنار روزها</b><small>عدد کوچک گوشهٔ هر خانهٔ تقویم</small></span></label>'
-      + '<div class="nb-field"><label>شروع هفته</label><select id="nbWeekStart">'
-      + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div>'
-      + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
-      + '<div class="nb-field"><label>پوشه های فقط خواندنی</label><input class="nb-input" id="nbRoFolders" dir="auto" placeholder="مثلاً: آرشیو، خروجی ها" value="' + escapeHtml((C.readonlyFolders || []).join('، ')) + '"><small class="nb-mini-text">با کاما جدا کن؛ یادداشت های این پوشه ها فقط خوانده می شوند.</small></div>'
-      + '<h5>چند دفترچه</h5>'
-      + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
-        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
-        + '</select></div>' : '')
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
-      + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
-      + '</div>'
-      + '<h5>خروجی و ورودی</h5><div class="nb-actions">'
-      + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
-      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label>'
-      + '</div></details>';
-    var nbSharedBefore = C.weekStart + '|' + C.attachments;
-    function apply(){
-      C.repo = $('nbRepo').value.trim();
-      C.branch = $('nbBranch').value.trim() || 'main';
-      if (!NB.locked) C.token = $('nbToken').value.trim();
-      if ($('nbProvider')) C.provider = $('nbProvider').value;
-      if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
-      if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
-      C.auto = $('nbAuto').checked;
-      if ($('nbSyncOnline')) C.syncOnline = $('nbSyncOnline').checked;
-      C.idleSeconds = +$('nbIdle').value || 20;
-      C.weekStart = $('nbWeekStart').value;
-      C.showGregorian = $('nbGreg').checked;
-      var shared = C.weekStart + '|' + C.attachments;
-      nbSaveCfg(); nbSay();
-      if (shared !== nbSharedBefore){ nbSharedBefore = shared; nbCollectionsChanged(true); }
-      if (NB.open && NB.section === 'cal') nbRenderKeep();
-    }
-    m.addEventListener('input', apply);
+      + '</div>';
+    if (sec === 'notes') return ''
+      + nbField('شروع هفته', '<select id="nbWeekStart">'
+        + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+        + '</select>')
+      + nbSw('nbGreg', C.showGregorian, 'نمایش تاریخ میلادی کنار روزها', 'عدد کوچک گوشهٔ هر خانهٔ تقویم')
+      + nbField('پوشهٔ پیوست ها', '<input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '">')
+      + nbField('پوشه های فقط خواندنی', '<input class="nb-input" id="nbRoFolders" dir="auto" placeholder="مثلاً: آرشیو، خروجی ها" value="' + escapeHtml((C.readonlyFolders || []).join('، ')) + '">',
+        'با کاما جدا کن؛ یادداشت های این پوشه ها فقط خوانده می شوند.');
+    if (sec === 'view') return '<div id="nbSetViewSlot"></div>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="theme">تم روشن / تیره</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-run="dir">جهت پایه: راست‌به‌چپ / چپ‌به‌راست</button></div>';
+    if (sec === 'security') return ''
+      + nbSw('nbLock', C.lockToken, 'قفل توکن با گذرواژه', 'توکن فقط رمزشده در مرورگر می ماند؛ با هر بار باز کردن برنامه یک بار گذرواژه می خواهد', NB.locked)
+      + '<h5>یادداشت های رمزدار</h5>'
+      + '<p class="nb-mini-text">متن رمزدار فقط روی همین دستگاه باز می شود و روی مخزن رمزشده می رود. گذرواژه تا بسته شدن برنامه در حافظه می ماند.</p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="forget"' + (NB.pass ? '' : ' disabled') + '>فراموش کردن گذرواژه در این نشست</button></div>';
+    var ver = (document.querySelector('meta[name="app-version"]') || {}).content || '';
+    return '<p class="nb-mini-text">میزکار — نسخهٔ <b dir="ltr">' + escapeHtml(ver) + '</b></p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="nb-keys">کلیدهای میانبر</button>'
+      + ($('btnInstall') && !$('btnInstall').hidden ? '<button class="btn-soft sm" type="button" data-nb-run="install">نصب به عنوان برنامه</button>' : '')
+      + '</div>';
+  }
+  /** The settings page: a list of sections; on a phone the list and one section take turns. */
+  function nbDrawSettings(sec){
+    var m = $('nbModal');
+    m.hidden = false;
+    if (sec !== undefined) NB.setSection = sec;
+    var phone = innerWidth <= 760;
+    if (!NB.setSection && !phone) NB.setSection = C.repo ? 'sync' : 'connect';
+    var cur = NB_SET.filter(function(x){ return x[0] === NB.setSection; })[0];
+    m.classList.toggle('nb-set-in', !!cur);
+    $('nbSetNav').innerHTML = NB_SET.map(function(x){
+      return '<button type="button" class="nb-set-item" data-nb-set="' + x[0] + '" aria-current="' + (cur && cur[0] === x[0] ? 'page' : 'false') + '">'
+        + icon(x[1]) + '<span><b>' + x[2] + '</b><small>' + x[3] + '</small></span></button>';
+    }).join('');
+    $('nbSetTitle').textContent = cur ? cur[2] : 'تنظیمات';
+    $('nbModalBody').innerHTML = cur ? nbSetSectionHtml(cur[0]) : '';
+    if (cur && cur[0] === 'view' && $('nbSetViewSlot')) $('nbSetViewSlot').appendChild(nbSetViewBox());
+    if (!m.dataset.wired){ m.dataset.wired = '1'; nbWireSettings(m); }
+  }
+  var nbSharedBefore = '';
+  function nbSettingsApply(){
+    if ($('nbRepo')) C.repo = $('nbRepo').value.trim();
+    if ($('nbBranch')) C.branch = $('nbBranch').value.trim() || 'main';
+    if ($('nbToken') && !NB.locked) C.token = $('nbToken').value.trim();
+    if ($('nbProvider')) C.provider = $('nbProvider').value;
+    if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
+    if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
+    if ($('nbAuto')) C.auto = $('nbAuto').checked;
+    if ($('nbSyncOnline')) C.syncOnline = $('nbSyncOnline').checked;
+    if ($('nbIdle')) C.idleSeconds = +$('nbIdle').value || 20;
+    if ($('nbWeekStart')) C.weekStart = $('nbWeekStart').value;
+    if ($('nbGreg')) C.showGregorian = $('nbGreg').checked;
+    var shared = C.weekStart + '|' + C.attachments;
+    nbSaveCfg(); nbSay();
+    if (nbSharedBefore && shared !== nbSharedBefore) nbCollectionsChanged(true);
+    nbSharedBefore = shared;
+    if (NB.open && NB.section === 'cal') nbRenderKeep();
+  }
+  /** Wired once: every redraw replaces the content, never the listeners. */
+  function nbWireSettings(m){
+    nbSharedBefore = C.weekStart + '|' + C.attachments;
+    m.addEventListener('input', function(e){ if (e.target.closest('#nbModalBody') && !e.target.closest('.nb-set-app')) nbSettingsApply(); });
     m.addEventListener('change', function(e){
+      if (!e.target.closest('#nbModalBody') || e.target.closest('.nb-set-app')) return;
       if (e.target.id === 'nbLock'){
         if (!e.target.checked){ C.lockToken = false; NB.tokenPass = ''; nbSaveCfg(); nbDrawSettings(); toast('قفل توکن برداشته شد', 'check'); return; }
         e.target.checked = false;
@@ -2074,24 +2144,30 @@ function nbCommitMessage(list){
         if (el) el.type = 'password';
         return;
       }
-      if (e.target.id === 'nbProf' && e.target.value){
-        apply();
-        nbUseProfile(e.target.value);
-        nbCloseSettings();
-        return;
-      }
-      apply();
+      if (e.target.id === 'nbProf' && e.target.value){ nbSettingsApply(); nbUseProfile(e.target.value); nbCloseSettings(); return; }
+      if (e.target.id === 'nbZipIn'){ nbImportZip(e.target); return; }
+      nbSettingsApply();
     });
     m.addEventListener('click', function(e){
+      var item = e.target.closest('[data-nb-set]');
+      if (item){ nbDrawSettings(item.dataset.nbSet); return; }
+      if (e.target.closest('[data-nb-set-back]')){ nbDrawSettings(''); return; }
+      var prov = e.target.closest('[data-nb-prov]');
+      if (prov){ $('nbProvider').value = prov.dataset.nbProv; nbSettingsApply(); nbDrawSettings(); return; }
+      var run = e.target.closest('[data-nb-run]');
+      if (run){ runAction(run.dataset.nbRun); return; }
       var fix = e.target.closest('[data-nb-colfix]');
       if (fix){ nbCollectionDialog(+fix.dataset.nbColfix); return; }
       var btn = e.target.closest('[data-nb-cfg]');
       if (!btn) return;
-      if (btn.dataset.nbCfg === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
-      if (btn.dataset.nbCfg === 'addcol'){ nbCollectionDialog(-1, ''); return; }
       var what = btn.dataset.nbCfg;
+      if (what === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
+      if (what === 'addcol'){ nbCollectionDialog(-1, ''); return; }
+      if (what === 'pull'){ nbPull({ loud: true }); return; }
+      if (what === 'push'){ nbPush({ loud: true }); return; }
+      if (what === 'forget'){ NB.pass = ''; nbDrawSettings(); toast('گذرواژهٔ یادداشت های رمزدار از حافظه پاک شد', 'lock'); return; }
       if (what === 'test'){
-        apply();
+        nbSettingsApply();
         $('nbTestOut').textContent = 'در حال آزمایش…';
         nbTest().then(function(r){
           $('nbTestOut').innerHTML = 'اوکی — <b dir="ltr">' + escapeHtml(r.name) + '</b>' + (r.private ? ' (خصوصی)' : ' (عمومی)')
@@ -2100,29 +2176,15 @@ function nbCommitMessage(list){
           NB.error = ''; nbSay();
           if (!r.empty) nbPull({});
         }).catch(function(err){ $('nbTestOut').innerHTML = '<span class="nb-warn">' + escapeHtml(err.message) + '</span>'; nbSay('error'); });
-      } else if (what === 'addcol'){
-        apply();
-        C.collections.push({ id: 'c' + Date.now().toString(36), name: 'مجموعه', path: 'پوشه/{title}.md', template: '', calendar: '', color: '#6d5efc' });
-        nbSaveCfg(); nbDrawSettings();
-      } else if (what === 'delcol'){
-        if (C.collections.length <= 1) return;
-        C.collections.pop(); nbSaveCfg(); nbDrawSettings();
       } else if (what === 'tpl'){
-        apply();
         var n = 0;
         Object.keys(NB_TEMPLATES).forEach(function(p){ if (!NB.files[p]){ nbWrite(p, NB_TEMPLATES[p]); n++; } });
         toast(n ? faNum(n) + ' قالب ساخته شد — با «ارسال» به مخزن می رود' : 'قالب ها از قبل بودند', 'check');
-      } else if (what === 'config'){
-        apply();
-        nbWrite(C.configPath, JSON.stringify({
-          version: 1, calendar: C.calendar || 'jalali', weekStart: C.weekStart, collections: C.collections,
-          commit: { auto: C.auto, idleSeconds: C.idleSeconds }, attachments: C.attachments
-        }, null, 2) + '\n');
-        toast('config.json ساخته شد — با «ارسال» به مخزن می رود', 'check');
+        nbDrawSettings();
       } else if (what === 'zip'){
         nbDownloadZip('');
       } else if (what === 'saveprof'){
-        apply();
+        nbSettingsApply();
         nbPrompt('نام این دفترچه', C.active || '', function(name){
           if (!name) return;
           nbSaveProfile(name);
@@ -2137,26 +2199,26 @@ function nbCommitMessage(list){
         toast('دفترچه حذف شد (یادداشت هایش روی مخزن دست نخورده اند)', 'trash');
       }
     });
-    var zi = $('nbZipIn');
-    if (zi) zi.addEventListener('change', function(){
-      var file = zi.files[0];
-      if (!file) return;
-      file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
-        var n = 0;
-        entries.forEach(function(en){
-          if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
-          if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
-          nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
-          n++;
-        });
-        toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
-      }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
-      zi.value = '';
-    });
   }
-  function nbOpenSettings(){
-    if (innerWidth < 760) nbSidebar(false);
-    nbDrawSettings();
+  function nbImportZip(zi){
+    var file = zi.files[0];
+    if (!file) return;
+    file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
+      var n = 0;
+      entries.forEach(function(en){
+        if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
+        if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
+        nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
+        n++;
+      });
+      toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
+    }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
+    zi.value = '';
+  }
+  /** Opens the settings page; `sec` picks a section (the gear in the top bar opens «متن و ظاهر» when connected). */
+  function nbOpenSettings(sec){
+    if (innerWidth <= 760) nbSidebar(false);
+    nbDrawSettings(typeof sec === 'string' ? sec : (innerWidth <= 760 ? '' : 'connect'));
   }
   function nbCloseSettings(){ $('nbModal').hidden = true; }
 
@@ -2223,14 +2285,12 @@ function nbCommitMessage(list){
   addEventListener('keydown', function(e){
     if (e.key === 'Escape'){
       if (typeof NBD === 'object' && NBD.on) return;              // drag.js cancels the drag; nothing else closes
-      var mini = $('nbMini'), mini2 = $('nbMini2'), menu = $('nbMenu'), mod = $('nbModal');
       // one Esc closes one layer: the editor's own Esc (back to reading) must not run as well
-      var done = function(){ e.preventDefault(); e.stopPropagation(); };
-      if (menu && !menu.hidden){ nbMenuClose(); return done(); }
-      if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return done(); }
-      if (mini && !mini.hidden){ nbCloseMini(); return done(); }
-      if (mod && !mod.hidden){ nbCloseSettings(); return done(); }
-      if (NB.open && document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')){ nbSidebar(false); done(); }
+      var L = nbLayerTop(false);
+      if (L){ L.close(); e.preventDefault(); e.stopPropagation(); return; }
+      if (NB.open && (innerWidth < 1100 || (document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')))){
+        nbSidebar(false); e.preventDefault(); e.stopPropagation();
+      }
       return;
     }
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -2247,7 +2307,9 @@ function nbCommitMessage(list){
 
   /* --- palette and toolbar actions --- */
   ACTIONS['notebook'] = { label: 'دفترچه (یادداشت ها روی گیت هاب)', icon: 'tree', kbd: 'Ctrl \\', kw: 'notebook notes git markdown nb', run: function(){ nbSidebar(); } };
-  ACTIONS['nb-settings'] = { label: 'تنظیمات دفترچه (مخزن، توکن، مجموعه ها)', icon: 'cloud', kw: 'notebook settings repo token git', run: nbOpenSettings };
+  ACTIONS['nb-settings'] = { label: 'تنظیمات (اتصال، همگام سازی، مجموعه ها، ظاهر)', icon: 'sliders', kw: 'notebook settings repo token git', run: function(){ nbOpenSettings(innerWidth <= 760 ? '' : (C.repo ? 'sync' : 'connect')); } };
+  // the gear in the top bar opens the same page (the app's own settings live in «متن و ظاهر»)
+  if (ACTIONS['settings']) ACTIONS['settings'] = Object.assign({}, ACTIONS['settings'], { run: function(){ closePops(); nbOpenSettings(innerWidth <= 760 ? '' : 'view'); } });
   ACTIONS['nb-close'] = { label: 'بستن', icon: 'x', hidden: true, run: nbCloseSettings };
   ACTIONS['nb-new'] = { label: 'یادداشت تازه در دفترچه', icon: 'plus', kw: 'notebook new note daily', run: function(){ if (!NB.open) nbSidebar(true); nbSectionNotes(); nbNewDialog(); } };
   ACTIONS['nb-search'] = { label: 'جستجو در یادداشت ها', icon: 'search', kbd: 'Alt Shift F', kw: 'notebook search find notes', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } };
@@ -3842,9 +3904,39 @@ function nbCommitMessage(list){
    * «something is open», whatever opened it: watching the layers (not every place that opens one) keeps the
    * entry honest, and a layer closed by its own ✕ takes its entry back with it.
    */
+  /*
+   * Every layer the app can show, top first: one list decides what Esc and Back close, what counts as «something
+   * is in front» (single-key shortcuts wait), and which history entry the phone's Back uses.
+   */
+  function nbShown(id){ var el = $(id); return !!(el && !el.hidden); }
+  var NB_LAYERS = [
+    { id: 'nbMenu', close: function(){ nbMenuClose(); } },
+    { id: 'nbMini2', close: function(){ nbCloseMini('nbMini2'); } },
+    { id: 'nbMini', close: function(){ nbCloseMini(); } },
+    { id: 'nbModal', close: function(){ nbCloseSettings(); } },
+    { id: 'nbSyncPop', close: function(){ $('nbSyncPop').hidden = true; } },
+    { id: 'palette', back: true, close: function(){ if (typeof closePalette === 'function') closePalette(); } },
+    { id: 'deck', back: true, close: function(){ if (typeof closeDeck === 'function') closeDeck(); } },
+    { open: function(){ return !!document.querySelector('.pop.open'); }, back: true, close: function(){ closePops(); } },
+    { open: function(){ return !!document.querySelector('.modal:not([hidden]):not(.nb-set):not(#nbMini):not(#nbMini2)'); }, back: true, close: function(){
+      var m = document.querySelector('.modal:not([hidden]):not(.nb-set):not(#nbMini):not(#nbMini2)'), x = m && m.querySelector('[data-action^="close"], .modal-head .ib');
+      if (x) x.click(); else if (m) m.hidden = true;
+    } }
+  ];
+  function nbLayerTop(forBack){
+    for (var i = 0; i < NB_LAYERS.length; i++){
+      var L = NB_LAYERS[i];
+      if (L.back && !forBack) continue;              // the app closes its own palette, slides and popovers on Esc
+      if (L.open ? L.open() : nbShown(L.id)) return L;
+    }
+    return null;
+  }
+  /** A dialog, menu, palette or the slides is in front: single keys belong to it. */
+  function nbLayerOpen(){ return !!nbLayerTop(true); }
   var nbBack = { entry: false, ignore: false, timer: 0 };
-  function nbBackOn(){ return innerWidth <= 760; }
-  function nbSomethingOpen(){ return nbLayerOpen() || (NB.open && nbBackOn()); }
+  function nbBackOn(){ return innerWidth < 1100; }               // phones and tablets have a Back button (or gesture)
+  function nbPanelIsLayer(){ return NB.open && innerWidth < 1100; }
+  function nbSomethingOpen(){ return nbLayerOpen() || nbPanelIsLayer(); }
   function nbBackSync(){
     clearTimeout(nbBack.timer);
     // after the current task: a dialog that closes and opens the next one at once is still «open»
@@ -3856,13 +3948,8 @@ function nbCommitMessage(list){
     }, 0);
   }
   function nbCloseTopLayer(){
-    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu'), pal = $('palette'), deck = $('deck');
-    if (menu && !menu.hidden){ nbMenuClose(); return true; }
-    if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return true; }
-    if (mini && !mini.hidden){ nbCloseMini(); return true; }
-    if (modal && !modal.hidden){ nbCloseSettings(); return true; }
-    if (pal && !pal.hidden && typeof closePalette === 'function'){ closePalette(); return true; }
-    if (deck && !deck.hidden && typeof closeDeck === 'function'){ closeDeck(); return true; }
+    var L = nbLayerTop(true);
+    if (L){ L.close(); return true; }
     if (NB.open){ nbSidebar(false); return true; }
     return false;
   }
@@ -3874,11 +3961,8 @@ function nbCommitMessage(list){
     nbBackSync();                                            // something is still open: the next back closes that
   });
   (function(){
-    var watch = new MutationObserver(nbBackSync);
-    ['nbMini', 'nbMini2', 'nbModal', 'nbMenu', 'palette', 'deck'].forEach(function(id){
-      if ($(id)) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
-    });
-    watch.observe(body, { attributes: true, attributeFilter: ['class'] });
+    // any layer, the app's own included (popovers, its dialogs): one observer, settled after the current task
+    new MutationObserver(nbBackSync).observe(body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   })();
   // a swipe down on the drawer closes it, like a sheet
   (function(){
@@ -3985,10 +4069,6 @@ function nbCommitMessage(list){
       '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'keyboard');
     $('nbKeysQ').addEventListener('input', function(){ $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
   }
-  /** A dialog, menu, palette or the slides is in front: single keys belong to it. */
-  function nbLayerOpen(){
-    return !!document.querySelector('#nbMenu:not([hidden]), #nbMini:not([hidden]), #nbMini2:not([hidden]), #nbModal:not([hidden]), .modal:not([hidden]), .palette:not([hidden]), .deck:not([hidden])');
-  }
   addEventListener('keydown', function(e){
     if ((e.key === '?' || e.key === '؟') && !e.ctrlKey && !e.altKey && !e.metaKey){
       var t = e.target;
@@ -4037,7 +4117,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    menu: nbMenu, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
+    menu: nbMenu, goHome: function(){ nbGoHome(); }, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
@@ -4051,7 +4131,7 @@ function nbCommitMessage(list){
   };
   window.mizkarNotebook = NB;
   // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
-  window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); };
+  window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); nbShellSync(); };
   window.nbHomeHtml = nbHomeHtml;
   window.nbPaletteItems = nbPaletteItems;
   window.nbShamsiLabel = nbShamsiLabel;          // the front matter strip shows date:/created: in Shamsi

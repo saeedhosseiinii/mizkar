@@ -230,10 +230,10 @@ def main():
     html = replace_once(html, '<button id="btnExitRead"', m['sidebar'] + '<button id="btnExitRead"', 'sidebar + dialogs')
     print('inserted markup: icon, toolbar, status, sidebar')
 
-    css = (DEV / 'nb.css').read_text(encoding='utf-8') + '\n' + (DEV / 'ui.css').read_text(encoding='utf-8')
+    css = '\n'.join((DEV / n).read_text(encoding='utf-8') for n in ('nb.css', 'ui.css', 'shell.css'))
     module = js_string_array(css.split('\n')) + '\n' + (DEV / 'nb.js').read_text(encoding='utf-8')
     # the home page and the calmer layout share the notebook's scope (dev/home.js, dev/ui.js)
-    parts = ['home.js', 'ui.js', 'inplace.js', 'drag.js']
+    parts = ['home.js', 'ui.js', 'shell.js', 'inplace.js', 'drag.js']
     module = module.replace('  /* --- init --- */',
                             ''.join((DEV / p).read_text(encoding='utf-8') + '\n' for p in parts) + '  /* --- init --- */', 1)
     html = replace_once(html, '  /* --- init --- */', module + '\n  /* --- init --- */', 'init marker')

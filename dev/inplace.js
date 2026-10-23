@@ -127,7 +127,7 @@
   });
   // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
   // judged where it starts, so a selection dragged out of the text never counts
-  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbRail, #nbEdge, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
+  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;

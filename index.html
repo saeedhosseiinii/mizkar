@@ -248,10 +248,11 @@
 <aside id="nb" aria-label="دفترچه">
   <div class="nb-grip" id="nbGrip" title="کشیدن: تغییر عرض نوار"></div>
   <div class="nb-head">
-    <span class="nb-h-title"><svg class="i"><use href="#i-tree"/></svg>دفترچه</span>
+    <span class="nb-h-title"><svg class="i"><use href="#i-tree"/></svg><span id="nbHeadTitle">دفترچه</span></span>
     <span class="nb-h-sp"></span>
-    <button class="ib sm" type="button" data-action="nb-today" title="یادداشت امروز" aria-label="یادداشت امروز"><svg class="i"><use href="#i-clock"/></svg></button>
-    <button class="ib sm" type="button" data-action="nb-settings" title="تنظیمات دفترچه" aria-label="تنظیمات دفترچه"><svg class="i"><use href="#i-sliders"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-new" title="یادداشت تازه" aria-label="یادداشت تازه"><svg class="i"><use href="#i-plus"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-today" title="یادداشت امروز" aria-label="یادداشت امروز"><svg class="i"><use href="#i-sun"/></svg></button>
+    <button class="ib sm" type="button" data-action="nb-settings" title="تنظیمات" aria-label="تنظیمات"><svg class="i"><use href="#i-sliders"/></svg></button>
     <button class="ib sm" type="button" id="nbClose" title="بستن" aria-label="بستن"><svg class="i"><use href="#i-x"/></svg></button>
   </div>
   <div class="nb-body" id="nbBody"></div>
@@ -259,13 +260,17 @@
 <div id="nbMenu" hidden role="menu" aria-label="گزینه ها"></div>
 <div class="modal" id="nbMini" hidden></div>
 <div class="modal" id="nbMini2" hidden></div>
-<div class="modal" id="nbModal" hidden>
-  <div class="modal-box" role="dialog" aria-modal="true" aria-label="دفترچه روی گیت هاب" style="width:min(780px,100%)">
+<div class="modal nb-set" id="nbModal" hidden>
+  <div class="modal-box nb-set-box" role="dialog" aria-modal="true" aria-label="تنظیمات">
     <div class="modal-head">
-      <span class="ph-title"><svg class="i"><use href="#i-cloud"/></svg>دفترچه روی گیت هاب</span>
+      <button class="ib sm nb-set-back" type="button" data-nb-set-back aria-label="همهٔ تنظیمات"><svg class="i nb-rtl-back"><use href="#i-chev"/></svg></button>
+      <span class="ph-title"><svg class="i"><use href="#i-sliders"/></svg><span id="nbSetTitle">تنظیمات</span></span>
       <button class="ib sm" type="button" data-action="nb-close" aria-label="بستن" style="margin-inline-start:auto"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
-    <div class="modal-body" id="nbModalBody"></div>
+    <div class="nb-set-main">
+      <nav class="nb-set-nav" id="nbSetNav" aria-label="بخش های تنظیمات"></nav>
+      <div class="modal-body nb-set-body" id="nbModalBody"></div>
+    </div>
   </div>
 </div>
 <button id="btnExitRead" type="button" data-action="exit-read"><svg class="i"><use href="#i-x"/></svg>بازگشت</button>
@@ -11055,20 +11060,6 @@ if (typeof document !== 'undefined'){
 
 var NB_CSS = [
   '/* === NOTEBOOK (Git): sidebar, sync indicator, dialogs === */',
-  '#nb{',
-  '  position:fixed; top:var(--nb-top, 96px); bottom:var(--nb-bottom, 28px); right:0;',
-  '  width:var(--nb-w, 328px); max-width:96vw; z-index:210; display:flex; flex-direction:column;',
-  '  background:var(--surface); border-inline-start:1px solid var(--border); border-start-start-radius:12px;',
-  '  box-shadow:-18px 0 40px -24px rgba(15,23,42,.35); transition:transform .22s ease; overflow:hidden;',
-  '}',
-  'body:not(.nb-open) #nb{ transform:translateX(102%); }',
-  '#nbBack{ position:fixed; inset:0; z-index:205; background:rgba(6,10,18,.42); opacity:0; pointer-events:none; transition:opacity .2s ease; }',
-  'body.nb-open #nbBack{ opacity:1; pointer-events:auto; }',
-  '@media (min-width:1100px){',
-  '  #nbBack{ display:none; }',
-  '  body.nb-open .work{ margin-right:var(--nb-w, 328px); }        /* the drawer is on the right; inline-end is the left in RTL */',
-  '  #nb{ z-index:25; }                                              /* docked: under the bar\'s popovers, the palette and dialogs */',
-  '}',
   '#nb .nb-head{ display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); }',
   '#nb .nb-head .nb-h-title{ font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px; color:var(--ink); }',
   '#nb .nb-h-sp{ flex:1; }',
@@ -11104,7 +11095,6 @@ var NB_CSS = [
   '#nb .nb-saved{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:0 6px; }',
   '#nb .nb-empty, #nb .nb-hint{ color:var(--muted); font-size:12px; line-height:1.9; padding:10px 8px; }',
   '#nb .nb-foot{ border-top:1px solid var(--border); padding:6px 10px; font-size:11.5px; color:var(--muted); background:var(--surface-2); }',
-  '#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; }',
   '#nb .nb-conflict-row{ border:1px solid var(--border); border-radius:10px; padding:8px; margin:6px 2px; background:var(--surface-2); }',
   '#nb .nb-conflict-row small{ display:block; color:var(--muted); font-size:11px; margin:2px 0 6px; word-break:break-all; }',
   '#nb .nb-cf-btns{ display:flex; gap:4px; flex-wrap:wrap; }',
@@ -11217,23 +11207,6 @@ var NB_CSS = [
   'img.nb-img-missing{ border:1px dashed #dc2626; min-height:40px; min-width:80px; }',
   '#nb .nb-ta{ min-height:110px; resize:vertical; font-family:inherit; }',
   '',
-  '/* --- dialogs from the notebook must sit above the drawer and its backdrop (the app\'s .modal is 97) --- */',
-  '#nbMini, #nbModal{ z-index: 420; }',
-  '#nbSyncPop{ z-index: 420; }',
-  '#nbSyncPop:not([hidden]){ display:block; }          /* the app\'s .pop shows only with .open; this one goes by hidden */',
-  '#nbMenu{ z-index: 430; }',
-  '.nb-sug{ z-index: 425; }',
-  '/* on a phone they come up as a sheet from the bottom, so the keyboard never hides them */',
-  '@media (max-width: 760px){',
-  '  #nbMini, #nbModal{ align-items: flex-end; padding: 0 0 var(--nb-kb, 0px); transition: padding .15s; }',
-  '  #nbMini .modal-box, #nbModal .modal-box{',
-  '    width: 100%; max-width: 100%; border-radius: 18px 18px 0 0; max-height: 88vh;',
-  '    animation: nb-sheet .2s cubic-bezier(.2,.9,.3,1.1);',
-  '  }',
-  '  #nbMini .nb-mini-body{ max-height: 46vh; }',
-  '  #nbModal .modal-body{ padding: 12px; }',
-  '  .nb-sug{ max-height: 34vh; }',
-  '}',
   '@keyframes nb-sheet{ from{ transform: translateY(14px); opacity: .6; } to{ transform: none; opacity: 1; } }',
   '',
   '/* collections list and «پیشرفته» (settings) */',
@@ -11297,72 +11270,6 @@ var NB_CSS = [
   '@media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }',
   '',
   '/* ================= §4 موبایل: حس اپ ================= */',
-  ':root{ --nb-nav-h: 0px; }',
-  '@media (max-width:760px){',
-  '  html,body{ height:100dvh; }',
-  '  .app{ height:100dvh !important; box-sizing:border-box; }',
-  '  body.nb-nav-on{ --nb-nav-h: 56px; }',
-  '  body.nb-nav-on .app{ padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); }',
-  '  .bar, .tabs{ padding-inline:calc(10px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px)); }',
-  '  #zoomWrap, #nbBody, textarea#input{ overscroll-behavior:contain; }',
-  '}',
-  '/* the bottom bar itself */',
-  '.toast{ z-index:450; }',
-  '#nbNav{',
-  '  display:none;position:fixed;left:0;right:0;bottom:0;z-index:205;',
-  '  height:calc(56px + env(safe-area-inset-bottom, 0px));',
-  '  padding-bottom:env(safe-area-inset-bottom, 0px);',
-  '  background:var(--surface);border-top:1px solid var(--border);',
-  '  align-items:stretch;justify-content:space-around;gap:2px;',
-  '}',
-  '@media (max-width:760px){ body.nb-nav-on #nbNav{ display:flex; } }',
-  '.nb-nav-b{',
-  '  flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;',
-  '  border:0;background:none;color:var(--muted);font:inherit;font-size:.66rem;font-weight:600;cursor:pointer;padding:6px 2px;',
-  '}',
-  '.nb-nav-b .i{ width:22px;height:22px; }',
-  '.nb-nav-b:active,.nb-nav-b[aria-pressed="true"]{ color:var(--accent); }',
-  '#nbNav [data-nb-nav="new"]{ color:#fff; }',
-  '#nbNav [data-nb-nav="new"] .i{ background:var(--accent);border-radius:50%;padding:6px;width:34px;height:34px;box-sizing:border-box; }',
-  '/* the drawer becomes a sheet from the bottom on a phone */',
-  '@media (max-width:760px){',
-  '  #nb{',
-  '    top:auto !important;bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;',
-  '    right:0 !important;left:0 !important;width:auto !important;max-height:78dvh;height:78dvh;',
-  '    border-radius:18px 18px 0 0;border-inline-start:0;border-top:1px solid var(--border);',
-  '    box-shadow:0 -20px 50px -24px rgba(15,23,42,.5);transition:transform .22s ease,opacity .22s ease;',
-  '  }',
-  '  #nb .nb-grip{ display:none; }',
-  '  #nb .nb-head{ position:relative;padding-top:14px; }',
-  '  #nb .nb-head::before{',
-  '    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);',
-  '    width:44px;height:4px;border-radius:99px;background:var(--border-strong, #cbd5e1);opacity:.8;',
-  '  }',
-  '  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }',
-  '  #nbBody .elbtn.xs, #nbBody .ib.sm{ min-height:32px;padding-inline:10px; }',
-  '}',
-  '/* no hover on a phone: the buttons that only showed on hover are always there */',
-  '@media (max-width:760px){',
-  '  .nb-row-acts,.nb-act,.nb-note-acts{ opacity:1 !important; }',
-  '}',
-  '/* the Markdown toolbar stays above the soft keyboard */',
-  '@media (max-width:760px){',
-  '  body.ip-on #work[data-view="editor"] .pane.editor .mdbar, .pane.editor .mdbar{',
-  '    position:fixed;left:0;right:0;bottom:var(--nb-kb, 0px);z-index:6;',
-  '    background:var(--surface);border-top:1px solid var(--border);border-bottom:0;',
-  '    padding:6px calc(8px + env(safe-area-inset-left, 0px)) 6px calc(8px + env(safe-area-inset-right, 0px));',
-  '    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);transition:bottom .15s;',
-  '  }',
-  '  body.ip-on #work[data-view="editor"] textarea#input{ padding-bottom:64px; }',
-  '}',
-  '/* desktop-only controls leave the phone alone */',
-  '@media (max-width:760px){',
-  '  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],',
-  '  [data-action="present"], [data-action="fs"]{ display:none !important; }',
-  '  #outline, #outlineBtn{ display:none !important; }',
-  '  #splitBar, .split{ display:none !important; }',
-  '}',
-  'body:not(.ui-calm) #nbNav{ display:none; }',
   '/* the pull-to-refresh hint */',
   '.nb-pull-hint{',
   '  position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;',
@@ -11402,88 +11309,6 @@ var NB_CSS = [
   '.nb-key-row span{flex:1;min-width:0;font-size:.82rem;}',
   '.nb-key-row kbd{flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:1px 7px;font-size:.7rem;}',
   '',
-  '/* ================= بازبینی موبایل: اصلاح های اندازه گیری شده (۳۶۰x۷۴۰) ================= */',
-  '@media (max-width:760px){',
-  '  /* ۱) نوار پایین روی نوار وضعیت می افتاد: body خودش .app است، پس پدینگ باید روی body بنشیند */',
-  '  body.nb-nav-on{',
-  '    --nb-nav-h:56px;',
-  '    padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;',
-  '    box-sizing:border-box; overflow:hidden;',
-  '  }',
-  '  /* ۲) نوار بالا در دو ردیف می شکست (۱۰۲ پیکسل): یک ردیف، بی نام برند */',
-  '  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; align-items:center; }',
-  '  body.ui-calm .brand{ flex:none; }',
-  '  body.ui-calm .brand-name{ display:none; }',
-  '  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }',
-  '  body.ui-calm .ui-export{ margin-inline-start:auto; }',
-  '  body.ui-calm .ui-export .ib{ padding:0 8px; }',
-  '  /* ۳) نوار بخش ها در کشو جا نمی شد: می لغزد */',
-  '  #nb .nb-tabs{ overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }',
-  '  #nb .nb-tabs::-webkit-scrollbar{ height:0; display:none; }',
-  '  #nb .nb-tab{ flex:none; padding-inline:10px; }',
-  '  /* ۴) کشوی بسته به پهلو می رفت ولی چیدمانش شیت پایین است: پایین برود */',
-  '  body:not(.nb-open) #nb{ transform:translateY(110%); }',
-  '  /* ۵) انتخابگر تاریخ هم مثل بقیه پنجره ها شیت پایین شود */',
-  '  #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); }',
-  '  #nbMini2 .modal-box{ width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:88vh; }',
-  '  /* ۶) هدف های لمسی کوچک */',
-  '  #nb .ib.sm, #nbBody .ib.sm, .status .ib.sm{ min-width:40px; min-height:40px; }',
-  '  #nbNav .nb-nav-b{ min-height:48px; }',
-  '  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:38px; }',
-  '  .nb-rail-b{ width:40px; height:40px; }',
-  '  #tabsList .tab-x{ width:26px; height:26px; }',
-  '  .status{ min-height:44px; height:auto; }',
-  '}',
-  '',
-  '@media (max-width:760px){',
-  '  /* هدف لمسی ۴۰ پیکسل برای همهٔ دکمه های کوچک، از جمله نوار وضعیت */',
-  '  .ib.sm{ min-width:40px; min-height:40px; }',
-  '  .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }',
-  '  #tabsList .tab-x{ width:30px; height:30px; line-height:30px; }',
-  '  .pane-head .ph-actions .ib{ min-height:40px; }',
-  '  #nbMini .modal-head .ib, #nbModal .modal-head .ib, #nbMini2 .modal-head .ib{ min-width:40px; min-height:40px; }',
-  '}',
-  '',
-  '@media (max-width:760px){',
-  '  /* هنگام ویرایش (نه خواندن)، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */',
-  '  body.ip-tint #nbNav, body.nb-nav-on:has(textarea#input:focus) #nbNav{ display:none; }',
-  '  /* backdrop-filter نوار بالا، پنجره های fixed داخلش را به خود نوار می بست و overflow:hidden آن ها را می برید */',
-  '  body.ui-calm .bar{ backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--surface); }',
-  '  body.ui-calm .bar .pop{ top:calc(60px + env(safe-area-inset-top, 0px)); max-height:calc(100dvh - 140px); overflow:auto; z-index:430; }',
-  '  /* پیام ها بالای نوار پایین و کشو */',
-  '  body.nb-nav-on .toast{ bottom:calc(var(--nb-nav-h, 56px) + 12px + env(safe-area-inset-bottom, 0px)); }',
-  '  /* پنجرهٔ همگام سازی روی گوشی شیت پایین است */',
-  '  #nbSyncPop{ position:fixed; left:8px; right:8px; bottom:calc(var(--nb-nav-h, 56px) + 8px + env(safe-area-inset-bottom, 0px)); top:auto;',
-  '    width:auto; min-width:0; max-height:70dvh; overflow:auto; z-index:430; }',
-  '  /* صفحه یک ستون است و همهٔ ارتفاع را می گیرد؛ نمای دوستونه روی گوشی فقط ویرایشگر را نشان می دهد */',
-  '  body.app.nb-nav-on{ height:100dvh; }',
-  '  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{ display:grid !important; grid-template-rows:minmax(0,1fr); }',
-  '  body.nb-nav-on .pane{ height:auto; }',
-  '  body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }',
-  '  .preview, #nbList, #nbBody{ overscroll-behavior-y:contain; }',
-  '  body.ip-on #work[data-view="editor"] .pane.editor .mdbar{ bottom:calc(var(--nb-kb, 0px) + env(safe-area-inset-bottom, 0px)); }',
-  '}',
-  '',
-  '@media (max-width:760px){',
-  '  /* نوار وضعیت در حالت ویرایش می شکست و ۱۳۳ پیکسل می شد و صفحه را افقی می برد: یک خط و لغزان */',
-  '  .status{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }',
-  '  .status::-webkit-scrollbar{ height:0; display:none; }',
-  '  .status > *{ flex:none; }',
-  '  .status .st-nb, .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }',
-  '  /* نوار ابزار Markdown: دکمه های بلندتر برای انگشت */',
-  '  .mdbar .mdb{ min-width:34px; min-height:34px; }',
-  '}',
-  '',
-  '/* reading mode, the slides and print show the page alone: the notebook\'s chrome steps aside */',
-  'body.readmode #nb, body.readmode #nbRail, body.readmode #nbEdge, body.readmode #nbNav, body.readmode #nbBack,',
-  'body:has(#deck:not([hidden])) #nb, body:has(#deck:not([hidden])) #nbRail, body:has(#deck:not([hidden])) #nbEdge,',
-  'body:has(#deck:not([hidden])) #nbNav, body:has(#deck:not([hidden])) #nbBack{ display:none !important; }',
-  'body.readmode .work{ margin-right:0 !important; }',
-  '@media print{',
-  '  #nb, #nbRail, #nbEdge, #nbNav, #nbBack, #nbMenu, #nbMini, #nbMini2, #nbModal, #nbSyncPop, .nb-drag-ghost, .ta-md{ display:none !important; }',
-  '  .work{ margin-right:0 !important; }',
-  '  body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }',
-  '}',
   '/* the app\'s «drop a file» cover is only a picture: drops land on what is under it (drawer, editor, page) */',
   '#drop{ pointer-events:none; }',
   '',
@@ -11501,39 +11326,6 @@ var NB_CSS = [
   'body.ui-calm .bar-end{display:none;}          /* its buttons moved into .ui-near (ui.js §1a) */',
   '.ui-near{display:flex;align-items:center;gap:2px;margin-inline-start:6px;min-width:0;}',
   '.ui-export{display:flex;align-items:center;margin-inline-start:auto;}',
-  '/* the drawer\'s edge handle: a slim tab on the right edge, and on the drawer itself when it is open */',
-  '#nbEdge{',
-  '  position:fixed;z-index:212;top:50%;right:0;transform:translateY(-50%);width:26px;height:92px;',
-  '  display:none;align-items:center;justify-content:center;gap:0;padding:0;cursor:pointer;',
-  '  border:1px solid var(--border);border-inline-end:0;border-radius:12px 0 0 12px;',
-  '  background:var(--surface);color:var(--muted);box-shadow:-10px 0 24px -14px rgba(15,23,42,.4);',
-  '  transition:right .22s ease,color .15s;',
-  '}',
-  '#nbEdge:hover{color:var(--accent);border-color:var(--border-strong);}',
-  '#nbEdge .i{width:16px;height:16px;transform:rotate(-90deg);}',
-  '#nbEdge .nb-edge-t{',
-  '  position:absolute;right:calc(100% + 6px);top:50%;transform:translateY(-50%);white-space:nowrap;',
-  '  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:3px 8px;border-radius:8px;',
-  '  opacity:0;pointer-events:none;transition:opacity .15s;',
-  '}',
-  '#nbEdge:hover .nb-edge-t{opacity:1;}',
-  'body.nb-open #nbEdge{right:var(--nb-w,328px);}',
-  '@media (min-width:760px){ #nbEdge{display:flex;} }',
-  '/* the collapsed rail: the sections, one icon each */',
-  '#nbRail{',
-  '  position:fixed;z-index:200;top:var(--nb-top,96px);bottom:var(--nb-bottom,28px);right:0;width:46px;',
-  '  display:none;flex-direction:column;align-items:center;gap:4px;padding:8px 0;',
-  '  background:var(--surface-2);border-inline-start:1px solid var(--border);',
-  '}',
-  'body.nb-rail-on:not(.nb-open) #nbRail{display:flex;}',
-  '.nb-rail-b{',
-  '  width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;',
-  '  background:transparent;color:var(--muted);cursor:pointer;padding:0;',
-  '}',
-  '.nb-rail-b:hover{background:var(--soft);color:var(--ink);}',
-  '.nb-rail-b[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);}',
-  '@media (min-width:1100px){ body.nb-rail-on:not(.nb-open) .work{margin-right:46px;} #nbRail{z-index:25;} }',
-  '@media (max-width:1099px){ #nbRail{display:none !important;} }',
   '.ui-edit,.ui-tools{width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;font-size:.8rem;font-weight:600;}',
   '.ui-edit[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}',
   '.ui-tools .chev{width:14px;height:14px;opacity:.7;}',
@@ -11601,6 +11393,201 @@ var NB_CSS = [
   '.ta-md .mk-fm{color:var(--muted);}',
   'body.ip-on #zoomWrap li.task > .box{cursor:pointer;}',
   'body.ip-on #zoomWrap{cursor:text;}',
+  '',
+  '/* === SHELL (shell.js): one layout per size — phone ≤ 760, tablet 761–1099, desktop ≥ 1100 ===',
+  '   The layers stack in this one order; nothing else in the notebook sets a z-index for a layer. */',
+  ':root{',
+  '  --z-panel-docked:25; --z-backdrop:205; --z-panel:210; --z-nav:215;',
+  '  --z-settings:410; --z-dialog:420; --z-suggest:425; --z-menu:430; --z-ghost:440; --z-toast:450;',
+  '  --nb-nav-h:0px;',
+  '}',
+  '.toast{ z-index:var(--z-toast); }',
+  '#nbModal{ z-index:var(--z-settings); }',
+  '#nbMini, #nbMini2, #nbSyncPop{ z-index:var(--z-dialog); }',
+  '#nbSyncPop:not([hidden]){ display:block; }          /* the app\'s .pop shows only with .open; this one goes by hidden */',
+  '#nbSyncPop{ position:fixed; width:min(380px, calc(100vw - 16px)); max-height:min(70dvh, 560px); overflow:auto; }',
+  '.nb-sug{ z-index:var(--z-suggest); }',
+  '#nbMenu{ z-index:var(--z-menu); }',
+  '.nb-drag-ghost{ z-index:var(--z-ghost); }',
+  '.nb-rtl-back{ transform:rotate(-90deg); }           /* the chevron points down; «back» in a right-to-left page points right */',
+  '#nbNav, #nbTop{ display:none; }',
+  '',
+  '/* --- the panel --- */',
+  '#nb{',
+  '  position:fixed; z-index:var(--z-panel); top:var(--nb-top, 96px); bottom:var(--nb-bottom, 28px); right:0;',
+  '  width:var(--nb-w, 340px); max-width:92vw; display:flex; flex-direction:column; overflow:hidden;',
+  '  background:var(--surface); border-left:1px solid var(--border); box-shadow:-18px 0 40px -24px rgba(15,23,42,.35);',
+  '  transition:transform .22s ease, visibility 0s;',
+  '}',
+  'body:not(.nb-open) #nb{ transform:translateX(102%); visibility:hidden; transition:transform .22s ease, visibility 0s .22s; }',
+  '#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; z-index:2; }',
+  '#nbBack{ position:fixed; inset:0; z-index:var(--z-backdrop); background:rgba(6,10,18,.42); opacity:0; pointer-events:none; transition:opacity .2s ease; }',
+  'body.nb-open #nbBack{ opacity:1; pointer-events:auto; }',
+  '#btnNotebook[aria-pressed="true"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }',
+  '',
+  '/* desktop: beside the page, under every popover and dialog */',
+  '@media (min-width:1100px){',
+  '  #nbBack{ display:none; }',
+  '  #nb{ z-index:var(--z-panel-docked); box-shadow:none; }',
+  '  body.nb-open .work{ margin-right:var(--nb-w, 340px); }        /* the panel is on the right; inline-end would be the left in RTL */',
+  '}',
+  '/* tablet: over the page, the whole height */',
+  '@media (min-width:761px) and (max-width:1099px){',
+  '  #nb{ top:0; bottom:0; width:min(400px, 88vw); border-radius:16px 0 0 16px; }',
+  '  #nb .nb-grip{ display:none; }',
+  '}',
+  '',
+  '/* --- phone: pages, a bottom bar, a note top bar, sheets --- */',
+  '@media (max-width:760px){',
+  '  html, body{ height:100dvh; }',
+  '  body.app{ height:100dvh !important; overflow:hidden !important; box-sizing:border-box; }',
+  '  body.nb-nav-on{ --nb-nav-h:56px; padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important; }',
+  '  /* typing: the bottom bar steps aside for the keyboard and the Markdown toolbar */',
+  '  body.nb-nav-on.ip-tint, body.nb-nav-on:has(textarea#input:focus){ --nb-nav-h:0px; }',
+  '  body.ip-tint #nbNav, body:has(textarea#input:focus) #nbNav{ display:none !important; }',
+  '',
+  '  /* the page: one column filling the space between the top bar and the bottom bar */',
+  '  .tabs, .status, #btnNotebook{ display:none !important; }',
+  '  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{',
+  '    display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:minmax(0,1fr) !important;',
+  '    gap:0 !important; padding:0 !important; flex:1; min-height:0;',
+  '  }',
+  '  body.nb-nav-on .divider{ display:none !important; }',
+  '  body.nb-nav-on .pane{ height:auto !important; border-radius:0; border-inline:0; box-shadow:none; }',
+  '  body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }',
+  '  .preview, #nbList, #nbBody, textarea#input{ overscroll-behavior:contain; }',
+  '',
+  '  /* the top bar: one row; its popovers come up from the bottom */',
+  '  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; padding:6px 10px; position:relative;',
+  '    backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--surface); }',
+  '  body.ui-calm .brand-name{ display:none; }',
+  '  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }',
+  '  body.ui-calm .bar .pop{ position:fixed; top:auto !important; left:8px !important; right:8px !important; width:auto !important; min-width:0;',
+  '    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)); max-height:70dvh; overflow:auto; }',
+  '',
+  '  /* a note is a page: its own top bar instead of the app\'s */',
+  '  body.nb-note-page .bar{ display:none !important; }',
+  '  body.nb-note-page #nbTop{ display:flex; }',
+  '  #nbTop{',
+  '    flex:none; position:relative; z-index:30; align-items:center; gap:2px; min-height:52px;',
+  '    padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);',
+  '  }',
+  '  #nbTop .ib{ min-width:44px; min-height:44px; }',
+  '  .nb-top-t{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.02rem; padding-inline:4px; }',
+  '  .nb-top-sync{ border:0; background:none; width:36px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; }',
+  '  .nb-top-sync i{ width:9px; height:9px; border-radius:50%; background:var(--muted); }',
+  '  .nb-top-sync.nb-ok i{ background:#16a34a; }',
+  '  .nb-top-sync.nb-pending i{ background:var(--accent); }',
+  '  .nb-top-sync.nb-busy i{ background:#f59e0b; animation:nb-pulse 1s infinite; }',
+  '  .nb-top-sync.nb-conflict i, .nb-top-sync.nb-error i{ background:#dc2626; }',
+  '  #nbTop [data-nb-top="edit"][aria-pressed="true"]{ color:var(--accent); }',
+  '',
+  '  /* the panel is a page */',
+  '  #nb{',
+  '    top:0 !important; bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important; left:0; right:0;',
+  '    width:auto !important; max-width:none; border:0; border-radius:0; box-shadow:none; transform:none !important; transition:none;',
+  '    padding-top:env(safe-area-inset-top, 0px);',
+  '  }',
+  '  body:not(.nb-open) #nb{ display:none; }',
+  '  #nbBack, #nb .nb-grip, #nbClose, #nb .nb-tabs{ display:none !important; }',
+  '  #nb .nb-head{ min-height:52px; padding:6px 10px 6px 6px; background:var(--surface); }',
+  '  #nb .nb-head .nb-h-title{ font-size:1.08rem; }',
+  '  #nb .nb-head .ib.sm{ min-width:44px; min-height:44px; }',
+  '  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }',
+  '  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:40px; }',
+  '  .nb-row-acts, .nb-act, .nb-note-acts, .nb-hist-btns{ opacity:1 !important; }',
+  '',
+  '  /* the bottom bar */',
+  '  #nbNav{',
+  '    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:var(--z-nav);',
+  '    height:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); padding-bottom:env(safe-area-inset-bottom, 0px);',
+  '    background:var(--surface); border-top:1px solid var(--border); align-items:stretch; justify-content:space-around;',
+  '  }',
+  '  .nb-nav-b{',
+  '    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;',
+  '    border:0; background:none; color:var(--muted); font:inherit; font-size:.68rem; font-weight:600; cursor:pointer; padding:6px 2px;',
+  '  }',
+  '  .nb-nav-b .i{ width:22px; height:22px; }',
+  '  .nb-nav-b[aria-pressed="true"]{ color:var(--accent); }',
+  '  .nb-nav-b[aria-pressed="true"] .i{ background:color-mix(in srgb, var(--accent) 14%, transparent); border-radius:99px; padding:2px 14px; width:52px; box-sizing:border-box; }',
+  '',
+  '  /* every layer is a sheet from the bottom, above the bottom bar */',
+  '  #nbMenu{',
+  '    left:8px !important; right:8px !important; top:auto !important; min-width:0;',
+  '    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)) !important; max-height:70dvh; border-radius:16px; padding:6px;',
+  '  }',
+  '  #nbMenu .mi{ min-height:46px; font-size:.95rem; }',
+  '  #nbSyncPop{ left:8px !important; right:8px !important; top:auto !important; width:auto;',
+  '    bottom:calc(var(--nb-nav-h) + 8px + env(safe-area-inset-bottom, 0px)) !important; }',
+  '  #nbMini, #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); transition:padding .15s; }',
+  '  #nbMini .modal-box, #nbMini2 .modal-box{',
+  '    width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:calc(100dvh - var(--nb-kb, 0px) - 12px);',
+  '    animation:nb-sheet .2s cubic-bezier(.2,.9,.3,1.1);',
+  '  }',
+  '  #nbMini .nb-mini-body{ max-height:46vh; }',
+  '  .nb-sug{ max-height:34vh; }',
+  '  .toast{ bottom:calc(var(--nb-nav-h) + 12px + env(safe-area-inset-bottom, 0px)); }',
+  '',
+  '  /* the Markdown toolbar sits on the keyboard (or on the bottom bar) */',
+  '  .pane.editor .mdbar{',
+  '    position:fixed; left:0; right:0; z-index:var(--z-nav);',
+  '    bottom:calc(var(--nb-kb, 0px) + var(--nb-nav-h) + env(safe-area-inset-bottom, 0px));',
+  '    background:var(--surface); border-top:1px solid var(--border); border-bottom:0; padding:6px 8px;',
+  '    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);',
+  '  }',
+  '  .mdbar .mdb{ min-width:36px; min-height:36px; }',
+  '  textarea#input{ padding-bottom:64px; font-size:16px; }     /* 16px: the phone does not zoom into the field */',
+  '  .nb-input, #nbBody input, #nbBody select{ font-size:16px; }',
+  '',
+  '  /* what has no use without a mouse */',
+  '  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],',
+  '  [data-action="present"], [data-action="fs"], #btnOutline, .split{ display:none !important; }',
+  '}',
+  '',
+  '/* --- the settings page --- */',
+  '#nbModal .nb-set-box{ width:min(940px, 100%) !important; height:min(680px, calc(100dvh - 40px)); display:flex; flex-direction:column; }',
+  '.nb-set-main{ flex:1; min-height:0; display:grid; grid-template-columns:250px minmax(0,1fr); }',
+  '.nb-set-nav{ overflow:auto; padding:8px; background:var(--surface-2); border-left:1px solid var(--border); }',
+  '.nb-set-item{',
+  '  display:flex; gap:10px; align-items:center; width:100%; text-align:start; padding:10px; border:0; background:none;',
+  '  border-radius:12px; cursor:pointer; color:var(--ink); font:inherit;',
+  '}',
+  '.nb-set-item:hover{ background:var(--soft); }',
+  '.nb-set-item .i{ flex:none; color:var(--muted); }',
+  '.nb-set-item b{ display:block; font-size:.88rem; }',
+  '.nb-set-item small{ display:block; color:var(--muted); font-size:.7rem; }',
+  '.nb-set-item[aria-current="page"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); }',
+  '.nb-set-item[aria-current="page"] .i, .nb-set-item[aria-current="page"] b{ color:var(--accent); }',
+  '#nbModal .nb-set-body{ overflow:auto; padding:16px 20px 24px; max-height:none; }',
+  '.nb-set-body h5{ margin:18px 0 8px; font-size:.78rem; color:var(--muted); }',
+  '.nb-set-body .sw{ margin-block:6px; }',
+  '.nb-set-back{ display:none !important; }',
+  '.nb-steps{ margin:4px 0 10px; padding-inline-start:20px; font-size:.82rem; line-height:2; color:var(--ink-2); }',
+  '.nb-seg{ display:inline-flex; }',
+  '.nb-seg button[aria-pressed="true"]{ background:var(--accent); color:#fff; }',
+  '.nb-set-app .pop-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; flex-wrap:wrap; }',
+  '@media (max-width:760px){',
+  '  #nbModal{ padding:0; align-items:stretch; }',
+  '  #nbModal .nb-set-box{ width:100% !important; max-width:none; height:100dvh; max-height:none; border-radius:0; }',
+  '  .nb-set-main{ grid-template-columns:minmax(0,1fr); }',
+  '  .nb-set-nav{ border:0; background:none; padding:6px 8px; }',
+  '  .nb-set-item{ min-height:58px; }',
+  '  #nbModal:not(.nb-set-in) .nb-set-body{ display:none; }',
+  '  #nbModal.nb-set-in .nb-set-nav{ display:none; }',
+  '  #nbModal.nb-set-in .nb-set-back{ display:inline-flex !important; min-width:44px; min-height:44px; }',
+  '  #nbModal .nb-set-body{ padding:12px 14px 32px; }',
+  '}',
+  '',
+  '/* --- reading mode, the slides and print show the page alone --- */',
+  'body.readmode #nb, body.readmode #nbNav, body.readmode #nbBack, body.readmode #nbTop,',
+  'body:has(#deck:not([hidden])) #nb, body:has(#deck:not([hidden])) #nbNav,',
+  'body:has(#deck:not([hidden])) #nbBack, body:has(#deck:not([hidden])) #nbTop{ display:none !important; }',
+  'body.readmode .work{ margin-right:0 !important; }',
+  '@media print{',
+  '  #nb, #nbNav, #nbTop, #nbBack, #nbMenu, #nbMini, #nbMini2, #nbModal, #nbSyncPop, .nb-drag-ghost, .ta-md{ display:none !important; }',
+  '  .work{ margin-right:0 !important; }',
+  '  body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }',
+  '}',
   '',
 ].join('\n');
 
@@ -12714,6 +12701,7 @@ function nbCommitMessage(list){
     var f = NB.files[path];
     if (!f){ toast('این یادداشت پیدا نشد', 'x'); return; }
     if (f.deleted){ toast('این یادداشت حذف شده', 'x'); return; }
+    nbPhoneLeavePanel();
     if (f.enc && f.plain == null){
       nbEnsurePlain(path).then(function(ok){ if (ok) nbOpen(path, at); });
       return;
@@ -12860,7 +12848,7 @@ function nbCommitMessage(list){
     var tabsBar = $('tabs'), foot = document.querySelector('footer.status');
     var top = tabsBar ? Math.max(0, tabsBar.getBoundingClientRect().bottom) : 96;
     var bot = foot ? Math.max(0, innerHeight - foot.getBoundingClientRect().top) : 28;
-    ['nb', 'nbRail'].forEach(function(id){
+    ['nb'].forEach(function(id){
       var el = $(id);
       if (!el) return;
       el.style.setProperty('--nb-top', Math.round(top) + 'px');
@@ -13077,13 +13065,13 @@ function nbCommitMessage(list){
       var empty = e.target.closest('[data-nb-empty]');
       if (empty){ nbEmptyAct(empty.dataset.nbEmpty); return; }
       var temp = e.target.closest('[data-nb-temp]');
-      if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); return; }
+      if (temp){ nbPhoneLeavePanel(); switchTab(temp.dataset.nbTemp); nbRender(); return; }
       var hs = e.target.closest('[data-nb-hist-save]');
       if (hs){ nbHistSaveToNotebook(+hs.dataset.nbHistSave); return; }
       var hd = e.target.closest('[data-nb-hist-del]');
       if (hd){ nbHistDelete(+hd.dataset.nbHistDel); return; }
       var hist = e.target.closest('[data-nb-hist-item]');
-      if (hist){ nbHistOpen(+hist.dataset.nbHistItem); nbRender(); return; }
+      if (hist){ nbPhoneLeavePanel(); nbHistOpen(+hist.dataset.nbHistItem); nbRender(); return; }
       var clr = e.target.closest('[data-nb-hist-clear]');
       if (clr){
         nbConfirm('پاک کردن متن های اخیر', 'همهٔ متن های اخیر پاک شوند؟ (تب های باز دست نمی خورند)', function(){
@@ -13123,30 +13111,7 @@ function nbCommitMessage(list){
       }
       e.preventDefault();
       if (note){
-        var path = note.dataset.nbNote;
-        nbMenu(e.clientX, e.clientY, [
-          { label: 'باز کردن', act: function(){ nbOpen(path); } },
-          { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
-          { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
-          { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
-          { label: 'باز کردن در تب تازه', act: function(){ nbOpenInNewTab(path); } },
-          { label: 'سنجاق در تب', act: function(){ nbPinNoteTab(path); } },
-          { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
-          { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
-          null,
-          { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
-          { label: 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
-          { label: 'کپی پیوند [[]]', act: function(){
-            var link = '[[' + nbTitle(path) + ']]';
-            copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
-          } },
-          { label: 'دانلود md', act: function(){ nbDownload(path); } },
-          { label: 'حذف', danger: true, act: function(){
-            nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
-              nbDeletePath(path); toast('برای حذف صف شد', 'trash');
-            });
-          } }
-        ]);
+        nbMenu(e.clientX, e.clientY, nbNoteMenuItems(note.dataset.nbNote));
       } else if (att) {
         var ap = att.dataset.nbAtt;
         nbMenu(e.clientX, e.clientY, [
@@ -13177,6 +13142,32 @@ function nbCommitMessage(list){
     });
   }
 
+  /** Everything that can be done to one note: the tree's right-click, the note page's ⋯ on a phone. */
+  function nbNoteMenuItems(path){
+    return [
+      { label: 'باز کردن', act: function(){ nbOpen(path); } },
+      { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
+      { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
+      { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
+      { label: 'باز کردن در تب تازه', act: function(){ nbOpenInNewTab(path); } },
+      { label: 'سنجاق در تب', act: function(){ nbPinNoteTab(path); } },
+      { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
+      { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
+      null,
+      { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
+      { label: NB.files[path] && NB.files[path].enc ? 'برداشتن رمز' : 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
+      { label: 'کپی پیوند [[]]', act: function(){
+        var link = '[[' + nbTitle(path) + ']]';
+        copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
+      } },
+      { label: 'دانلود md', act: function(){ nbDownload(path); } },
+      { label: 'حذف', danger: true, act: function(){
+        nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
+          nbDeletePath(path); toast('برای حذف صف شد', 'trash');
+        });
+      } }
+    ];
+  }
   /* --- small dialogs, in the app's own style --- */
   function nbModalBox(title, bodyHtml, footHtml, ico, target){
     if (innerWidth <= 760) nbSidebar(false);                     // on a phone the drawer would be in the way
@@ -13602,20 +13593,64 @@ function nbCommitMessage(list){
   });
 
   /* --- settings --- */
-  function nbDrawSettings(){
-    var m = $('nbModal');
-    m.hidden = false;
-    $('nbModalBody').innerHTML = '<div class="nb-sec"><h4>اتصال</h4>'
-      + '<div class="nb-field"><label>مخزن</label><input class="nb-input" id="nbRepo" dir="ltr" placeholder="user/notes" value="' + escapeHtml(C.repo) + '"></div>'
-      + '<div class="nb-field"><label>توکن</label><input class="nb-input" id="nbToken" dir="ltr" type="password" placeholder="' + (NB.locked ? 'قفل است' : 'github_pat_…') + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '"></div>'
+  /* ================= تنظیمات: یک صفحه، چند بخش ================= */
+  var NB_SET = [
+    ['connect', 'cloud', 'اتصال', 'مخزن گیت هاب یا گیت لب'],
+    ['sync', 'redo', 'همگام سازی', 'ارسال خودکار، گرفتن، پشتیبان'],
+    ['cols', 'folder', 'مجموعه ها', 'پوشه + تقویم + قالب'],
+    ['notes', 'clock', 'یادداشت ها و تقویم', 'هفته، پیوست ها، فقط خواندنی'],
+    ['view', 'sliders', 'متن و ظاهر', 'اندازه، رنگ، تم، جهت'],
+    ['security', 'lock', 'امنیت', 'قفل توکن، یادداشت های رمزدار'],
+    ['about', 'file', 'درباره', 'نسخه، کلیدهای میانبر']
+  ];
+  var nbSetView = null;           // the app's own settings controls, moved here once (their listeners come along)
+  function nbSetViewBox(){
+    if (nbSetView) return nbSetView;
+    nbSetView = document.createElement('div');
+    nbSetView.className = 'nb-set-app';
+    var pop = $('popSettings');
+    if (pop) Array.prototype.slice.call(pop.children).forEach(function(ch){ if (!ch.classList.contains('pop-title')) nbSetView.appendChild(ch); });
+    return nbSetView;
+  }
+  function nbSw(id, on, title, sub, disabled){
+    return '<label class="sw"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + (disabled ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>' + title + '</b>'
+      + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>';
+  }
+  function nbField(label, inner, hint){
+    return '<div class="nb-field"><label>' + label + '</label>' + inner + (hint ? '<small class="nb-mini-text">' + hint + '</small>' : '') + '</div>';
+  }
+  function nbSetSectionHtml(sec){
+    var gl = (C.provider || 'github') === 'gitlab';
+    if (sec === 'connect') return ''
+      + nbField('سرویس', '<div class="seg nb-seg" id="nbProvSeg">'
+        + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<button type="button" data-nb-prov="' + o[0] + '" aria-pressed="' + ((C.provider || 'github') === o[0]) + '">' + o[1] + '</button>'; }).join('')
+        + '</div><input type="hidden" id="nbProvider" value="' + escapeHtml(C.provider || 'github') + '">')
+      + nbField('مخزن', '<input class="nb-input" id="nbRepo" dir="ltr" placeholder="' + (gl ? 'group/notes' : 'user/notes') + '" value="' + escapeHtml(C.repo) + '">')
+      + nbField('توکن', '<input class="nb-input" id="nbToken" dir="ltr" type="password" autocomplete="off" placeholder="' + (NB.locked ? 'قفل است' : (gl ? 'glpat-…' : 'github_pat_…')) + '"' + (NB.locked ? ' disabled' : '') + ' value="' + escapeHtml(C.token) + '">')
       + (NB.locked ? '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="unlock">باز کردن قفل توکن</button></div>' : '')
-      + '<label class="sw"><input type="checkbox" id="nbLock"' + (C.lockToken ? ' checked' : '') + (NB.locked ? ' disabled' : '') + '><span class="sw-ui"></span><span><b>قفل توکن با گذرواژه</b><small>توکن فقط رمزشده در مرورگر می ماند؛ هر بار باز شدن صفحه، با کلیک روی «قفل» باز می شود</small></span></label>'
-      + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن).</p>'
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
+      + '<ol class="nb-steps">' + (gl
+        ? '<li>در گیت لب یک مخزن (حتی خالی) بساز.</li><li><a href="https://gitlab.com/-/user_settings/personal_access_tokens" target="_blank" rel="noopener">توکن تازه</a> با دسترسی <b dir="ltr">api</b> بساز.</li>'
+        : '<li>در گیت هاب یک مخزن خصوصی (حتی خالی) بساز.</li><li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">توکن fine-grained</a> بساز: فقط همین مخزن، دسترسی <b>Contents: Read and write</b>.</li>')
+      + '<li>مخزن و توکن را اینجا بگذار و «آزمایش اتصال» را بزن.</li></ol>'
+      + '<div class="nb-actions"><button class="btn-primary sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
       + '<p class="nb-hint" id="nbTestOut"></p>'
-      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند</small></span></label>'
-      + '<label class="sw"><input type="checkbox" id="nbSyncOnline"' + (C.syncOnline !== false ? ' checked' : '') + '><span class="sw-ui"></span><span><b>همگام سازی وقتی اینترنت برگشت</b><small>اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود</small></span></label></div>'
-      + '<div class="nb-sec"><h4>مجموعه ها <small>پوشه + تقویم + قالب</small></h4><div class="nb-collist">'
+      + nbField('شاخه', '<input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '">')
+      + '<h5>چند دفترچه</h5>'
+      + (nbProfiles().length ? nbField('دفترچهٔ فعال', '<select id="nbProf"><option value="">—</option>'
+        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
+        + '</select>') : '')
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
+      + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
+      + '</div>';
+    if (sec === 'sync') return ''
+      + nbSw('nbAuto', C.auto, 'ارسال خودکار', 'چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند')
+      + nbField('ثانیه تا ارسال خودکار', '<input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '">')
+      + nbSw('nbSyncOnline', C.syncOnline !== false, 'همگام سازی وقتی اینترنت برگشت', 'اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود')
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="pull">گرفتن الان</button><button class="btn-soft sm" type="button" data-nb-cfg="push">ارسال الان</button></div>'
+      + '<h5>پشتیبان</h5><div class="nb-actions">'
+      + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
+      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label></div>';
+    if (sec === 'cols') return '<div class="nb-collist">'
       + C.collections.map(function(c, i){
         var kind = (NB_CAL_KINDS.filter(function(k){ return k[0] === (c.calendar || ''); })[0] || ['', ''])[1];
         return '<div class="nb-colrow"><i class="hm-dot" style="background:' + escapeHtml(c.color || 'var(--accent)') + '"></i>'
@@ -13624,50 +13659,72 @@ function nbCommitMessage(list){
       }).join('')
       + '</div><div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="addcol">مجموعهٔ جدید…</button>'
       + (Object.keys(NB_TEMPLATES).some(function(p){ return !NB.files[p]; }) ? '<button class="btn-soft sm" type="button" data-nb-cfg="tpl">قالب های نمونه را بساز</button>' : '')
-      + '</div></div>'
-      + '<details class="nb-sec nb-adv"><summary>پیشرفته</summary>'
-      + '<div class="nb-field"><label>سرویس</label><select id="nbProvider">'
-      + [['github', 'گیت هاب'], ['gitlab', 'گیت لب']].map(function(o){ return '<option value="' + o[0] + '"' + ((C.provider || 'github') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div>'
-      + '<div class="nb-field"><label>شاخه</label><input class="nb-input" id="nbBranch" dir="ltr" value="' + escapeHtml(C.branch) + '"></div>'
-      + '<div class="nb-field"><label>ثانیه تا ارسال خودکار</label><input class="nb-input" id="nbIdle" dir="ltr" type="number" min="5" max="600" value="' + (+C.idleSeconds || 20) + '"></div>'
-      + '<label class="sw"><input type="checkbox" id="nbGreg"' + (C.showGregorian ? ' checked' : '') + '><span class="sw-ui"></span><span><b>نمایش تاریخ میلادی کنار روزها</b><small>عدد کوچک گوشهٔ هر خانهٔ تقویم</small></span></label>'
-      + '<div class="nb-field"><label>شروع هفته</label><select id="nbWeekStart">'
-      + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-      + '</select></div>'
-      + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
-      + '<div class="nb-field"><label>پوشه های فقط خواندنی</label><input class="nb-input" id="nbRoFolders" dir="auto" placeholder="مثلاً: آرشیو، خروجی ها" value="' + escapeHtml((C.readonlyFolders || []).join('، ')) + '"><small class="nb-mini-text">با کاما جدا کن؛ یادداشت های این پوشه ها فقط خوانده می شوند.</small></div>'
-      + '<h5>چند دفترچه</h5>'
-      + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
-        + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
-        + '</select></div>' : '')
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="saveprof">ذخیرهٔ این اتصال به عنوان دفترچه…</button>'
-      + (C.active ? '<button class="btn-soft sm" type="button" data-nb-cfg="delprof">حذف «' + escapeHtml(C.active) + '»</button>' : '')
-      + '</div>'
-      + '<h5>خروجی و ورودی</h5><div class="nb-actions">'
-      + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
-      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label>'
-      + '</div></details>';
-    var nbSharedBefore = C.weekStart + '|' + C.attachments;
-    function apply(){
-      C.repo = $('nbRepo').value.trim();
-      C.branch = $('nbBranch').value.trim() || 'main';
-      if (!NB.locked) C.token = $('nbToken').value.trim();
-      if ($('nbProvider')) C.provider = $('nbProvider').value;
-      if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
-      if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
-      C.auto = $('nbAuto').checked;
-      if ($('nbSyncOnline')) C.syncOnline = $('nbSyncOnline').checked;
-      C.idleSeconds = +$('nbIdle').value || 20;
-      C.weekStart = $('nbWeekStart').value;
-      C.showGregorian = $('nbGreg').checked;
-      var shared = C.weekStart + '|' + C.attachments;
-      nbSaveCfg(); nbSay();
-      if (shared !== nbSharedBefore){ nbSharedBefore = shared; nbCollectionsChanged(true); }
-      if (NB.open && NB.section === 'cal') nbRenderKeep();
-    }
-    m.addEventListener('input', apply);
+      + '</div>';
+    if (sec === 'notes') return ''
+      + nbField('شروع هفته', '<select id="nbWeekStart">'
+        + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+        + '</select>')
+      + nbSw('nbGreg', C.showGregorian, 'نمایش تاریخ میلادی کنار روزها', 'عدد کوچک گوشهٔ هر خانهٔ تقویم')
+      + nbField('پوشهٔ پیوست ها', '<input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '">')
+      + nbField('پوشه های فقط خواندنی', '<input class="nb-input" id="nbRoFolders" dir="auto" placeholder="مثلاً: آرشیو، خروجی ها" value="' + escapeHtml((C.readonlyFolders || []).join('، ')) + '">',
+        'با کاما جدا کن؛ یادداشت های این پوشه ها فقط خوانده می شوند.');
+    if (sec === 'view') return '<div id="nbSetViewSlot"></div>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="theme">تم روشن / تیره</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-run="dir">جهت پایه: راست‌به‌چپ / چپ‌به‌راست</button></div>';
+    if (sec === 'security') return ''
+      + nbSw('nbLock', C.lockToken, 'قفل توکن با گذرواژه', 'توکن فقط رمزشده در مرورگر می ماند؛ با هر بار باز کردن برنامه یک بار گذرواژه می خواهد', NB.locked)
+      + '<h5>یادداشت های رمزدار</h5>'
+      + '<p class="nb-mini-text">متن رمزدار فقط روی همین دستگاه باز می شود و روی مخزن رمزشده می رود. گذرواژه تا بسته شدن برنامه در حافظه می ماند.</p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="forget"' + (NB.pass ? '' : ' disabled') + '>فراموش کردن گذرواژه در این نشست</button></div>';
+    var ver = (document.querySelector('meta[name="app-version"]') || {}).content || '';
+    return '<p class="nb-mini-text">میزکار — نسخهٔ <b dir="ltr">' + escapeHtml(ver) + '</b></p>'
+      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="nb-keys">کلیدهای میانبر</button>'
+      + ($('btnInstall') && !$('btnInstall').hidden ? '<button class="btn-soft sm" type="button" data-nb-run="install">نصب به عنوان برنامه</button>' : '')
+      + '</div>';
+  }
+  /** The settings page: a list of sections; on a phone the list and one section take turns. */
+  function nbDrawSettings(sec){
+    var m = $('nbModal');
+    m.hidden = false;
+    if (sec !== undefined) NB.setSection = sec;
+    var phone = innerWidth <= 760;
+    if (!NB.setSection && !phone) NB.setSection = C.repo ? 'sync' : 'connect';
+    var cur = NB_SET.filter(function(x){ return x[0] === NB.setSection; })[0];
+    m.classList.toggle('nb-set-in', !!cur);
+    $('nbSetNav').innerHTML = NB_SET.map(function(x){
+      return '<button type="button" class="nb-set-item" data-nb-set="' + x[0] + '" aria-current="' + (cur && cur[0] === x[0] ? 'page' : 'false') + '">'
+        + icon(x[1]) + '<span><b>' + x[2] + '</b><small>' + x[3] + '</small></span></button>';
+    }).join('');
+    $('nbSetTitle').textContent = cur ? cur[2] : 'تنظیمات';
+    $('nbModalBody').innerHTML = cur ? nbSetSectionHtml(cur[0]) : '';
+    if (cur && cur[0] === 'view' && $('nbSetViewSlot')) $('nbSetViewSlot').appendChild(nbSetViewBox());
+    if (!m.dataset.wired){ m.dataset.wired = '1'; nbWireSettings(m); }
+  }
+  var nbSharedBefore = '';
+  function nbSettingsApply(){
+    if ($('nbRepo')) C.repo = $('nbRepo').value.trim();
+    if ($('nbBranch')) C.branch = $('nbBranch').value.trim() || 'main';
+    if ($('nbToken') && !NB.locked) C.token = $('nbToken').value.trim();
+    if ($('nbProvider')) C.provider = $('nbProvider').value;
+    if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
+    if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
+    if ($('nbAuto')) C.auto = $('nbAuto').checked;
+    if ($('nbSyncOnline')) C.syncOnline = $('nbSyncOnline').checked;
+    if ($('nbIdle')) C.idleSeconds = +$('nbIdle').value || 20;
+    if ($('nbWeekStart')) C.weekStart = $('nbWeekStart').value;
+    if ($('nbGreg')) C.showGregorian = $('nbGreg').checked;
+    var shared = C.weekStart + '|' + C.attachments;
+    nbSaveCfg(); nbSay();
+    if (nbSharedBefore && shared !== nbSharedBefore) nbCollectionsChanged(true);
+    nbSharedBefore = shared;
+    if (NB.open && NB.section === 'cal') nbRenderKeep();
+  }
+  /** Wired once: every redraw replaces the content, never the listeners. */
+  function nbWireSettings(m){
+    nbSharedBefore = C.weekStart + '|' + C.attachments;
+    m.addEventListener('input', function(e){ if (e.target.closest('#nbModalBody') && !e.target.closest('.nb-set-app')) nbSettingsApply(); });
     m.addEventListener('change', function(e){
+      if (!e.target.closest('#nbModalBody') || e.target.closest('.nb-set-app')) return;
       if (e.target.id === 'nbLock'){
         if (!e.target.checked){ C.lockToken = false; NB.tokenPass = ''; nbSaveCfg(); nbDrawSettings(); toast('قفل توکن برداشته شد', 'check'); return; }
         e.target.checked = false;
@@ -13680,24 +13737,30 @@ function nbCommitMessage(list){
         if (el) el.type = 'password';
         return;
       }
-      if (e.target.id === 'nbProf' && e.target.value){
-        apply();
-        nbUseProfile(e.target.value);
-        nbCloseSettings();
-        return;
-      }
-      apply();
+      if (e.target.id === 'nbProf' && e.target.value){ nbSettingsApply(); nbUseProfile(e.target.value); nbCloseSettings(); return; }
+      if (e.target.id === 'nbZipIn'){ nbImportZip(e.target); return; }
+      nbSettingsApply();
     });
     m.addEventListener('click', function(e){
+      var item = e.target.closest('[data-nb-set]');
+      if (item){ nbDrawSettings(item.dataset.nbSet); return; }
+      if (e.target.closest('[data-nb-set-back]')){ nbDrawSettings(''); return; }
+      var prov = e.target.closest('[data-nb-prov]');
+      if (prov){ $('nbProvider').value = prov.dataset.nbProv; nbSettingsApply(); nbDrawSettings(); return; }
+      var run = e.target.closest('[data-nb-run]');
+      if (run){ runAction(run.dataset.nbRun); return; }
       var fix = e.target.closest('[data-nb-colfix]');
       if (fix){ nbCollectionDialog(+fix.dataset.nbColfix); return; }
       var btn = e.target.closest('[data-nb-cfg]');
       if (!btn) return;
-      if (btn.dataset.nbCfg === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
-      if (btn.dataset.nbCfg === 'addcol'){ nbCollectionDialog(-1, ''); return; }
       var what = btn.dataset.nbCfg;
+      if (what === 'unlock'){ nbUnlock().then(function(ok){ if (ok) nbDrawSettings(); }); return; }
+      if (what === 'addcol'){ nbCollectionDialog(-1, ''); return; }
+      if (what === 'pull'){ nbPull({ loud: true }); return; }
+      if (what === 'push'){ nbPush({ loud: true }); return; }
+      if (what === 'forget'){ NB.pass = ''; nbDrawSettings(); toast('گذرواژهٔ یادداشت های رمزدار از حافظه پاک شد', 'lock'); return; }
       if (what === 'test'){
-        apply();
+        nbSettingsApply();
         $('nbTestOut').textContent = 'در حال آزمایش…';
         nbTest().then(function(r){
           $('nbTestOut').innerHTML = 'اوکی — <b dir="ltr">' + escapeHtml(r.name) + '</b>' + (r.private ? ' (خصوصی)' : ' (عمومی)')
@@ -13706,29 +13769,15 @@ function nbCommitMessage(list){
           NB.error = ''; nbSay();
           if (!r.empty) nbPull({});
         }).catch(function(err){ $('nbTestOut').innerHTML = '<span class="nb-warn">' + escapeHtml(err.message) + '</span>'; nbSay('error'); });
-      } else if (what === 'addcol'){
-        apply();
-        C.collections.push({ id: 'c' + Date.now().toString(36), name: 'مجموعه', path: 'پوشه/{title}.md', template: '', calendar: '', color: '#6d5efc' });
-        nbSaveCfg(); nbDrawSettings();
-      } else if (what === 'delcol'){
-        if (C.collections.length <= 1) return;
-        C.collections.pop(); nbSaveCfg(); nbDrawSettings();
       } else if (what === 'tpl'){
-        apply();
         var n = 0;
         Object.keys(NB_TEMPLATES).forEach(function(p){ if (!NB.files[p]){ nbWrite(p, NB_TEMPLATES[p]); n++; } });
         toast(n ? faNum(n) + ' قالب ساخته شد — با «ارسال» به مخزن می رود' : 'قالب ها از قبل بودند', 'check');
-      } else if (what === 'config'){
-        apply();
-        nbWrite(C.configPath, JSON.stringify({
-          version: 1, calendar: C.calendar || 'jalali', weekStart: C.weekStart, collections: C.collections,
-          commit: { auto: C.auto, idleSeconds: C.idleSeconds }, attachments: C.attachments
-        }, null, 2) + '\n');
-        toast('config.json ساخته شد — با «ارسال» به مخزن می رود', 'check');
+        nbDrawSettings();
       } else if (what === 'zip'){
         nbDownloadZip('');
       } else if (what === 'saveprof'){
-        apply();
+        nbSettingsApply();
         nbPrompt('نام این دفترچه', C.active || '', function(name){
           if (!name) return;
           nbSaveProfile(name);
@@ -13743,26 +13792,26 @@ function nbCommitMessage(list){
         toast('دفترچه حذف شد (یادداشت هایش روی مخزن دست نخورده اند)', 'trash');
       }
     });
-    var zi = $('nbZipIn');
-    if (zi) zi.addEventListener('change', function(){
-      var file = zi.files[0];
-      if (!file) return;
-      file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
-        var n = 0;
-        entries.forEach(function(en){
-          if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
-          if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
-          nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
-          n++;
-        });
-        toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
-      }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
-      zi.value = '';
-    });
   }
-  function nbOpenSettings(){
-    if (innerWidth < 760) nbSidebar(false);
-    nbDrawSettings();
+  function nbImportZip(zi){
+    var file = zi.files[0];
+    if (!file) return;
+    file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
+      var n = 0;
+      entries.forEach(function(en){
+        if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
+        if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
+        nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
+        n++;
+      });
+      toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
+    }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
+    zi.value = '';
+  }
+  /** Opens the settings page; `sec` picks a section (the gear in the top bar opens «متن و ظاهر» when connected). */
+  function nbOpenSettings(sec){
+    if (innerWidth <= 760) nbSidebar(false);
+    nbDrawSettings(typeof sec === 'string' ? sec : (innerWidth <= 760 ? '' : 'connect'));
   }
   function nbCloseSettings(){ $('nbModal').hidden = true; }
 
@@ -13829,14 +13878,12 @@ function nbCommitMessage(list){
   addEventListener('keydown', function(e){
     if (e.key === 'Escape'){
       if (typeof NBD === 'object' && NBD.on) return;              // drag.js cancels the drag; nothing else closes
-      var mini = $('nbMini'), mini2 = $('nbMini2'), menu = $('nbMenu'), mod = $('nbModal');
       // one Esc closes one layer: the editor's own Esc (back to reading) must not run as well
-      var done = function(){ e.preventDefault(); e.stopPropagation(); };
-      if (menu && !menu.hidden){ nbMenuClose(); return done(); }
-      if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return done(); }
-      if (mini && !mini.hidden){ nbCloseMini(); return done(); }
-      if (mod && !mod.hidden){ nbCloseSettings(); return done(); }
-      if (NB.open && document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')){ nbSidebar(false); done(); }
+      var L = nbLayerTop(false);
+      if (L){ L.close(); e.preventDefault(); e.stopPropagation(); return; }
+      if (NB.open && (innerWidth < 1100 || (document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')))){
+        nbSidebar(false); e.preventDefault(); e.stopPropagation();
+      }
       return;
     }
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -13853,7 +13900,9 @@ function nbCommitMessage(list){
 
   /* --- palette and toolbar actions --- */
   ACTIONS['notebook'] = { label: 'دفترچه (یادداشت ها روی گیت هاب)', icon: 'tree', kbd: 'Ctrl \\', kw: 'notebook notes git markdown nb', run: function(){ nbSidebar(); } };
-  ACTIONS['nb-settings'] = { label: 'تنظیمات دفترچه (مخزن، توکن، مجموعه ها)', icon: 'cloud', kw: 'notebook settings repo token git', run: nbOpenSettings };
+  ACTIONS['nb-settings'] = { label: 'تنظیمات (اتصال، همگام سازی، مجموعه ها، ظاهر)', icon: 'sliders', kw: 'notebook settings repo token git', run: function(){ nbOpenSettings(innerWidth <= 760 ? '' : (C.repo ? 'sync' : 'connect')); } };
+  // the gear in the top bar opens the same page (the app's own settings live in «متن و ظاهر»)
+  if (ACTIONS['settings']) ACTIONS['settings'] = Object.assign({}, ACTIONS['settings'], { run: function(){ closePops(); nbOpenSettings(innerWidth <= 760 ? '' : 'view'); } });
   ACTIONS['nb-close'] = { label: 'بستن', icon: 'x', hidden: true, run: nbCloseSettings };
   ACTIONS['nb-new'] = { label: 'یادداشت تازه در دفترچه', icon: 'plus', kw: 'notebook new note daily', run: function(){ if (!NB.open) nbSidebar(true); nbSectionNotes(); nbNewDialog(); } };
   ACTIONS['nb-search'] = { label: 'جستجو در یادداشت ها', icon: 'search', kbd: 'Alt Shift F', kw: 'notebook search find notes', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } };
@@ -15448,9 +15497,39 @@ function nbCommitMessage(list){
    * «something is open», whatever opened it: watching the layers (not every place that opens one) keeps the
    * entry honest, and a layer closed by its own ✕ takes its entry back with it.
    */
+  /*
+   * Every layer the app can show, top first: one list decides what Esc and Back close, what counts as «something
+   * is in front» (single-key shortcuts wait), and which history entry the phone's Back uses.
+   */
+  function nbShown(id){ var el = $(id); return !!(el && !el.hidden); }
+  var NB_LAYERS = [
+    { id: 'nbMenu', close: function(){ nbMenuClose(); } },
+    { id: 'nbMini2', close: function(){ nbCloseMini('nbMini2'); } },
+    { id: 'nbMini', close: function(){ nbCloseMini(); } },
+    { id: 'nbModal', close: function(){ nbCloseSettings(); } },
+    { id: 'nbSyncPop', close: function(){ $('nbSyncPop').hidden = true; } },
+    { id: 'palette', back: true, close: function(){ if (typeof closePalette === 'function') closePalette(); } },
+    { id: 'deck', back: true, close: function(){ if (typeof closeDeck === 'function') closeDeck(); } },
+    { open: function(){ return !!document.querySelector('.pop.open'); }, back: true, close: function(){ closePops(); } },
+    { open: function(){ return !!document.querySelector('.modal:not([hidden]):not(.nb-set):not(#nbMini):not(#nbMini2)'); }, back: true, close: function(){
+      var m = document.querySelector('.modal:not([hidden]):not(.nb-set):not(#nbMini):not(#nbMini2)'), x = m && m.querySelector('[data-action^="close"], .modal-head .ib');
+      if (x) x.click(); else if (m) m.hidden = true;
+    } }
+  ];
+  function nbLayerTop(forBack){
+    for (var i = 0; i < NB_LAYERS.length; i++){
+      var L = NB_LAYERS[i];
+      if (L.back && !forBack) continue;              // the app closes its own palette, slides and popovers on Esc
+      if (L.open ? L.open() : nbShown(L.id)) return L;
+    }
+    return null;
+  }
+  /** A dialog, menu, palette or the slides is in front: single keys belong to it. */
+  function nbLayerOpen(){ return !!nbLayerTop(true); }
   var nbBack = { entry: false, ignore: false, timer: 0 };
-  function nbBackOn(){ return innerWidth <= 760; }
-  function nbSomethingOpen(){ return nbLayerOpen() || (NB.open && nbBackOn()); }
+  function nbBackOn(){ return innerWidth < 1100; }               // phones and tablets have a Back button (or gesture)
+  function nbPanelIsLayer(){ return NB.open && innerWidth < 1100; }
+  function nbSomethingOpen(){ return nbLayerOpen() || nbPanelIsLayer(); }
   function nbBackSync(){
     clearTimeout(nbBack.timer);
     // after the current task: a dialog that closes and opens the next one at once is still «open»
@@ -15462,13 +15541,8 @@ function nbCommitMessage(list){
     }, 0);
   }
   function nbCloseTopLayer(){
-    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu'), pal = $('palette'), deck = $('deck');
-    if (menu && !menu.hidden){ nbMenuClose(); return true; }
-    if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return true; }
-    if (mini && !mini.hidden){ nbCloseMini(); return true; }
-    if (modal && !modal.hidden){ nbCloseSettings(); return true; }
-    if (pal && !pal.hidden && typeof closePalette === 'function'){ closePalette(); return true; }
-    if (deck && !deck.hidden && typeof closeDeck === 'function'){ closeDeck(); return true; }
+    var L = nbLayerTop(true);
+    if (L){ L.close(); return true; }
     if (NB.open){ nbSidebar(false); return true; }
     return false;
   }
@@ -15480,11 +15554,8 @@ function nbCommitMessage(list){
     nbBackSync();                                            // something is still open: the next back closes that
   });
   (function(){
-    var watch = new MutationObserver(nbBackSync);
-    ['nbMini', 'nbMini2', 'nbModal', 'nbMenu', 'palette', 'deck'].forEach(function(id){
-      if ($(id)) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
-    });
-    watch.observe(body, { attributes: true, attributeFilter: ['class'] });
+    // any layer, the app's own included (popovers, its dialogs): one observer, settled after the current task
+    new MutationObserver(nbBackSync).observe(body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   })();
   // a swipe down on the drawer closes it, like a sheet
   (function(){
@@ -15590,10 +15661,6 @@ function nbCommitMessage(list){
       + '<div class="nb-keys" id="nbKeysList">' + nbKeysRows('') + '</div>',
       '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'keyboard');
     $('nbKeysQ').addEventListener('input', function(){ $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
-  }
-  /** A dialog, menu, palette or the slides is in front: single keys belong to it. */
-  function nbLayerOpen(){
-    return !!document.querySelector('#nbMenu:not([hidden]), #nbMini:not([hidden]), #nbMini2:not([hidden]), #nbModal:not([hidden]), .modal:not([hidden]), .palette:not([hidden]), .deck:not([hidden])');
   }
   addEventListener('keydown', function(e){
     if ((e.key === '?' || e.key === '؟') && !e.ctrlKey && !e.altKey && !e.metaKey){
@@ -15901,66 +15968,48 @@ function nbCommitMessage(list){
     }
   })();
 
-  /* === §1b: the drawer's own edge handle, the rail, and keeping them in step === */
-  var nbShellSync = (function(){
-    var edge = document.createElement('button');
-    edge.type = 'button';
-    edge.id = 'nbEdge';
-    edge.setAttribute('aria-label', 'نوار کناری دفترچه');
-    edge.setAttribute('data-tip', 'دفترچه: یادداشت ها · Ctrl+\\');
-    edge.setAttribute('aria-expanded', 'false');
-    edge.innerHTML = icon('chev') + '<span class="nb-edge-t">دفترچه</span>';
-    document.body.appendChild(edge);
+  /* === /UI === */
 
-    var RAIL = [
-      ['notes', 'tree', 'دفترچه'], ['home', 'sun', 'امروز'], ['search', 'search', 'جستجو'],
-      ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'text', 'موقت']
-    ];
-    var rail = document.createElement('nav');
-    rail.id = 'nbRail';
-    rail.setAttribute('aria-label', 'دفترچه');
-    rail.innerHTML = RAIL.map(function(r){
-      return '<button type="button" class="nb-rail-b" data-nb-rail="' + r[0] + '" aria-label="' + r[2] + '" data-tip="' + r[2] + '">' + icon(r[1]) + '</button>';
-    }).join('');
-    document.body.appendChild(rail);
-    body.classList.add('nb-rail-on');
+  /* === SHELL: the frame around the notes — Mizkar ===
+     Three sizes, one layout each:
+       phone   ≤ 760   pages, not a drawer: a bottom bar switches «امروز · یادداشت‌ها · جستجو · تقویم · بیشتر»,
+                       a note is a page of its own with a top bar (← title · sync · edit · ⋯), every menu is a sheet;
+       tablet  761–1099 the panel slides over the page from the right, behind a backdrop;
+       desktop ≥ 1100  the panel sits beside the page.
+     On tablet and desktop one button opens the panel: the notebook button at the start of the top bar. */
+  function nbSize(){ return innerWidth <= 760 ? 'phone' : innerWidth < 1100 ? 'tablet' : 'desk'; }
+  var NB_SECTION_NAMES = { notes: 'یادداشت‌ها', temps: 'موقت', search: 'جستجو', cal: 'تقویم', tasks: 'کارها', tags: 'برچسب‌ها', conflicts: 'تعارض‌ها' };
 
-    edge.addEventListener('click', function(e){ e.stopPropagation(); nbSidebar(); });
-    rail.addEventListener('click', function(e){
-      var b = e.target.closest('[data-nb-rail]');
-      if (!b) return;
-      e.stopPropagation();
-      var what = b.dataset.nbRail;
-      if (what === 'home'){ nbGoHome(); return; }
-      NB.section = what;
-      nbSidebar(true);
-    });
-
-    return function(){
-      var open = body.classList.contains('nb-open');
-      edge.setAttribute('aria-expanded', String(open));
-      edge.title = open ? 'بستن نوار کناری' : 'باز کردن نوار کناری';
-      var ch = edge.querySelector('.i');
-      if (ch) ch.style.transform = open ? 'rotate(90deg)' : 'rotate(-90deg)';
-      var sec = NB.section;
-      Array.prototype.forEach.call(rail.querySelectorAll('[data-nb-rail]'), function(b){
-        b.setAttribute('aria-pressed', String(!open && b.dataset.nbRail === sec));
-      });
-    };
-  })();
   /** «امروز» is the empty page: an empty temp tab is reused instead of opening one more each time. */
   function nbGoHome(){
     var empty = tabs.filter(function(t){ return !t.nb && !String(t.text || '').trim(); })[0];
     if (empty){ if (empty.id !== activeTab) switchTab(empty.id); else render(); }
     else openTab('');
-    if (innerWidth <= 1099 && NB.open) nbSidebar(false);            // the page is behind the drawer there
+    if (nbSize() !== 'desk' && NB.open) nbSidebar(false);           // the page is behind the panel there
+    NB.cameFrom = 'home';
+    nbShellSync();
   }
-  /* === §4: on a phone the app gets a bottom bar and its own kind of sheets === */
-  var nbMobile = (function(){
-    var NAV = [
-      ['home', 'sun', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
-      ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه']
+  /** «بیشتر» on a phone: the sections without a place on the bottom bar, the new-note actions, settings. */
+  function nbMoreItems(){
+    var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
+    return [
+      { label: 'موقت (تب ها و متن های اخیر)', act: sec('temps') },
+      { label: 'کارها', act: sec('tasks') },
+      { label: 'برچسب ها', act: sec('tags') },
+      NB.conflicts.length ? { label: 'تعارض ها (' + faNum(NB.conflicts.length) + ')', act: sec('conflicts') } : null,
+      null,
+      { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },
+      { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
+      { label: 'یادداشت امروز', act: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
+      null,
+      { label: 'همگام سازی: ' + (($('nbSync') && $('nbSync').textContent) || 'دفترچه'), act: function(){ $('nbSync').click(); } },
+      { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
+      { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } }
     ];
+  }
+  var nbShellSync = (function(){
+    /* the bottom bar (phone) */
+    var NAV = [['home', 'sun', 'امروز'], ['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['more', 'list', 'بیشتر']];
     var nav = document.createElement('nav');
     nav.id = 'nbNav';
     nav.setAttribute('aria-label', 'بخش ها');
@@ -15974,43 +16023,112 @@ function nbCommitMessage(list){
       if (!b) return;
       e.stopPropagation();
       var what = b.dataset.nbNav;
-      if (what === 'new'){
-        nbMenu(12, innerHeight - 190, [
-          { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },
-          { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
-          { label: 'یادداشت امروز', act: function(){ if (typeof ACTIONS === 'object' && ACTIONS['nb-today']) ACTIONS['nb-today'].run(); else nbNewDialog(); } }
-        ]);
-        return;
-      }
       if (what === 'home'){ nbGoHome(); return; }
+      if (what === 'more'){ var r = b.getBoundingClientRect(); nbMenu(r.left, r.top, nbMoreItems()); return; }
       NB.section = what;
-      nbSidebar(true);
+      if (what === 'search') NB.focusSearch = true;
+      if (NB.open) nbRender(); else nbSidebar(true);
+      nbShellSync();
     });
-    // the ⋯ menu on the preview header drops the desktop-only bits on a phone
-    function phoneItems(items, w){
-      if ((w || innerWidth) > 760) return items;
-      return items.filter(function(it){
-        return !/بزرگ نمایی|کوچک نمایی|اندازهٔ اصلی|حالت دست/.test(it.label);
+
+    /* the note page's top bar (phone) */
+    var top = document.createElement('div');
+    top.id = 'nbTop';
+    top.setAttribute('role', 'toolbar');
+    top.setAttribute('aria-label', 'یادداشت');
+    top.innerHTML = '<button type="button" class="ib" data-nb-top="back" aria-label="بازگشت"><svg class="i nb-rtl-back"><use href="#i-chev"/></svg></button>'
+      + '<b class="nb-top-t" id="nbTopTitle" dir="auto"></b>'
+      + '<button type="button" class="nb-top-sync" data-nb-top="sync" aria-label="وضعیت همگام سازی"><i></i></button>'
+      + '<button type="button" class="ib" data-nb-top="edit" aria-label="ویرایش"><svg class="i"><use href="#i-pen"/></svg></button>'
+      + '<button type="button" class="ib" data-nb-top="more" aria-label="گزینه ها"><span class="ui-dots">⋯</span></button>';
+    var header = document.querySelector('header.bar');
+    if (header && header.parentNode) header.parentNode.insertBefore(top, header);
+    else document.body.insertBefore(top, document.body.firstChild);
+    top.addEventListener('click', function(e){
+      var b = e.target.closest('[data-nb-top]');
+      if (!b) return;
+      e.stopPropagation();
+      var t = currentTab(), path = t && t.nb;
+      var w = b.dataset.nbTop;
+      if (w === 'back'){
+        if (NB.cameFrom && NB.cameFrom !== 'home'){ NB.section = NB.cameFrom; nbSidebar(true); }
+        else nbGoHome();
+      } else if (w === 'edit'){
+        setView(state.view === 'preview' ? 'editor' : 'preview');
+        saveState();
+        if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
+      } else if (w === 'sync'){
+        $('nbSync').click();
+      } else if (w === 'more' && path){
+        var r = b.getBoundingClientRect();
+        nbMenu(r.left, r.bottom, [
+          { label: 'گرفتن و ارسال', act: function(){ nbPull({ loud: true }).then(function(){ if (nbCountDirty()) nbPush({ loud: true }); }); } },
+          null
+        ].concat(nbNoteMenuItems(path).filter(function(it){ return !it || !/^(باز کردن|باز کردن در تب تازه|سنجاق در تب)$/.test(it.label); })));
+      }
+    });
+
+    /* the sync list lives at the top level (the status bar it opens from is not there on a phone) and opens
+       next to its chip, or as a sheet on a phone */
+    var syncPop = $('nbSyncPop'), syncChip = $('nbSync');
+    if (syncPop && syncChip){
+      document.body.appendChild(syncPop);
+      syncChip.addEventListener('click', function(){
+        if (syncPop.hidden || nbSize() === 'phone') return;
+        var r = syncChip.getBoundingClientRect(), w = syncPop.offsetWidth || 360;
+        syncPop.style.top = 'auto'; syncPop.style.right = 'auto';
+        syncPop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+        syncPop.style.bottom = Math.max(8, innerHeight - r.top + 8) + 'px';
       });
     }
-    // theme-color follows the theme, so the phone's own bar matches the app
+
+    /* the ⋯ menu on the preview header drops the desktop-only bits on a phone */
+    function phoneItems(items, w){
+      if ((w || innerWidth) > 760) return items;
+      return items.filter(function(it){ return !/بزرگ نمایی|کوچک نمایی|اندازهٔ اصلی|حالت دست/.test(it.label); });
+    }
+    /* theme-color follows the theme, so the phone's own bar matches the app */
     function themeColor(){
       var meta = document.querySelector('meta[name="theme-color"]');
-      if (!meta){
-        meta = document.createElement('meta');
-        meta.setAttribute('name', 'theme-color');
-        document.head.appendChild(meta);
-      }
+      if (!meta){ meta = document.createElement('meta'); meta.setAttribute('name', 'theme-color'); document.head.appendChild(meta); }
       var bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
       meta.setAttribute('content', bg || '#ffffff');
     }
     themeColor();
     new MutationObserver(themeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
-    var api = { phoneItems: phoneItems, themeColor: themeColor, nav: nav };
-    window.nbMobile = api;
-    return api;
+    window.nbMobile = { phoneItems: phoneItems, themeColor: themeColor, nav: nav };
+
+    function sync(){
+      var size = nbSize(), t = currentTab(), path = t && t.nb ? t.nb : '';
+      if (body.dataset.nbSize !== size) body.dataset.nbSize = size;
+      var notePage = size === 'phone' && !!path && !NB.open;
+      body.classList.toggle('nb-note-page', notePage);
+      if (path) $('nbTopTitle').textContent = nbTitle(path);
+      var syncBtn = $('nbSync'), dot = top.querySelector('.nb-top-sync');
+      if (syncBtn) dot.className = 'nb-top-sync ' + (syncBtn.className.match(/nb-(ok|pending|busy|conflict|error|off)/) || ['nb-off'])[0];
+      dot.title = syncBtn ? syncBtn.textContent : '';
+      top.querySelector('[data-nb-top="edit"]').setAttribute('aria-pressed', String(state.view !== 'preview'));
+      var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
+      Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.nbNav === on)); });
+      var head = $('nbHeadTitle');
+      if (head) head.textContent = size === 'phone' ? (NB_SECTION_NAMES[NB.section] || 'دفترچه') : 'دفترچه';
+      var btn = $('btnNotebook');
+      if (btn) btn.setAttribute('aria-pressed', String(NB.open));
+    }
+    addEventListener('resize', function(){ sync(); if (NB.open) nbSlot(); });
+    new MutationObserver(sync).observe(work, { attributes: true, attributeFilter: ['data-view'] });
+    if ($('nbSync')) new MutationObserver(sync).observe($('nbSync'), { attributes: true, attributeFilter: ['class'] });
+    return sync;
   })();
-  /* === /UI === */
+  /**
+   * Where the panel covers the page (phone, tablet), opening a note or a tab from it leaves the panel, remembering
+   * where from (the note page's ← goes back there). Beside the page (desktop) it stays.
+   */
+  function nbPhoneLeavePanel(){
+    if (nbSize() !== 'desk' && NB.open){ NB.cameFrom = NB.section; nbSidebar(false); }
+    else if (!NB.open && !NB.cameFrom) NB.cameFrom = 'home';
+  }
+  /* === /SHELL === */
 
   /* === IN PLACE: a notebook note is one page — read it, double-click to edit right there — Mizkar ===
      Notebook tabs open in reading view; a double-click (or E) turns the same column into the Markdown source,
@@ -16141,7 +16259,7 @@ function nbCommitMessage(list){
   });
   // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
   // judged where it starts, so a selection dragged out of the text never counts
-  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbRail, #nbEdge, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
+  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;
@@ -16538,7 +16656,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    menu: nbMenu, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
+    menu: nbMenu, goHome: function(){ nbGoHome(); }, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,
@@ -16552,7 +16670,7 @@ function nbCommitMessage(list){
   };
   window.mizkarNotebook = NB;
   // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
-  window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); };
+  window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); nbShellSync(); };
   window.nbHomeHtml = nbHomeHtml;
   window.nbPaletteItems = nbPaletteItems;
   window.nbShamsiLabel = nbShamsiLabel;          // the front matter strip shows date:/created: in Shamsi

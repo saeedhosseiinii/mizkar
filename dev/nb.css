@@ -1,18 +1,4 @@
 /* === NOTEBOOK (Git): sidebar, sync indicator, dialogs === */
-#nb{
-  position:fixed; top:var(--nb-top, 96px); bottom:var(--nb-bottom, 28px); right:0;
-  width:var(--nb-w, 328px); max-width:96vw; z-index:210; display:flex; flex-direction:column;
-  background:var(--surface); border-inline-start:1px solid var(--border); border-start-start-radius:12px;
-  box-shadow:-18px 0 40px -24px rgba(15,23,42,.35); transition:transform .22s ease; overflow:hidden;
-}
-body:not(.nb-open) #nb{ transform:translateX(102%); }
-#nbBack{ position:fixed; inset:0; z-index:205; background:rgba(6,10,18,.42); opacity:0; pointer-events:none; transition:opacity .2s ease; }
-body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
-@media (min-width:1100px){
-  #nbBack{ display:none; }
-  body.nb-open .work{ margin-right:var(--nb-w, 328px); }        /* the drawer is on the right; inline-end is the left in RTL */
-  #nb{ z-index:25; }                                              /* docked: under the bar's popovers, the palette and dialogs */
-}
 #nb .nb-head{ display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); }
 #nb .nb-head .nb-h-title{ font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px; color:var(--ink); }
 #nb .nb-h-sp{ flex:1; }
@@ -48,7 +34,6 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
 #nb .nb-saved{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:0 6px; }
 #nb .nb-empty, #nb .nb-hint{ color:var(--muted); font-size:12px; line-height:1.9; padding:10px 8px; }
 #nb .nb-foot{ border-top:1px solid var(--border); padding:6px 10px; font-size:11.5px; color:var(--muted); background:var(--surface-2); }
-#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; }
 #nb .nb-conflict-row{ border:1px solid var(--border); border-radius:10px; padding:8px; margin:6px 2px; background:var(--surface-2); }
 #nb .nb-conflict-row small{ display:block; color:var(--muted); font-size:11px; margin:2px 0 6px; word-break:break-all; }
 #nb .nb-cf-btns{ display:flex; gap:4px; flex-wrap:wrap; }
@@ -161,23 +146,6 @@ body.nb-ro .pane.editor .ph-title::after{ content:' · فقط خواندنی'; c
 img.nb-img-missing{ border:1px dashed #dc2626; min-height:40px; min-width:80px; }
 #nb .nb-ta{ min-height:110px; resize:vertical; font-family:inherit; }
 
-/* --- dialogs from the notebook must sit above the drawer and its backdrop (the app's .modal is 97) --- */
-#nbMini, #nbModal{ z-index: 420; }
-#nbSyncPop{ z-index: 420; }
-#nbSyncPop:not([hidden]){ display:block; }          /* the app's .pop shows only with .open; this one goes by hidden */
-#nbMenu{ z-index: 430; }
-.nb-sug{ z-index: 425; }
-/* on a phone they come up as a sheet from the bottom, so the keyboard never hides them */
-@media (max-width: 760px){
-  #nbMini, #nbModal{ align-items: flex-end; padding: 0 0 var(--nb-kb, 0px); transition: padding .15s; }
-  #nbMini .modal-box, #nbModal .modal-box{
-    width: 100%; max-width: 100%; border-radius: 18px 18px 0 0; max-height: 88vh;
-    animation: nb-sheet .2s cubic-bezier(.2,.9,.3,1.1);
-  }
-  #nbMini .nb-mini-body{ max-height: 46vh; }
-  #nbModal .modal-body{ padding: 12px; }
-  .nb-sug{ max-height: 34vh; }
-}
 @keyframes nb-sheet{ from{ transform: translateY(14px); opacity: .6; } to{ transform: none; opacity: 1; } }
 
 /* collections list and «پیشرفته» (settings) */
@@ -241,72 +209,6 @@ body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]
 @media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }
 
 /* ================= §4 موبایل: حس اپ ================= */
-:root{ --nb-nav-h: 0px; }
-@media (max-width:760px){
-  html,body{ height:100dvh; }
-  .app{ height:100dvh !important; box-sizing:border-box; }
-  body.nb-nav-on{ --nb-nav-h: 56px; }
-  body.nb-nav-on .app{ padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); }
-  .bar, .tabs{ padding-inline:calc(10px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px)); }
-  #zoomWrap, #nbBody, textarea#input{ overscroll-behavior:contain; }
-}
-/* the bottom bar itself */
-.toast{ z-index:450; }
-#nbNav{
-  display:none;position:fixed;left:0;right:0;bottom:0;z-index:205;
-  height:calc(56px + env(safe-area-inset-bottom, 0px));
-  padding-bottom:env(safe-area-inset-bottom, 0px);
-  background:var(--surface);border-top:1px solid var(--border);
-  align-items:stretch;justify-content:space-around;gap:2px;
-}
-@media (max-width:760px){ body.nb-nav-on #nbNav{ display:flex; } }
-.nb-nav-b{
-  flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  border:0;background:none;color:var(--muted);font:inherit;font-size:.66rem;font-weight:600;cursor:pointer;padding:6px 2px;
-}
-.nb-nav-b .i{ width:22px;height:22px; }
-.nb-nav-b:active,.nb-nav-b[aria-pressed="true"]{ color:var(--accent); }
-#nbNav [data-nb-nav="new"]{ color:#fff; }
-#nbNav [data-nb-nav="new"] .i{ background:var(--accent);border-radius:50%;padding:6px;width:34px;height:34px;box-sizing:border-box; }
-/* the drawer becomes a sheet from the bottom on a phone */
-@media (max-width:760px){
-  #nb{
-    top:auto !important;bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
-    right:0 !important;left:0 !important;width:auto !important;max-height:78dvh;height:78dvh;
-    border-radius:18px 18px 0 0;border-inline-start:0;border-top:1px solid var(--border);
-    box-shadow:0 -20px 50px -24px rgba(15,23,42,.5);transition:transform .22s ease,opacity .22s ease;
-  }
-  #nb .nb-grip{ display:none; }
-  #nb .nb-head{ position:relative;padding-top:14px; }
-  #nb .nb-head::before{
-    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);
-    width:44px;height:4px;border-radius:99px;background:var(--border-strong, #cbd5e1);opacity:.8;
-  }
-  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }
-  #nbBody .elbtn.xs, #nbBody .ib.sm{ min-height:32px;padding-inline:10px; }
-}
-/* no hover on a phone: the buttons that only showed on hover are always there */
-@media (max-width:760px){
-  .nb-row-acts,.nb-act,.nb-note-acts{ opacity:1 !important; }
-}
-/* the Markdown toolbar stays above the soft keyboard */
-@media (max-width:760px){
-  body.ip-on #work[data-view="editor"] .pane.editor .mdbar, .pane.editor .mdbar{
-    position:fixed;left:0;right:0;bottom:var(--nb-kb, 0px);z-index:6;
-    background:var(--surface);border-top:1px solid var(--border);border-bottom:0;
-    padding:6px calc(8px + env(safe-area-inset-left, 0px)) 6px calc(8px + env(safe-area-inset-right, 0px));
-    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);transition:bottom .15s;
-  }
-  body.ip-on #work[data-view="editor"] textarea#input{ padding-bottom:64px; }
-}
-/* desktop-only controls leave the phone alone */
-@media (max-width:760px){
-  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],
-  [data-action="present"], [data-action="fs"]{ display:none !important; }
-  #outline, #outlineBtn{ display:none !important; }
-  #splitBar, .split{ display:none !important; }
-}
-body:not(.ui-calm) #nbNav{ display:none; }
 /* the pull-to-refresh hint */
 .nb-pull-hint{
   position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;
@@ -346,87 +248,5 @@ body.nb-dragging #nbBody,body.nb-dragging #zoomWrap{user-select:none;}
 .nb-key-row span{flex:1;min-width:0;font-size:.82rem;}
 .nb-key-row kbd{flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:1px 7px;font-size:.7rem;}
 
-/* ================= بازبینی موبایل: اصلاح های اندازه گیری شده (۳۶۰x۷۴۰) ================= */
-@media (max-width:760px){
-  /* ۱) نوار پایین روی نوار وضعیت می افتاد: body خودش .app است، پس پدینگ باید روی body بنشیند */
-  body.nb-nav-on{
-    --nb-nav-h:56px;
-    padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
-    box-sizing:border-box; overflow:hidden;
-  }
-  /* ۲) نوار بالا در دو ردیف می شکست (۱۰۲ پیکسل): یک ردیف، بی نام برند */
-  body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; align-items:center; }
-  body.ui-calm .brand{ flex:none; }
-  body.ui-calm .brand-name{ display:none; }
-  body.ui-calm .ui-near{ margin-inline-start:2px; gap:0; min-width:0; }
-  body.ui-calm .ui-export{ margin-inline-start:auto; }
-  body.ui-calm .ui-export .ib{ padding:0 8px; }
-  /* ۳) نوار بخش ها در کشو جا نمی شد: می لغزد */
-  #nb .nb-tabs{ overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
-  #nb .nb-tabs::-webkit-scrollbar{ height:0; display:none; }
-  #nb .nb-tab{ flex:none; padding-inline:10px; }
-  /* ۴) کشوی بسته به پهلو می رفت ولی چیدمانش شیت پایین است: پایین برود */
-  body:not(.nb-open) #nb{ transform:translateY(110%); }
-  /* ۵) انتخابگر تاریخ هم مثل بقیه پنجره ها شیت پایین شود */
-  #nbMini2{ align-items:flex-end; padding:0 0 var(--nb-kb, 0px); }
-  #nbMini2 .modal-box{ width:100%; max-width:100%; border-radius:18px 18px 0 0; max-height:88vh; }
-  /* ۶) هدف های لمسی کوچک */
-  #nb .ib.sm, #nbBody .ib.sm, .status .ib.sm{ min-width:40px; min-height:40px; }
-  #nbNav .nb-nav-b{ min-height:48px; }
-  #nbBody .btn-soft.sm, #nbBody .elbtn.xs, .nb-empty-act{ min-height:38px; }
-  .nb-rail-b{ width:40px; height:40px; }
-  #tabsList .tab-x{ width:26px; height:26px; }
-  .status{ min-height:44px; height:auto; }
-}
-
-@media (max-width:760px){
-  /* هدف لمسی ۴۰ پیکسل برای همهٔ دکمه های کوچک، از جمله نوار وضعیت */
-  .ib.sm{ min-width:40px; min-height:40px; }
-  .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }
-  #tabsList .tab-x{ width:30px; height:30px; line-height:30px; }
-  .pane-head .ph-actions .ib{ min-height:40px; }
-  #nbMini .modal-head .ib, #nbModal .modal-head .ib, #nbMini2 .modal-head .ib{ min-width:40px; min-height:40px; }
-}
-
-@media (max-width:760px){
-  /* هنگام ویرایش (نه خواندن)، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */
-  body.ip-tint #nbNav, body.nb-nav-on:has(textarea#input:focus) #nbNav{ display:none; }
-  /* backdrop-filter نوار بالا، پنجره های fixed داخلش را به خود نوار می بست و overflow:hidden آن ها را می برید */
-  body.ui-calm .bar{ backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--surface); }
-  body.ui-calm .bar .pop{ top:calc(60px + env(safe-area-inset-top, 0px)); max-height:calc(100dvh - 140px); overflow:auto; z-index:430; }
-  /* پیام ها بالای نوار پایین و کشو */
-  body.nb-nav-on .toast{ bottom:calc(var(--nb-nav-h, 56px) + 12px + env(safe-area-inset-bottom, 0px)); }
-  /* پنجرهٔ همگام سازی روی گوشی شیت پایین است */
-  #nbSyncPop{ position:fixed; left:8px; right:8px; bottom:calc(var(--nb-nav-h, 56px) + 8px + env(safe-area-inset-bottom, 0px)); top:auto;
-    width:auto; min-width:0; max-height:70dvh; overflow:auto; z-index:430; }
-  /* صفحه یک ستون است و همهٔ ارتفاع را می گیرد؛ نمای دوستونه روی گوشی فقط ویرایشگر را نشان می دهد */
-  body.app.nb-nav-on{ height:100dvh; }
-  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{ display:grid !important; grid-template-rows:minmax(0,1fr); }
-  body.nb-nav-on .pane{ height:auto; }
-  body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }
-  .preview, #nbList, #nbBody{ overscroll-behavior-y:contain; }
-  body.ip-on #work[data-view="editor"] .pane.editor .mdbar{ bottom:calc(var(--nb-kb, 0px) + env(safe-area-inset-bottom, 0px)); }
-}
-
-@media (max-width:760px){
-  /* نوار وضعیت در حالت ویرایش می شکست و ۱۳۳ پیکسل می شد و صفحه را افقی می برد: یک خط و لغزان */
-  .status{ flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
-  .status::-webkit-scrollbar{ height:0; display:none; }
-  .status > *{ flex:none; }
-  .status .st-nb, .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }
-  /* نوار ابزار Markdown: دکمه های بلندتر برای انگشت */
-  .mdbar .mdb{ min-width:34px; min-height:34px; }
-}
-
-/* reading mode, the slides and print show the page alone: the notebook's chrome steps aside */
-body.readmode #nb, body.readmode #nbRail, body.readmode #nbEdge, body.readmode #nbNav, body.readmode #nbBack,
-body:has(#deck:not([hidden])) #nb, body:has(#deck:not([hidden])) #nbRail, body:has(#deck:not([hidden])) #nbEdge,
-body:has(#deck:not([hidden])) #nbNav, body:has(#deck:not([hidden])) #nbBack{ display:none !important; }
-body.readmode .work{ margin-right:0 !important; }
-@media print{
-  #nb, #nbRail, #nbEdge, #nbNav, #nbBack, #nbMenu, #nbMini, #nbMini2, #nbModal, #nbSyncPop, .nb-drag-ghost, .ta-md{ display:none !important; }
-  .work{ margin-right:0 !important; }
-  body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }
-}
 /* the app's «drop a file» cover is only a picture: drops land on what is under it (drawer, editor, page) */
 #drop{ pointer-events:none; }
