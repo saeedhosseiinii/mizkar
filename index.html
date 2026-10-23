@@ -12166,19 +12166,20 @@ function nbCommitMessage(list){
     if (nbIsGL()){
       var g = nbGL();
       return nbApi('GET', '/projects/' + g.id).then(function(p){
-        return { name: p.path_with_namespace, private: p.visibility !== 'public', writable: !!(p.permissions && p.permissions.project_access) };
+        return { name: p.path_with_namespace, private: p.visibility !== 'public', writable: !!(p.permissions && p.permissions.project_access), branch: p.default_branch || '', empty: !!p.empty_repo };
       });
     }
     return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name).then(function(info){
-      return { name: info.full_name, private: info.private, writable: !!((info.permissions && info.permissions.push) || info.permissions === undefined) };
+      return { name: info.full_name, private: info.private, writable: !!((info.permissions && info.permissions.push) || info.permissions === undefined), branch: info.default_branch || '' };
     });
   }
   function nbTest(){
     return nbRepoInfo().then(function(info){
       return nbRef().then(function(r){
-        return { sha: r.sha, empty: !r.sha, writable: info.writable, name: info.name, private: info.private };
+        return { sha: r.sha, empty: !r.sha, writable: info.writable, name: info.name, private: info.private, branch: info.branch };
       }, function(e){
-        if (e.status === 404 || e.status === 409) return { sha: '', empty: true, writable: info.writable, name: info.name, private: info.private };
+        // 404: this branch is not there (the repository may be empty, or use another name for its branch)
+        if (e.status === 404 || e.status === 409) return { sha: '', empty: true, missing: true, writable: info.writable, name: info.name, private: info.private, branch: info.branch };
         throw e;
       });
     }, function(e){
@@ -14029,6 +14030,7 @@ function nbCommitMessage(list){
       if (what === 'pull'){ nbPull({ loud: true }); return; }
       if (what === 'push'){ nbPush({ loud: true }); return; }
       if (what === 'reset'){ nbCloseSettings(); nbResetFromRepo(); return; }
+      if (what === 'usebranch'){ C.branch = btn.dataset.branch; NB.lastCommit = ''; nbSaveCfg(); nbDrawSettings(); toast('شاخه: ' + C.branch, 'check'); if (C.token) nbPull({ loud: true }); return; }
       if (what === 'forget'){ NB.pass = ''; nbDrawSettings(); toast('گذرواژهٔ یادداشت های رمزدار از حافظه پاک شد', 'lock'); return; }
       if (what === 'test'){
         nbSettingsApply();
@@ -14036,7 +14038,11 @@ function nbCommitMessage(list){
         nbTest().then(function(r){
           $('nbTestOut').innerHTML = 'اوکی — <b dir="ltr">' + escapeHtml(r.name) + '</b>' + (r.private ? ' (خصوصی)' : ' (عمومی)')
             + (r.empty ? ' · هنوز commit ندارد' : ' · ' + escapeHtml(r.sha.slice(0, 7)))
-            + (r.writable ? '' : ' · <span class="nb-warn">توکن اجازهٔ نوشتن ندارد</span>');
+            + (r.writable ? '' : ' · <span class="nb-warn">توکن اجازهٔ نوشتن ندارد</span>')
+            + (r.branch && r.branch !== C.branch
+              ? '<br>شاخهٔ اصلی این مخزن «<b dir="ltr">' + escapeHtml(r.branch) + '</b>» است و دفترچه روی «<b dir="ltr">' + escapeHtml(C.branch) + '</b>» می نویسد'
+                + (r.missing ? ' (اولین ارسال آن را می سازد)' : '') + '. <button class="btn-soft sm" type="button" data-nb-cfg="usebranch" data-branch="' + escapeHtml(r.branch) + '">همان «' + escapeHtml(r.branch) + '» باشد</button>'
+              : '');
           NB.error = ''; nbSay();
           if (!r.empty) nbPull({});
         }).catch(function(err){ $('nbTestOut').innerHTML = '<span class="nb-warn">' + escapeHtml(err.message) + '</span>'; nbSay('error'); });

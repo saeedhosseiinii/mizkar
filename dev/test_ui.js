@@ -1673,6 +1673,18 @@ async function until(fn, ms = 3000) {
   ok('in two commits: the first through the Contents API, the rest on top', repo.apiCommits === 2 && repo.commits[1].parents[0] === repo.commits[0].sha, repo.apiCommits);
   eq('nothing waits any more', nb.ui.dirty().filter((f) => f.path.startsWith('خالی/')).length, 0);
 
+  console.log('\n— «آزمایش اتصال» says which branch the repository uses —');
+  await until(() => !nb.ui.state().busy, 4000);
+  nb.ui.cfg({ branch: 'notes' });
+  nb.ui.settings('connect');
+  await sleep(20);
+  doc.querySelector('#nbModalBody [data-nb-cfg="test"]').click();
+  await until(() => !!doc.querySelector('#nbTestOut [data-nb-cfg="usebranch"]'), 3000);
+  ok('a different branch name is pointed out, with a button', /main/.test(doc.getElementById('nbTestOut').textContent) && !!doc.querySelector('#nbTestOut [data-nb-cfg="usebranch"]'));
+  doc.querySelector('#nbTestOut [data-nb-cfg="usebranch"]').click();
+  eq('one tap and the notebook uses it', nb.ui.cfg().branch, 'main');
+  doc.querySelector('[data-action="nb-close"]').click();
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();
