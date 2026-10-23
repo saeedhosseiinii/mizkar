@@ -14,6 +14,13 @@ the first send to an empty repository, and the branch hint in «آزمایش ا�
 Still open: dropping a note link at the exact drop point in the editor (a textarea gives no caret from a point),
 attachments following a folder merge, and a look at every screen on a real phone (the tests have no layout).
 
+Last round (after the first beta2 build): «موقت» moved onto the phone's bottom bar (six places now, «بیشتر»
+keeps کارها/برچسب ها/سطل/تنظیمات); the phone turns its pages with a sideways finger — a pull from the right edge
+brings the notebook panel out, a pull from the left edge takes it away, and in the middle a 56px drag moves along
+the bar (a scroll does not count); in beta2 the FAB answers a finger even when the browser gives no click, and it
+steps aside for the panel, dialogs and the palette. `dev/shell.js` (pages and edges), `dev/m3.js` (the FAB),
+`dev/m3.css` + `dev/shell.css` (when it shows), `dev/test_ui.js` (§4 and the FAB).
+
 ## Ground rules
 
 - **Never edit `index.html` by hand.** Change `dev/*.js|css|html` and rebuild with `python3 dev/apply.py`.

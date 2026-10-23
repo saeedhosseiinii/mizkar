@@ -21,7 +21,6 @@
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
-      { label: 'موقت (تب ها و متن های اخیر)', act: sec('temps') },
       { label: 'کارها', act: sec('tasks') },
       { label: 'برچسب ها', act: sec('tags') },
       { label: 'سطل بازیافت' + ((NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: sec('trash') },
@@ -38,7 +37,7 @@
   }
   var nbShellSync = (function(){
     /* the bottom bar (phone) */
-    var NAV = [['home', 'sun', 'امروز'], ['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['more', 'list', 'بیشتر']];
+    var NAV = [['home', 'sun', 'امروز'], ['temps', 'file', 'موقت'], ['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['more', 'list', 'بیشتر']];
     var nav = document.createElement('nav');
     nav.id = 'nbNav';
     nav.setAttribute('aria-label', 'بخش ها');
@@ -172,7 +171,7 @@
         hs.title = (syncBtn ? syncBtn.textContent : 'همگام سازی') + ' — فهرست، گرفتن و ارسال';
       }
       top.querySelector('[data-nb-top="edit"]').setAttribute('aria-pressed', String(state.view !== 'preview'));
-      var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
+      var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal', temps: 'temps' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
       Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.nbNav === on)); });
       var head = $('nbHeadTitle');
       if (head) head.textContent = size === 'phone' ? (NB_SECTION_NAMES[NB.section] || 'دفترچه') : 'دفترچه';
@@ -191,5 +190,95 @@
   function nbPhoneLeavePanel(){
     if (nbSize() !== 'desk' && NB.open){ NB.cameFrom = NB.section; nbSidebar(false); }
     else if (!NB.open && !NB.cameFrom) NB.cameFrom = 'home';
+  }
+
+  /* ==== the phone's sideways swipes: the pages of the bottom bar, both edges included ====
+     The bar, right to left, is the strip of pages: امروز · موقت · یادداشت ها · جستجو · تقویم. A finger moving to
+     the right pulls the page on the left of the current one in (a right-to-left strip moves that way), and a
+     finger moving left goes back. From the right edge a short pull brings the panel out the way a drawer comes,
+     and from the left edge a short pull takes it away; both are wide enough for a thumb to find without aiming.
+     «بیشتر» is a menu, not a page, and stays out. */
+  var NB_PAGES = ['home', 'temps', 'notes', 'search', 'cal'];
+  var NB_SWIPE = { edge: 28, need: 56, wobble: 24, slope: 1.6 };
+  /** Which page is on screen: no panel is «امروز»; کارها/برچسب ها/سطل/تعارض count as «یادداشت ها». */
+  function nbPageNow(){
+    if (!NB.open) return 0;
+    var i = NB_PAGES.indexOf(NB.section);
+    return i > 0 ? i : 2;
+  }
+  /** Shows page `i` of the bar (0 is «امروز», where the panel is closed). */
+  function nbPageGo(i){
+    i = Math.max(0, Math.min(NB_PAGES.length - 1, i));
+    var p = NB_PAGES[i];
+    if (p === 'home'){
+      if (NB.open){ NB.cameFrom = 'home'; nbSidebar(false); }
+      nbGoHome();
+    } else {
+      NB.section = p;
+      if (p === 'search') NB.focusSearch = true;
+      if (NB.open) nbRender(); else nbSidebar(true);
+    }
+    nbShellSync();
+    return p;
+  }
+  /** The panel out of the right edge: the page that was up last, «یادداشت ها» to begin with. */
+  function nbPanelOut(){
+    var i = NB_PAGES.indexOf(NB.section);
+    return nbPageGo(i > 0 ? i : 2);
+  }
+  /**
+   * What a finished sideways finger means on a phone: `{step}` turns a page of the bar, `{edge:'open'}` pulls the
+   * panel out of the right edge, `{edge:'close'}` takes it away from the left edge, and null is «not a drag of
+   * that kind». Short pulls at the edges count, so a thumb finds them without aiming.
+   */
+  function nbSwipeStep(dx, dy, x0){
+    if (Math.abs(dx) < NB_SWIPE.wobble) return null;
+    if (Math.abs(dx) < Math.abs(dy) * NB_SWIPE.slope) return null;      // that was a scroll, not a pull
+    if (x0 >= innerWidth - NB_SWIPE.edge) return dx < 0 ? { edge: 'open' } : null;
+    if (x0 <= NB_SWIPE.edge) return dx > 0 ? { edge: 'close' } : null;
+    if (Math.abs(dx) < NB_SWIPE.need) return null;
+    return { step: dx > 0 ? 1 : -1 };
+  }
+  /** What a finger may not start a page turn on: fields, sideways rows, and the rows a hold drags. */
+  function nbSwipeBlocked(el){
+    if (!el || !el.closest) return true;
+    if (el.closest('textarea, input, select, [contenteditable], #tabs, .mdbar, .status, .nb-tabs, #nbMenu, #nbSyncPop, .nb-sug, .nb-set-nav')) return true;
+    return !!el.closest('[data-nb-note], [data-nb-dir], [data-nb-att], [data-task-open]');
+  }
+  function nbSwipeReady(){
+    if (nbSize() !== 'phone') return false;
+    if (body.classList.contains('ip-tint') || body.classList.contains('readmode')) return false;
+    if (document.querySelector('#deck:not([hidden]), #palette:not([hidden]), .modal:not([hidden])')) return false;
+    var m = $('nbMenu');
+    return !(m && !m.hidden);
+  }
+  (function(){
+    var x0 = 0, y0 = 0, armed = false;
+    document.addEventListener('touchstart', function(e){
+      armed = false;
+      if (e.touches.length !== 1 || !nbSwipeReady()) return;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      armed = !nbSwipeBlocked(e.target);
+    }, { passive: true });
+    document.addEventListener('touchend', function(e){
+      if (!armed) return;
+      armed = false;
+      if (typeof NBD === 'object' && NBD && (NBD.on || NBD.ready)) return;      // a drag is in flight
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      var turn = nbSwipeStep(t.clientX - x0, t.clientY - y0, x0);
+      if (!turn) return;
+      if (turn.edge === 'open') nbPanelOut();
+      else if (turn.edge === 'close') nbPageGo(0);
+      else nbPageGo(nbPageNow() + turn.step);
+    }, { passive: true });
+    document.addEventListener('touchcancel', function(){ armed = false; }, { passive: true });
+  })();
+  if (window.nbMobile){
+    window.nbMobile.pages = NB_PAGES;
+    window.nbMobile.pageNow = nbPageNow;
+    window.nbMobile.pageGo = nbPageGo;
+    window.nbMobile.swipeStep = nbSwipeStep;
+    window.nbMobile.swipeReady = nbSwipeReady;
   }
   /* === /SHELL === */

@@ -1016,13 +1016,16 @@ async function until(fn, ms = 3000) {
   console.log('\n— §4: the phone gets a bottom bar and sheets —');
   const nav = doc.getElementById('nbNav');
   ok('a bottom bar is there', !!nav && doc.body.classList.contains('nb-nav-on'));
-  eq('with the five places', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.dataset.nbNav), ['home', 'notes', 'search', 'cal', 'more']);
-  eq('and their names', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.textContent.trim()), ['امروز', 'یادداشت‌ها', 'جستجو', 'تقویم', 'بیشتر']);
+  eq('with the six places', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.dataset.nbNav), ['home', 'temps', 'notes', 'search', 'cal', 'more']);
+  eq('and their names', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.textContent.trim()), ['امروز', 'موقت', 'یادداشت‌ها', 'جستجو', 'تقویم', 'بیشتر']);
   nb.ui.sidebar(false);
   const tabsBeforeNav = doc.querySelectorAll('#tabsList .tab').length;
   nav.querySelector('[data-nb-nav="home"]').click();
   await sleep(80);
   ok('«امروز» opens the day page', doc.querySelectorAll('#tabsList .tab').length >= tabsBeforeNav);
+  nav.querySelector('[data-nb-nav="temps"]').click();
+  await sleep(60);
+  eq('«موقت» is one tap away on the bar and opens its page', [nb.ui.state().section, doc.body.classList.contains('nb-open')], ['temps', true]);
   nav.querySelector('[data-nb-nav="search"]').click();
   await sleep(60);
   eq('«جستجو» opens the drawer on search', nb.ui.state().section, 'search');
@@ -1031,7 +1034,8 @@ async function until(fn, ms = 3000) {
   nav.querySelector('[data-nb-nav="more"]').click();
   await sleep(40);
   const navMenu = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent.trim());
-  ok('«بیشتر» offers the other sections, new notes and settings', ['موقت', 'کارها', 'یادداشت جدید', 'ثبت سریع', 'یادداشت امروز', 'تنظیمات'].every((s) => navMenu.some((l) => l.indexOf(s) !== -1)), navMenu);
+  ok('«بیشتر» offers the other sections, new notes and settings', ['کارها', 'یادداشت جدید', 'ثبت سریع', 'یادداشت امروز', 'تنظیمات'].every((s) => navMenu.some((l) => l.indexOf(s) !== -1)), navMenu);
+  ok('and «موقت» is no longer buried in it', !navMenu.some((l) => l.indexOf('موقت') === 0), navMenu);
   doc.getElementById('nbMenu').hidden = true;
   ok('the theme colour follows the theme for the phone bar', (() => {
     const meta = doc.querySelector('meta[name="theme-color"]');
@@ -1046,6 +1050,71 @@ async function until(fn, ms = 3000) {
     const css = doc.getElementById('appStyle').textContent;
     return /100dvh/.test(css) && /safe-area-inset-bottom/.test(css) && /#nbNav\b/.test(css) && /overscroll-behavior:contain/.test(css);
   })());
+  console.log('\n— a sideways finger turns the phone\'s pages —');
+  const wideW0 = win.innerWidth;
+  Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true, writable: true });
+  win.dispatchEvent(new win.Event('resize'));
+  for (let i = 0; i < 6 && nb.ui.closeTopLayer(); i++) await sleep(20);
+  await sleep(30);
+  eq('the pages are the places of the bar, «بیشتر» aside', win.nbMobile.pages, ['home', 'temps', 'notes', 'search', 'cal']);
+  const tev = (type, x, y) => {
+    const e = new win.Event(type, { bubbles: true, cancelable: true });
+    const pts = [{ clientX: x, clientY: y, identifier: 1 }];
+    Object.defineProperty(e, 'touches', { value: type === 'touchend' ? [] : pts });
+    Object.defineProperty(e, 'changedTouches', { value: pts });
+    return e;
+  };
+  const swipe = async (x0, y0, x1, y1, el) => {
+    const node = el || doc.body;
+    node.dispatchEvent(tev('touchstart', x0, y0));
+    node.dispatchEvent(tev('touchend', x1, y1));
+    await sleep(60);
+  };
+  nb.ui.sidebar(false);
+  await sleep(30);
+  await swipe(60, 400, 200, 404);
+  eq('a finger to the right brings «موقت» in', [nb.ui.state().section, doc.body.classList.contains('nb-open')], ['temps', true]);
+  await swipe(200, 400, 340, 402);
+  eq('and again «یادداشت‌ها»', nb.ui.state().section, 'notes');
+  await swipe(340, 400, 180, 398);
+  eq('a finger to the left goes back', nb.ui.state().section, 'temps');
+  await swipe(300, 400, 40, 400);
+  ok('and once more reaches «امروز», the panel closed', !doc.body.classList.contains('nb-open') && nb.ui.state().section === 'temps');
+  nb.ui.sidebar(false);
+  nb.ui.section('notes');
+  await sleep(40);
+  await swipe(386, 300, 346, 301);
+  ok('a short pull from the right edge brings the panel out', doc.body.classList.contains('nb-open') && nb.ui.state().section === 'notes');
+  await swipe(20, 300, 90, 301);
+  ok('a pull from the left edge takes it away', !doc.body.classList.contains('nb-open'));
+  nb.ui.sidebar(true);
+  nb.ui.section('notes');
+  await sleep(40);
+  await swipe(200, 300, 212, 430);
+  eq('a scroll is not a pull', nb.ui.state().section, 'notes');
+  await swipe(200, 300, 238, 302);
+  eq('a drag under 56px in the middle is nothing', nb.ui.state().section, 'notes');
+  await swipe(200, 300, 262, 302);
+  eq('62px in the middle turns it', nb.ui.state().section, 'search');
+  ok('a wobble or a scroll is not a drag of that kind', win.nbMobile.swipeStep(-50, 60, 200) === null && win.nbMobile.swipeStep(-10, 0, 200) === null);
+  nb.ui.section('notes');
+  await sleep(30);
+  showAllFolders();
+  await sleep(40);
+  const swipeRow = doc.querySelector('#nbBody [data-nb-note]');
+  if (swipeRow){
+    await swipe(60, 40, 230, 42, swipeRow);
+    eq('a swipe that starts on a note row drags, it does not turn the page', nb.ui.state().section, 'notes');
+  }
+  ok('a menu in front stops the turn', (() => {
+    doc.getElementById('nbMenu').hidden = false;
+    const turn = win.nbMobile.swipeStep(-70, 0, 200);
+    return !!turn && turn.step === -1 && win.nbMobile.swipeReady() === false;
+  })());
+  doc.getElementById('nbMenu').hidden = true;
+  Object.defineProperty(win, 'innerWidth', { value: wideW0, configurable: true, writable: true });
+  win.dispatchEvent(new win.Event('resize'));
+  await sleep(30);
   console.log('\n— the Back button closes the top layer —');
   nb.ui.sidebar(true);
   await sleep(30);
@@ -1858,6 +1927,37 @@ async function until(fn, ms = 3000) {
   const savedLocked = win.__idb.get('meta') && win.__idb.get('meta').get('nb-cfg');
   ok('weekStart ذخیره شد و توکن ساده در انبار نیست', savedLocked && savedLocked.weekStart === 'monday' && savedLocked.token === '' && savedLocked.tokenEnc === 'sealed-x', savedLocked && { w: savedLocked.weekStart, t: savedLocked.token });
   nb.ui.cfg({ lockToken: false, tokenEnc: '', weekStart: 'saturday' });
+
+  console.log('\n— نسخهٔ ۲: دکمهٔ شناور «تازه» (FAB) و ریپل —');
+  Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true, writable: true });
+  win.dispatchEvent(new win.Event('resize'));
+  doc.documentElement.dataset.skin = 'm3';
+  eq('the FAB mounts on an M3 page (and mounts once)', [typeof win.m3Fab, win.m3Fab(), win.m3Fab(), doc.querySelectorAll('#m3Fab').length], ['function', true, true, 1]);
+  const fabEl = doc.getElementById('m3Fab');
+  ok('it is a button with the plus icon and its own label', !!fabEl && fabEl.tagName === 'BUTTON' && /i-plus/.test(fabEl.innerHTML) && fabEl.getAttribute('aria-label') === 'تازه');
+  const fabTap = (how) => {
+    if (how === 'click') fabEl.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+    else fabEl.dispatchEvent(pev('pointerup', 20, 700, { pointerType: 'touch' }));
+  };
+  fabTap('click');
+  await sleep(60);
+  ok('a click on the FAB opens the «تازه» menu', !doc.getElementById('nbMenu').hidden && /یادداشت جدید/.test(doc.getElementById('nbMenu').textContent), doc.getElementById('nbMenu').textContent.slice(0, 40));
+  await sleep(450);
+  fabTap('click');
+  await sleep(60);
+  ok('a second tap on the FAB closes it again', doc.getElementById('nbMenu').hidden === true);
+  doc.body.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(30);
+  await sleep(450);
+  fabTap('pointer');
+  await sleep(60);
+  ok('a finger that never becomes a click opens it too', !doc.getElementById('nbMenu').hidden);
+  doc.body.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  await sleep(40);
+  ok('and a click outside still closes it', doc.getElementById('nbMenu').hidden === true);
+  const css2 = doc.getElementById('appStyle').textContent;
+  ok('the stylesheet keeps the FAB off the panel and the dialogs', /body\.m3\.nb-open #m3Fab/.test(css2) && /:has\(\.modal:not\(\[hidden\]\)\) #m3Fab/.test(css2));
+  ok('and a tap on it is not a double-tap zoom', /touch-action:manipulation/.test(css2));
 
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);

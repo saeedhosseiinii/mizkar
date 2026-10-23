@@ -11569,6 +11569,8 @@ var NB_CSS = [
   '',
   '  /* the app\'s own floating buttons (چسباندن، ویرایش سریع) sit above the bottom bar, pinned to the screen */',
   '  body.nb-nav-on .fabs{ position:fixed; left:16px; bottom:calc(var(--nb-nav-h, 56px) + 14px + env(safe-area-inset-bottom, 0px)); z-index:214; }',
+  '  /* a page of its own is in front: those buttons belong to the page behind it */',
+  '  body.nb-open .fabs, body:has(.modal:not([hidden])) .fabs, body:has(#palette:not([hidden])) .fabs{ display:none !important; }',
   '  body.nb-nav-on #btnExport{ width:44px; height:44px; }',
   '',
   '  /* what has no use without a mouse */',
@@ -11784,11 +11786,16 @@ var NB_CSS = [
   '  width:56px; height:56px; border-radius:16px; border:0; cursor:pointer;',
   '  align-items:center; justify-content:center; background:var(--m3-pc); color:var(--m3-on-pc);',
   '  box-shadow:0 4px 8px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.22); transition:transform .15s;',
+  '  touch-action:manipulation; -webkit-tap-highlight-color:transparent;   /* the tap is the answer, not a zoom */',
   '}',
   'body.m3[data-nb-size="phone"] #m3Fab:active{ transform:scale(.94); }',
   '#m3Fab .i{ width:24px; height:24px; }',
   'body.m3.ip-tint #m3Fab, body.m3.readmode #m3Fab, body.m3:has(textarea#input:focus) #m3Fab,',
   'body.m3:has(#deck:not([hidden])) #m3Fab{ display:none !important; }',
+  '/* on a page of its own — the panel, a dialog, the slides, the palette — the FAB belongs to the page behind */',
+  'body.m3.nb-open #m3Fab,',
+  'body.m3:has(.modal:not([hidden])) #m3Fab,',
+  'body.m3:has(#palette:not([hidden])) #m3Fab{ display:none !important; }',
   '',
   'body.m3[data-nb-size="phone"] .fabs{',
   '  position:fixed; left:16px; z-index:214;',
@@ -14186,12 +14193,13 @@ function nbCommitMessage(list){
     if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
   }
   function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
-  document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu')) nbMenuClose(); }, true);
+  document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose(); }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu')) nbMenuClose();
+    /* #m3Fab stays out of it too: on a phone the FAB is the switch of its own menu, not «outside» */
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose();
   });
 
   /* --- settings --- */
@@ -16630,7 +16638,6 @@ function nbCommitMessage(list){
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
-      { label: 'موقت (تب ها و متن های اخیر)', act: sec('temps') },
       { label: 'کارها', act: sec('tasks') },
       { label: 'برچسب ها', act: sec('tags') },
       { label: 'سطل بازیافت' + ((NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: sec('trash') },
@@ -16647,7 +16654,7 @@ function nbCommitMessage(list){
   }
   var nbShellSync = (function(){
     /* the bottom bar (phone) */
-    var NAV = [['home', 'sun', 'امروز'], ['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['more', 'list', 'بیشتر']];
+    var NAV = [['home', 'sun', 'امروز'], ['temps', 'file', 'موقت'], ['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['more', 'list', 'بیشتر']];
     var nav = document.createElement('nav');
     nav.id = 'nbNav';
     nav.setAttribute('aria-label', 'بخش ها');
@@ -16781,7 +16788,7 @@ function nbCommitMessage(list){
         hs.title = (syncBtn ? syncBtn.textContent : 'همگام سازی') + ' — فهرست، گرفتن و ارسال';
       }
       top.querySelector('[data-nb-top="edit"]').setAttribute('aria-pressed', String(state.view !== 'preview'));
-      var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
+      var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal', temps: 'temps' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
       Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.nbNav === on)); });
       var head = $('nbHeadTitle');
       if (head) head.textContent = size === 'phone' ? (NB_SECTION_NAMES[NB.section] || 'دفترچه') : 'دفترچه';
@@ -16800,6 +16807,96 @@ function nbCommitMessage(list){
   function nbPhoneLeavePanel(){
     if (nbSize() !== 'desk' && NB.open){ NB.cameFrom = NB.section; nbSidebar(false); }
     else if (!NB.open && !NB.cameFrom) NB.cameFrom = 'home';
+  }
+
+  /* ==== the phone's sideways swipes: the pages of the bottom bar, both edges included ====
+     The bar, right to left, is the strip of pages: امروز · موقت · یادداشت ها · جستجو · تقویم. A finger moving to
+     the right pulls the page on the left of the current one in (a right-to-left strip moves that way), and a
+     finger moving left goes back. From the right edge a short pull brings the panel out the way a drawer comes,
+     and from the left edge a short pull takes it away; both are wide enough for a thumb to find without aiming.
+     «بیشتر» is a menu, not a page, and stays out. */
+  var NB_PAGES = ['home', 'temps', 'notes', 'search', 'cal'];
+  var NB_SWIPE = { edge: 28, need: 56, wobble: 24, slope: 1.6 };
+  /** Which page is on screen: no panel is «امروز»; کارها/برچسب ها/سطل/تعارض count as «یادداشت ها». */
+  function nbPageNow(){
+    if (!NB.open) return 0;
+    var i = NB_PAGES.indexOf(NB.section);
+    return i > 0 ? i : 2;
+  }
+  /** Shows page `i` of the bar (0 is «امروز», where the panel is closed). */
+  function nbPageGo(i){
+    i = Math.max(0, Math.min(NB_PAGES.length - 1, i));
+    var p = NB_PAGES[i];
+    if (p === 'home'){
+      if (NB.open){ NB.cameFrom = 'home'; nbSidebar(false); }
+      nbGoHome();
+    } else {
+      NB.section = p;
+      if (p === 'search') NB.focusSearch = true;
+      if (NB.open) nbRender(); else nbSidebar(true);
+    }
+    nbShellSync();
+    return p;
+  }
+  /** The panel out of the right edge: the page that was up last, «یادداشت ها» to begin with. */
+  function nbPanelOut(){
+    var i = NB_PAGES.indexOf(NB.section);
+    return nbPageGo(i > 0 ? i : 2);
+  }
+  /**
+   * What a finished sideways finger means on a phone: `{step}` turns a page of the bar, `{edge:'open'}` pulls the
+   * panel out of the right edge, `{edge:'close'}` takes it away from the left edge, and null is «not a drag of
+   * that kind». Short pulls at the edges count, so a thumb finds them without aiming.
+   */
+  function nbSwipeStep(dx, dy, x0){
+    if (Math.abs(dx) < NB_SWIPE.wobble) return null;
+    if (Math.abs(dx) < Math.abs(dy) * NB_SWIPE.slope) return null;      // that was a scroll, not a pull
+    if (x0 >= innerWidth - NB_SWIPE.edge) return dx < 0 ? { edge: 'open' } : null;
+    if (x0 <= NB_SWIPE.edge) return dx > 0 ? { edge: 'close' } : null;
+    if (Math.abs(dx) < NB_SWIPE.need) return null;
+    return { step: dx > 0 ? 1 : -1 };
+  }
+  /** What a finger may not start a page turn on: fields, sideways rows, and the rows a hold drags. */
+  function nbSwipeBlocked(el){
+    if (!el || !el.closest) return true;
+    if (el.closest('textarea, input, select, [contenteditable], #tabs, .mdbar, .status, .nb-tabs, #nbMenu, #nbSyncPop, .nb-sug, .nb-set-nav')) return true;
+    return !!el.closest('[data-nb-note], [data-nb-dir], [data-nb-att], [data-task-open]');
+  }
+  function nbSwipeReady(){
+    if (nbSize() !== 'phone') return false;
+    if (body.classList.contains('ip-tint') || body.classList.contains('readmode')) return false;
+    if (document.querySelector('#deck:not([hidden]), #palette:not([hidden]), .modal:not([hidden])')) return false;
+    var m = $('nbMenu');
+    return !(m && !m.hidden);
+  }
+  (function(){
+    var x0 = 0, y0 = 0, armed = false;
+    document.addEventListener('touchstart', function(e){
+      armed = false;
+      if (e.touches.length !== 1 || !nbSwipeReady()) return;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      armed = !nbSwipeBlocked(e.target);
+    }, { passive: true });
+    document.addEventListener('touchend', function(e){
+      if (!armed) return;
+      armed = false;
+      if (typeof NBD === 'object' && NBD && (NBD.on || NBD.ready)) return;      // a drag is in flight
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      var turn = nbSwipeStep(t.clientX - x0, t.clientY - y0, x0);
+      if (!turn) return;
+      if (turn.edge === 'open') nbPanelOut();
+      else if (turn.edge === 'close') nbPageGo(0);
+      else nbPageGo(nbPageNow() + turn.step);
+    }, { passive: true });
+    document.addEventListener('touchcancel', function(){ armed = false; }, { passive: true });
+  })();
+  if (window.nbMobile){
+    window.nbMobile.pages = NB_PAGES;
+    window.nbMobile.pageNow = nbPageNow;
+    window.nbMobile.pageGo = nbPageGo;
+    window.nbMobile.swipeStep = nbSwipeStep;
+    window.nbMobile.swipeReady = nbSwipeReady;
   }
   /* === /SHELL === */
 
@@ -17574,22 +17671,42 @@ function nbCommitMessage(list){
   /* === M3 (beta2 only): the Android behaviours — the FAB and the ripple — Mizkar ===
      Does nothing unless the page was built with <html data-skin="m3"> (dev/beta.py --v2). */
   (function(){
-    if ((document.documentElement.dataset.skin || '') !== 'm3') return;
-    body.classList.add('m3');
-
-    /* the FAB: the one «تازه» button of an Android app, bottom end on the phone */
-    var fab = document.createElement('button');
-    fab.id = 'm3Fab';
-    fab.type = 'button';
-    fab.setAttribute('aria-label', 'تازه');
-    fab.setAttribute('aria-haspopup', 'menu');
-    fab.innerHTML = icon('plus');
-    document.body.appendChild(fab);
-    fab.addEventListener('click', function(e){
-      e.stopPropagation();
-      var r = fab.getBoundingClientRect();
-      nbMenu(r.left, Math.max(8, r.top - 300), nbPlusItems());
-    });
+    /** The FAB: the one «تازه» button of an Android app, bottom end on the phone. */
+    function m3Fab(){
+      if ((document.documentElement.dataset.skin || '') !== 'm3') return false;
+      body.classList.add('m3');
+      if ($('m3Fab')) return true;                                  // one FAB, however often this runs
+      var fab = document.createElement('button');
+      fab.id = 'm3Fab';
+      fab.type = 'button';
+      fab.setAttribute('aria-label', 'تازه');
+      fab.setAttribute('aria-haspopup', 'menu');
+      fab.innerHTML = icon('plus');
+      document.body.appendChild(fab);
+      function open(){
+        var r = fab.getBoundingClientRect();
+        nbMenu(r.left, Math.max(8, r.top - 300), nbPlusItems());
+      }
+      /* A tap answers on the first of click/pointerup/touchend the browser gives us, and the rest of that one
+         tap is dropped: a phone whose browser delivers no click (or a late one) still opens the menu. A second
+         tap on the FAB closes it again — it is the switch of its own menu. */
+      var last = 0;
+      function tap(e){
+        if (e && e.stopPropagation) e.stopPropagation();      // not «outside»: the menu must stay open
+        var now = Date.now();
+        if (now - last < 400){ if (e && e.preventDefault) e.preventDefault(); return; }
+        last = now;
+        var m = $('nbMenu');
+        if (m && !m.hidden){ nbMenuClose(); return; }
+        open();
+      }
+      fab.addEventListener('click', tap);
+      fab.addEventListener('pointerup', function(e){ if (e.pointerType !== 'mouse') tap(e); });
+      fab.addEventListener('touchend', tap);
+      return true;
+    }
+    window.m3Fab = m3Fab;                                            // the tests wake it after setting the skin
+    if (!m3Fab()) return;
 
     /* the ripple: a touch answers where it lands */
     var RIPPLY = '.ib, .btn-soft, .btn-primary, .elbtn, .mi, .nb-row, .nb-nav-b, .tab, .hm-note, .nb-set-item, .nb-tab, #m3Fab';

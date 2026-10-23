@@ -2325,12 +2325,13 @@ function nbCommitMessage(list){
     if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
   }
   function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
-  document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu')) nbMenuClose(); }, true);
+  document.addEventListener('mousedown', function(e){ if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose(); }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu')) nbMenuClose();
+    /* #m3Fab stays out of it too: on a phone the FAB is the switch of its own menu, not «outside» */
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab')) nbMenuClose();
   });
 
   /* --- settings --- */

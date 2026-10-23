@@ -113,11 +113,16 @@ body.m3[data-nb-size="phone"] #m3Fab{
   width:56px; height:56px; border-radius:16px; border:0; cursor:pointer;
   align-items:center; justify-content:center; background:var(--m3-pc); color:var(--m3-on-pc);
   box-shadow:0 4px 8px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.22); transition:transform .15s;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;   /* the tap is the answer, not a zoom */
 }
 body.m3[data-nb-size="phone"] #m3Fab:active{ transform:scale(.94); }
 #m3Fab .i{ width:24px; height:24px; }
 body.m3.ip-tint #m3Fab, body.m3.readmode #m3Fab, body.m3:has(textarea#input:focus) #m3Fab,
 body.m3:has(#deck:not([hidden])) #m3Fab{ display:none !important; }
+/* on a page of its own — the panel, a dialog, the slides, the palette — the FAB belongs to the page behind */
+body.m3.nb-open #m3Fab,
+body.m3:has(.modal:not([hidden])) #m3Fab,
+body.m3:has(#palette:not([hidden])) #m3Fab{ display:none !important; }
 
 body.m3[data-nb-size="phone"] .fabs{
   position:fixed; left:16px; z-index:214;

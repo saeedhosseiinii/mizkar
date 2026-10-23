@@ -153,6 +153,8 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
 
   /* the app's own floating buttons (چسباندن، ویرایش سریع) sit above the bottom bar, pinned to the screen */
   body.nb-nav-on .fabs{ position:fixed; left:16px; bottom:calc(var(--nb-nav-h, 56px) + 14px + env(safe-area-inset-bottom, 0px)); z-index:214; }
+  /* a page of its own is in front: those buttons belong to the page behind it */
+  body.nb-open .fabs, body:has(.modal:not([hidden])) .fabs, body:has(#palette:not([hidden])) .fabs{ display:none !important; }
   body.nb-nav-on #btnExport{ width:44px; height:44px; }
 
   /* what has no use without a mouse */
