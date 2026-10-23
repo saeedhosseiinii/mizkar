@@ -8294,8 +8294,8 @@ if (typeof document !== 'undefined'){
     clearTimeout(saveTimer);
     try {
       localStorage.setItem('fs2-state', JSON.stringify({
-        text: ta.value, times: optTimes.checked, cronTz: state.cronTz, pasteTab: optPasteTab.checked, activeTab: activeTab,
-        tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt, nb: t.nb || undefined }; }),
+        text: currentTab() && currentTab().secret ? '' : ta.value, times: optTimes.checked, cronTz: state.cronTz, pasteTab: optPasteTab.checked, activeTab: activeTab,
+        tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.id === activeTab || t.secret ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt, nb: t.nb || undefined, secret: t.secret || undefined }; }),
         jsonView: state.jsonView, outline: state.outline, outlineW: state.outlineW, faRules: state.faRules, norm: optNorm.checked, bdi: optBdi.checked, sync: optSync.checked, pdf: state.pdf,
         fmt: state.fmt, view: state.view, split: state.split, size: state.size, width: state.width, accent: state.accent, ltr: state.ltr, read: state.read
       }));
@@ -8303,7 +8303,7 @@ if (typeof document !== 'undefined'){
     } catch(e){
       // too much for browser storage: every tab goes to IndexedDB, browser storage keeps the current one and a note to look there
       syncActiveTab();
-      var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.text, fmt: t.fmt, nb: t.nb || undefined }; }) };
+      var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.secret ? '' : t.text, fmt: t.fmt, nb: t.nb || undefined, secret: t.secret || undefined }; }) };
       idbSet('tabs', full).then(function(ok){
         if (!ok && !quotaWarned && tabs.length > 1){
           quotaWarned = true;
@@ -8311,7 +8311,7 @@ if (typeof document !== 'undefined'){
         }
       });
       try {
-        localStorage.setItem('fs2-state', JSON.stringify({ text: ta.value, fmt: state.fmt, view: state.view, theme: state.theme, pasteTab: optPasteTab.checked, tabsInIdb: full.at }));
+        localStorage.setItem('fs2-state', JSON.stringify({ text: currentTab() && currentTab().secret ? '' : ta.value, fmt: state.fmt, view: state.view, theme: state.theme, pasteTab: optPasteTab.checked, tabsInIdb: full.at }));
         return;
       } catch(e2){}
       // browser storage is ~5 MB: say so once instead of silently losing the text on reload
@@ -9010,6 +9010,8 @@ if (typeof document !== 'undefined'){
   /** `tab` (the closed tab) keeps its name with the text, so a tab closed by mistake is easy to find. */
   function remember(text, fmt, kind, tab){
     if (!text || !text.trim() || text.length > HISTORY_ITEM_MAX) return;
+    var curTab = currentTab();
+    if ((tab && tab.secret) || (curTab && curTab.secret && text === ta.value) || tabs.some(function(x){ return x.secret && x.text === text; })) return;
     var list = historyLoad().filter(function(h){ return h.t !== text; });
     var item = { t: text, title: textTitle(text), fmt: fmt || 'auto', kind: kind || detectFormat(text), at: Date.now() };
     if (tab){ item.closed = true; if (tab.name) item.name = tab.name; }
@@ -11570,6 +11572,7 @@ function nbCommitMessage(list){
   var NB = {
     cfg: null, files: {}, paths: [], loaded: false, lastCommit: '', lastSync: 0,
     dirtyCount: 0, state: 'off', error: '', conflicts: [], busy: false, timer: 0,
+    localSalt: crypto.getRandomValues(new Uint8Array(16)),
     lastPull: 0, open: false, section: 'notes', expanded: {}, pullTimer: 0,
     query: '', colFilter: '', tagFilter: '', calMonth: null, focusSearch: false,
     key: null, unlock: {}, attach: {}, pass: null, attachMeta: {}
@@ -11605,10 +11608,28 @@ function nbCommitMessage(list){
   function nbSaveCfg(){ return idbSet('nb-cfg', C, 'meta'); }
   /** Every notebook keeps its own working copy, so switching repositories never mixes notes. */
   function nbStoreSuffix(){ return ':' + (C && C.repo ? C.repo.replace(/[^\w.-]/g, '_') : 'local'); }
+  /**
+   * What goes to IndexedDB for one note. A secret note is stored without anything decrypted: its unsent text
+   * travels as `localCipher` (encrypted with the session passphrase), and plaintext fields are dropped.
+   */
+  function nbPersistable(f){
+    if (!f.enc) return Promise.resolve(f);
+    var copy = Object.assign({}, f);
+    delete copy.plain; delete copy.basePlain; delete copy._ct;
+    if (!nbIsEncrypted(copy.text || '')) copy.text = '';
+    if (!nbIsEncrypted(copy.base || '')) copy.base = '';
+    if (f.plain != null && f.dirty && NB.pass){
+      return nbEncrypt(f.plain, NB.pass, NB.localSalt).then(function(ct){ f.localCipher = ct; copy.localCipher = ct; return copy; });
+    }
+    return Promise.resolve(copy);
+  }
   function nbSaveFiles(){
-    var list = NB.paths.map(function(p){ return NB.files[p]; }).filter(Boolean);
+    // the store is named now: encrypting is asynchronous, and the notebook may be switched meanwhile
+    var list = NB.paths.map(function(p){ return NB.files[p]; }).filter(Boolean), key = 'all' + nbStoreSuffix();
     nbIdxInvalidate();
-    return idbSet('all' + nbStoreSuffix(), { at: Date.now(), files: list }, 'notes');
+    return Promise.all(list.map(nbPersistable)).then(function(files){
+      return idbSet(key, { at: Date.now(), files: files }, 'notes');
+    });
   }
   function nbSaveAttach(){
     var list = Object.keys(NB.attach || {}).map(function(k){ return NB.attach[k]; });
@@ -11785,21 +11806,28 @@ function nbCommitMessage(list){
         .then(function(c){ return { sha: c.id }; });
     }
     var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
-    var tree = [], chain = Promise.resolve();
-    changes.forEach(function(c){
-      chain = chain.then(function(){
-        if (c.deleted){ tree.push({ path: c.path, mode: '100644', type: 'blob', sha: null }); return true; }
-        var content = c.b64 || nbB64(c.text);
-        return nbApi('POST', base + '/git/blobs', { content: content, encoding: 'base64' }).then(function(blob){
-          tree.push({ path: c.path, mode: '100644', type: 'blob', sha: blob.sha });
-          return true;
-        });
+    // blobs go up four at a time; the tree keeps the order of the changes
+    var tree = new Array(changes.length), next = 0;
+    function worker(){
+      if (next >= changes.length) return Promise.resolve(true);
+      var i = next++, c = changes[i];
+      if (c.deleted){ tree[i] = { path: c.path, mode: '100644', type: 'blob', sha: null }; return worker(); }
+      return nbApi('POST', base + '/git/blobs', { content: c.b64 || nbB64(c.text), encoding: 'base64' }).then(function(blob){
+        tree[i] = { path: c.path, mode: '100644', type: 'blob', sha: blob.sha };
+        return worker();
       });
-    });
-    return chain
-      .then(function(){
+    }
+    var workers = [];
+    for (var w = 0; w < Math.min(4, changes.length); w++) workers.push(worker());
+    // base_tree must name a tree: the base commit's own tree, so every untouched file stays
+    var baseTree = baseSha ? nbApi('GET', base + '/git/commits/' + baseSha).then(function(c){
+      if (!c || !c.tree || !c.tree.sha) throw nbError(0, 'درخت commit پایه خوانده نشد');
+      return c.tree.sha;
+    }) : Promise.resolve('');
+    return Promise.all([baseTree].concat(workers))
+      .then(function(r){
         var body = { tree: tree };
-        if (baseSha) body.base_tree = baseSha;
+        if (r[0]) body.base_tree = r[0];
         return nbApi('POST', base + '/git/trees', body);
       })
       .then(function(treeRes){
@@ -11874,29 +11902,49 @@ function nbCommitMessage(list){
           var local = NB.files[job.path];
           return nbFileText(job.path).then(function(text){
             var enc = nbIsEncrypted(text);
-            if (local && local.enc && local.plain != null){
-              // the local copy of a secret note is plaintext: compare plain to plain
-              var minePlain = local.plain;
-              if (minePlain !== local.base){
-                var mg = nbMerge3(local.base || '', minePlain, text);
+            if (local && local.enc){
+              if (!local.dirty){
+                // nothing unsent here: take theirs, and keep it open if it was open
+                var reopen = local.plain != null && NB.pass && enc;
+                return (reopen ? nbDecrypt(text, NB.pass).catch(function(){ return null; }) : Promise.resolve(null)).then(function(plain){
+                  nbPutFile(job.path, text, job.sha, { base: text, basePlain: plain, dirty: false, isNew: false, enc: enc, plain: enc ? plain : null, remote: true });
+                  delete NB.files[job.path].localCipher;
+                  nbRefreshOpenTab(job.path, true);
+                  pulled++;
+                  return true;
+                });
+              }
+              // both sides changed a secret note: decrypt base, mine and theirs and compare plain to plain
+              return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
+                if (!pass) throw nbError(0, 'locked');
+                NB.pass = pass;
+                return Promise.all([
+                  local.plain != null ? local.plain : nbDecrypt(local.localCipher || local.text, pass),
+                  local.basePlain != null ? local.basePlain : (nbIsEncrypted(local.base || '') ? nbDecrypt(local.base, pass) : ''),
+                  enc ? nbDecrypt(text, pass) : text
+                ]);
+              }).then(function(r){
+                var mine = r[0], base = r[1], theirs = r[2], mg = nbMerge3(base, mine, theirs);
                 if (!mg.conflicts.length){
-                  nbPutFile(job.path, text, job.sha, { base: text, dirty: false, enc: true, plain: mg.text, remote: true });
-                  nbRefreshOpenTab(job.path);
+                  nbPutFile(job.path, text, job.sha, { base: text, basePlain: theirs, enc: true, plain: mg.text, dirty: mg.text !== theirs, remote: true });
+                  nbRefreshOpenTab(job.path, true);
                   merged++;
                   return true;
                 }
-              }
-              nbPutFile(job.path, text, job.sha, { base: text, dirty: false, enc: true, plain: minePlain, remote: true });
-              nbRefreshOpenTab(job.path);
-              pulled++;
-              return true;
+                NB.conflicts.push({ path: job.path, mine: mine, theirs: theirs, base: base, theirsSha: job.sha, theirsCipher: text, enc: true, merged: true });
+                return false;
+              }, function(){
+                // cannot be opened here: it waits, unsent, until the passphrase is given
+                NB.conflicts.push({ path: job.path, locked: true, theirsSha: job.sha, enc: true });
+                return false;
+              });
             }
             if (local && local.dirty && local.base !== text){
               // both sides moved: merge what can be merged, and only then ask the user
               var mg2 = nbMerge3(local.base || '', local.text, text);
               if (!mg2.conflicts.length){
                 nbPutFile(job.path, mg2.text, job.sha, { base: text, dirty: true, remote: true });
-                nbRefreshOpenTab(job.path);
+                nbRefreshOpenTab(job.path, true);
                 merged++;
                 return true;
               }
@@ -11948,9 +11996,15 @@ function nbCommitMessage(list){
       return false;
     });
   }
-  function nbRefreshOpenTab(path){
+  function nbRefreshOpenTab(path, force){
     var t = nbTabFor(path), f = NB.files[path];
-    if (!t || !f || f.dirty) return;
+    if (!t || !f || (f.dirty && !force)) return;
+    t.secret = !!f.enc;
+    if (f.enc && f.plain == null){                // locked again (taken from the repository): it reopens on demand
+      t.text = '';
+      if (t.id === activeTab){ ta.value = ''; render(); nbAfterSwitch(); }
+      return;
+    }
     t.text = nbTextOf(f);
     if (t.id === activeTab){
       ta.value = nbTextOf(f);
@@ -11998,11 +12052,12 @@ function nbCommitMessage(list){
       list.forEach(function(fd){
         chain = chain.then(function(){
           if (fd.deleted){ changes.push({ path: fd.path, deleted: true }); return true; }
-          if (fd.enc && fd.plain != null){
-            return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
-              NB.pass = pass;
-              return nbEncrypt(fd.plain, pass || '');
+          if (fd.enc){
+            return nbEnsurePlain(fd.path).then(function(ok){
+              if (!ok || !NB.pass) throw nbError(0, 'یادداشت رمزدار «' + nbTitle(fd.path) + '» باز نشد — بدون گذرواژه ارسال نمی شود');
+              return nbEncrypt(fd.plain, NB.pass);
             }).then(function(ct){
+              fd._ct = ct;
               changes.push({ path: fd.path, text: ct, exists: !!fd.remote });
               return true;
             });
@@ -12024,8 +12079,10 @@ function nbCommitMessage(list){
         .then(function(commit){
           list.forEach(function(fd){
             if (fd.deleted){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return; }
-            if (fd.enc && fd.plain != null) fd.base = fd.plain;   // the ciphertext is only for the repository
-            else fd.base = fd.text;
+            if (fd.enc && fd._ct){                    // the working copy keeps the ciphertext that went up
+              fd.text = fd.base = fd._ct; fd.basePlain = fd.plain;
+              delete fd._ct; delete fd.localCipher;
+            } else fd.base = fd.text;
             fd.dirty = false; fd.isNew = false; fd.sha = ''; fd.remote = true; fd.at = Date.now();
           });
           Object.keys(NB.attach).forEach(function(k){
@@ -12175,7 +12232,7 @@ function nbCommitMessage(list){
     }
     syncActiveTab();
     var text = nbTextOf(f);
-    var fresh = { id: tabId(), text: text, fmt: 'markdown', undo: [], redo: [], nb: path, name: nbTitle(path) };
+    var fresh = { id: tabId(), text: text, fmt: 'markdown', undo: [], redo: [], nb: path, name: nbTitle(path), secret: !!f.enc };
     var cur = currentTab(), at2 = cur ? tabs.indexOf(cur) : -1;
     tabs.splice(at2 + 1, 0, fresh);
     activeTab = fresh.id;
@@ -12193,6 +12250,7 @@ function nbCommitMessage(list){
     nbSuggestClose();
     if (!t || !t.nb){ ta.readOnly = false; body.classList.remove('nb-ro'); return; }
     var f = NB.files[t.nb];
+    t.secret = !!(f && f.enc);
     if (f && f.enc && f.plain == null){
       nbEnsurePlain(t.nb).then(function(ok){
         if (!ok) return;
@@ -12414,6 +12472,9 @@ function nbCommitMessage(list){
       }).join('') + '</div>' : '<div class="nb-empty">برچسبی پیدا نشد.<br>برچسب ها از فرادادهٔ یادداشت و از #برچسب داخل متن خوانده می شوند.</div>';
     } else {
       html += NB.conflicts.map(function(c, i){
+        if (c.locked) return '<div class="nb-conflict-row"><b dir="auto">' + escapeHtml(nbTitle(c.path)) + '</b><small dir="auto">' + escapeHtml(c.path) + '</small>'
+          + '<small class="nb-warn">یادداشت رمزدار هم اینجا و هم روی مخزن عوض شده — برای مقایسه گذرواژه لازم است</small>'
+          + '<div class="nb-cf-btns"><button type="button" class="btn-soft sm" data-nb-resolve="unlock" data-nb-ci="' + i + '">باز کردن و مقایسه</button></div></div>';
         return '<div class="nb-conflict-row"><b dir="auto">' + escapeHtml(nbTitle(c.path)) + '</b><small dir="auto">' + escapeHtml(c.path) + '</small>'
           + (c.merged ? '<small class="nb-warn">ادغام خودکار نشد — هر دو نسخه دست نخورده اند</small>' : '')
           + '<div class="nb-cf-btns">'
@@ -12657,6 +12718,17 @@ function nbCommitMessage(list){
   }
   function nbResolve(c, how){
     if (!c) return;
+    if (c.locked){                                  // give the passphrase, then compare again
+      nbAskPass(true).then(function(p){
+        if (!p) return;
+        NB.pass = p;
+        NB.conflicts = NB.conflicts.filter(function(x){ return x !== c; });
+        NB.lastCommit = '';
+        nbPull({ loud: true });
+      });
+      return;
+    }
+    if (c.enc) return nbResolveSecret(c, how);
     var t = nbTabFor(c.path);
     if (how === 'theirs'){
       nbPutFile(c.path, c.theirs, c.theirsSha, { base: c.theirs, dirty: false, isNew: false });
@@ -12687,6 +12759,26 @@ function nbCommitMessage(list){
       toast('تعارض حل شد', 'check');
       if (how !== 'both') nbPush({});
     }
+  }
+  /** The same choices for a secret note, kept plain in memory and ciphertext everywhere else. */
+  function nbResolveSecret(c, how){
+    var t = nbTabFor(c.path), f = NB.files[c.path], text;
+    if (!f) return;
+    if (how === 'both'){
+      openTab(c.theirs, 'markdown', 'نسخهٔ مخزن در تب تازه — مقایسه کن و درست را نگه دار');
+      var fresh = currentTab();
+      if (fresh){ fresh.secret = true; fresh.name = nbTitle(c.path) + ' (مخزن)'; }
+      drawTabs();
+    } else {
+      text = how === 'theirs' ? c.theirs : how === 'auto' ? nbMerge3(c.base || '', c.mine, c.theirs).text : c.mine;
+      f.enc = true; f.plain = text; f.basePlain = c.theirs; f.sha = c.theirsSha;
+      if (c.theirsCipher){ f.text = f.base = c.theirsCipher; }
+      f.dirty = text !== c.theirs; f.at = Date.now();
+      if (t){ t.secret = true; t.text = text; if (t.id === activeTab){ ta.value = text; render(); } }
+    }
+    NB.conflicts = NB.conflicts.filter(function(x){ return x !== c; });
+    nbCountDirty(); nbRender(); nbSaveFiles(); nbSay();
+    if (!NB.conflicts.length){ toast('تعارض حل شد', 'check'); if (how !== 'both') nbPush({}); }
   }
   function nbShowConflicts(){
     NB.section = 'conflicts';
@@ -13587,28 +13679,37 @@ function nbCommitMessage(list){
       if (el) el.type = 'password';
     });
   }
-  function nbKeyFromPass(pass, salt){
+  var NB_KDF_ROUNDS = 600000, nbKeyCache = {};
+  /** A key per (passphrase, salt, rounds), derived once per page: the slow part of PBKDF2 is paid once. */
+  function nbKeyFromPass(pass, salt, rounds){
+    rounds = rounds || NB_KDF_ROUNDS;
+    var id = rounds + ':' + nbB64Bytes(salt) + ':' + pass;
+    if (nbKeyCache[id]) return nbKeyCache[id];
     var enc = new TextEncoder();
-    return crypto.subtle.importKey('raw', enc.encode(pass), { name: 'PBKDF2' }, false, ['deriveKey'])
+    nbKeyCache[id] = crypto.subtle.importKey('raw', enc.encode(pass), { name: 'PBKDF2' }, false, ['deriveKey'])
       .then(function(base){
-        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 150000, hash: 'SHA-256' }, base,
+        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: rounds, hash: 'SHA-256' }, base,
           { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
       });
+    nbKeyCache[id].catch(function(){ delete nbKeyCache[id]; });
+    return nbKeyCache[id];
   }
-  function nbEncrypt(text, pass){
-    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-    return nbKeyFromPass(pass, salt).then(function(key){
+  /** `salt` is given only for the local copy (one salt per page, so the key is derived once); git gets a fresh one each time. */
+  function nbEncrypt(text, pass, salt){
+    salt = salt || crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return nbKeyFromPass(pass, salt, NB_KDF_ROUNDS).then(function(key){
       return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text));
     }).then(function(ct){
-      return '---\n' + NB_ENC_HEAD + ': 1\nkdf: PBKDF2-150000\nsalt: ' + nbB64Bytes(salt) + '\niv: ' + nbB64Bytes(iv) + '\n---\n'
+      return '---\n' + NB_ENC_HEAD + ': 1\nkdf: PBKDF2-' + NB_KDF_ROUNDS + '\nsalt: ' + nbB64Bytes(salt) + '\niv: ' + nbB64Bytes(iv) + '\n---\n'
         + nbB64Bytes(ct).replace(/(.{76})/g, '$1\n') + '\n';
     });
   }
   function nbDecrypt(text, pass){
-    var salt = /salt: ([^\n]+)/.exec(text), iv = /iv: ([^\n]+)/.exec(text);
+    var salt = /salt: ([^\n]+)/.exec(text), iv = /iv: ([^\n]+)/.exec(text), kdf = /kdf: PBKDF2-(\d+)/.exec(text);
     if (!salt || !iv) return Promise.reject(new Error('قالب یادداشت رمزدار خوانده نشد'));
     var body = text.split(/\n---\n/).slice(1).join('\n---\n').replace(/\s+/g, '');
-    return nbKeyFromPass(pass, nbBytesB64(salt[1])).then(function(key){
+    return nbKeyFromPass(pass, nbBytesB64(salt[1]), kdf ? +kdf[1] : 150000).then(function(key){
       return crypto.subtle.decrypt({ name: 'AES-GCM', iv: nbBytesB64(iv[1]) }, key, nbBytesB64(body));
     }).then(function(plain){ return new TextDecoder().decode(plain); });
   }
@@ -13620,14 +13721,21 @@ function nbCommitMessage(list){
       f.enc = false;
       if (f.plain != null){ f.text = f.plain; f.plain = null; }
       toast('رمزگذاری برداشته شد — با ارسال، متن ساده روی مخزن می رود', 'x');
+      var t0 = nbTabFor(path);
+      if (t0) t0.secret = false;
     } else {
+      if (!NB.pass){
+        nbAskPass(true).then(function(p){ if (p){ NB.pass = p; nbToggleEncrypt(path); } });
+        return;
+      }
       f.enc = true;
       f.plain = f.plain != null ? f.plain : f.text;
-      if (!NB.pass) nbAskPass(true).then(function(p){ NB.pass = p; toast('رمزگذاری فعال شد — از «ارسال» به بعد رمزدار می رود', 'check'); });
-      else toast('رمزگذاری فعال شد — از «ارسال» به بعد رمزدار می رود', 'check');
+      var t1 = nbTabFor(path);
+      if (t1) t1.secret = true;
+      toast('رمزگذاری فعال شد — از «ارسال» به بعد رمزدار می رود', 'check');
     }
     f.dirty = true; f.at = Date.now();
-    nbCountDirty(); nbRender(); nbSaveFiles();
+    nbCountDirty(); nbRender(); nbSaveFiles(); saveState();
   }
   function nbEnsurePlain(path){
     var f = NB.files[path];
@@ -13636,7 +13744,7 @@ function nbCommitMessage(list){
     return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
       if (!pass) return false;
       NB.pass = pass;
-      return nbDecrypt(f.text, pass).then(function(plain){ f.plain = plain; return true; },
+      return nbDecrypt(f.localCipher || f.text, pass).then(function(plain){ f.plain = plain; if (f.basePlain == null && !f.dirty) f.basePlain = plain; return true; },
         function(e){ toast('رمزگشایی نشد — گذرواژه درست است؟ (' + e.message + ')', 'x'); return false; });
     });
   }
@@ -13696,14 +13804,14 @@ function nbCommitMessage(list){
     if (typeof s.times === 'boolean') optTimes.checked = s.times;
     if (s.cronTz === 0 || s.cronTz === 210) state.cronTz = s.cronTz;
     if (Array.isArray(s.tabs) && s.tabs.length){
-      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: typeof t.nb === 'string' ? t.nb : undefined, undo: [], redo: [] }; });
+      tabs = s.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: typeof t.nb === 'string' ? t.nb : undefined, secret: !!t.secret, undo: [], redo: [] }; });
     }
     if (!tabs.length) tabs = [{ id: tabId(), text: '', fmt: s.fmt || 'auto', undo: [], redo: [] }];
     // the tabs did not fit in browser storage last time: bring them back from IndexedDB
     if (s.tabsInIdb) idbGet('tabs').then(function(full){
       if (!full || full.at !== s.tabsInIdb || !Array.isArray(full.tabs) || full.tabs.length < 2) return;
       var cur = ta.value;
-      tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: t.nb || undefined, undo: [], redo: [] }; });
+      tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: t.nb || undefined, secret: !!t.secret, undo: [], redo: [] }; });
       activeTab = tabs.some(function(t){ return t.id === full.activeTab; }) ? full.activeTab : tabs[0].id;
       currentTab().text = cur; // what the editor shows now wins
       drawTabs();

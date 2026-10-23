@@ -5,7 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { JSDOM } = require('jsdom');
 
-const HTML = process.env.MIZKAR_HTML || '/root/workspace/mizkar/index.html';
+const HTML = process.env.MIZKAR_HTML || require('path').join(__dirname, '..', 'index.html');
 let html = fs.readFileSync(HTML, 'utf8');
 // strip the two big vendored libraries and the CDN tag: the notebook needs none of them
 html = html.replace(/<script id="mermaidLib">[\s\S]*?<\/script>/, '<script id="mermaidLib"></script>');
@@ -93,7 +93,16 @@ function handleApi(method, url, body) {
     repo.blobs.set(sha, text);
     return apiResponse({ sha });
   }
+  if (p.startsWith('/git/commits/') && method === 'GET') {
+    const c = repo.commits.find((x) => x.sha === p.slice('/git/commits/'.length));
+    if (!c) return apiResponse({ message: 'Not Found' }, 404);
+    // commits a test made by hand get a real tree here, as every commit on GitHub has one
+    if (!c.tree || !repo.trees.has(c.tree)) { c.tree = c.tree || crypto.randomBytes(20).toString('hex'); repo.trees.set(c.tree, c.treeBody || { tree: [] }); }
+    return apiResponse({ sha: c.sha, tree: { sha: c.tree } });
+  }
   if (p === '/git/trees' && method === 'POST') {
+    // like GitHub: base_tree has to be a tree, never a commit
+    if (bodyObj.base_tree && !repo.trees.has(bodyObj.base_tree)) return apiResponse({ message: 'base_tree is not a tree' }, 422);
     const sha = crypto.randomBytes(20).toString('hex');
     repo.trees.set(sha, bodyObj);
     return apiResponse({ sha });
@@ -123,6 +132,7 @@ const dom = new JSDOM(html, {
   beforeParse(win) {
     // IndexedDB, in memory (jsdom has none)
     const db = new Map();
+    win.__idb = db;                      // tests look inside, to make sure nothing secret is stored
     win.indexedDB = {
       open() {
         const rq = { result: null, onsuccess: null, onerror: null, onupgradeneeded: null };
@@ -399,13 +409,60 @@ async function until(fn, ms = 3000) {
   try { await nb.ui.decryptText(cipher, 'pass-9999'); } catch (e) { wrongFailed = true; }
   ok('a wrong password fails', wrongFailed);
   nb.ui.write('ایده ها/راز.md', 'متن خصوصی من\n');
+  nb.ui.state().pass = 'pass-1234';        // a note turns secret only once the passphrase is known
   nb.ui.encrypt('ایده ها/راز.md');
-  nb.ui.state().pass = 'pass-1234';
   const beforeSecret = repo.apiCommits;
   await nb.ui.push({ loud: false });
   const pushed = repo.files.get('ایده ها/راز.md');
   ok('what lands in the repository is ciphertext', pushed && pushed.text.startsWith('---\nmizkar-enc:') && !pushed.text.includes('متن خصوصی من'), pushed && pushed.text.slice(0, 40));
   ok('the push went through', repo.apiCommits === beforeSecret + 1);
+
+  console.log('\n— a secret note never rests in plaintext on this device —');
+  const allStored = () => {
+    const parts = [];
+    for (const [, m] of win.__idb) for (const [, v] of m) parts.push(JSON.stringify(v));
+    for (let i = 0; i < win.localStorage.length; i++) parts.push(win.localStorage.getItem(win.localStorage.key(i)));
+    return parts.join('\n');
+  };
+  nb.ui.open('ایده ها/راز.md');
+  await sleep(50);
+  ok('the open secret note shows its text', win.document.getElementById('input').value.includes('متن خصوصی من'));
+  win.document.getElementById('input').value = 'متن خصوصی من\nیک خط تازهٔ محرمانه\n';
+  win.document.getElementById('input').dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(1700);                                 // the typing save
+  win.dispatchEvent(new win.Event('pagehide'));       // the app saves its state and remembers the text here
+  await sleep(50);
+  const savedTabs = JSON.parse(win.localStorage.getItem('fs2-state') || '{}').tabs || [];
+  ok('its tab is saved as secret, without text', savedTabs.some((t) => t.nb === 'ایده ها/راز.md' && t.secret && !t.text), savedTabs.map((t) => [t.nb, t.secret, (t.text || '').length]));
+  ok('IndexedDB and browser storage hold no plaintext of it', !/متن خصوصی من|خط تازهٔ محرمانه/.test(allStored()));
+  ok('the unsent text is kept, encrypted', /localCipher/.test(allStored()));
+  doc.querySelector('#tabsList .tab[aria-selected="true"] [data-tab-close]').click();
+  await sleep(50);
+  ok('closing it does not put it in recent texts', !/خط تازهٔ محرمانه/.test(allStored()));
+  await nb.ui.push({ loud: false });
+  const secretUp = repo.files.get('ایده ها/راز.md').text;
+  ok('the new line went up encrypted', secretUp.startsWith('---\nmizkar-enc:') && !/محرمانه/.test(secretUp));
+  ok('new ciphertext uses 600 000 rounds', /kdf: PBKDF2-600000/.test(secretUp));
+  eq('and it opens with the passphrase', await nb.ui.decryptText(secretUp, 'pass-1234'), 'متن خصوصی من\nیک خط تازهٔ محرمانه\n');
+  ok('old ciphertext (150 000 rounds) still opens', (await nb.ui.decryptText(cipher, 'pass-1234')) === '# راز\nمتن خصوصی\n');
+
+  console.log('\n— someone else edits the secret note —');
+  nb.ui.open('ایده ها/راز.md');
+  await sleep(50);
+  putRemote('ایده ها/راز.md', await nb.ui.encryptText('متن خصوصی من\nیک خط تازهٔ محرمانه\nخط از دستگاه دیگر\n', 'pass-1234'));
+  repo.commits.push({ sha: crypto.randomBytes(20).toString('hex'), message: 'other device', parents: [] });
+  await nb.ui.pull({ quiet: true });
+  ok('an unchanged local copy takes their edit', win.document.getElementById('input').value.includes('خط از دستگاه دیگر'), win.document.getElementById('input').value);
+  win.document.getElementById('input').value = 'سرخط من\n' + win.document.getElementById('input').value;
+  win.document.getElementById('input').dispatchEvent(new win.Event('input', { bubbles: true }));
+  putRemote('ایده ها/راز.md', await nb.ui.encryptText('متن خصوصی من\nیک خط تازهٔ محرمانه\nخط از دستگاه دیگر\nو یک خط دیگر از آن‌جا\n', 'pass-1234'));
+  repo.commits.push({ sha: crypto.randomBytes(20).toString('hex'), message: 'other device again', parents: [] });
+  await nb.ui.pull({ quiet: true });
+  const mergedSecret = win.document.getElementById('input').value;
+  ok('both sides changed: merged plain to plain', /^سرخط من\n/.test(mergedSecret) && mergedSecret.includes('و یک خط دیگر از آن‌جا') && !/mizkar-enc/.test(mergedSecret), mergedSecret);
+  ok('no conflict was needed', nb.ui.state().conflicts.length === 0);
+  await nb.ui.push({ loud: false });
+  ok('the merge went up encrypted', (await nb.ui.decryptText(repo.files.get('ایده ها/راز.md').text, 'pass-1234')) === mergedSecret);
 
   console.log('\n— attachments —');
   const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');

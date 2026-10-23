@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const HTML = process.env.MIZKAR_HTML || '/root/workspace/mizkar/index.html';
+const HTML = process.env.MIZKAR_HTML || require('path').join(__dirname, '..', 'index.html');
 const html = fs.readFileSync(HTML, 'utf8');
 const m = html.match(/\/\* NB:PURE:START \*\/([\s\S]*)\/\* NB:PURE:END \*\//);
 if (!m) { console.error('FAIL: NB:PURE markers not found'); process.exit(1); }

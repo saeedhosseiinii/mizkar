@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build /root/workspace/mizkar/index.html from the pristine app plus the notebook module.
+Build index.html (repository root) from the pristine app plus the notebook module.
 
 The repository keeps one built file (index.html); this script is how it is assembled, so the
 notebook sources (nb.js / nb.css / nb.markup.html) stay readable and the app code stays untouched
@@ -93,6 +93,24 @@ PATCHES = [
         "  });\n",
         "wikilinks in the preview",
     ),
+    # a secret note never reaches browser storage or recent texts in plaintext
+    (
+        "      localStorage.setItem('fs2-state', JSON.stringify({\n        text: ta.value,",
+        "      localStorage.setItem('fs2-state', JSON.stringify({\n        text: currentTab() && currentTab().secret ? '' : ta.value,",
+        "saveState: no secret text",
+    ),
+    (
+        "localStorage.setItem('fs2-state', JSON.stringify({ text: ta.value, fmt: state.fmt,",
+        "localStorage.setItem('fs2-state', JSON.stringify({ text: currentTab() && currentTab().secret ? '' : ta.value, fmt: state.fmt,",
+        "saveState fallback: no secret text",
+    ),
+    (
+        "  function remember(text, fmt, kind, tab){\n    if (!text || !text.trim() || text.length > HISTORY_ITEM_MAX) return;",
+        "  function remember(text, fmt, kind, tab){\n    if (!text || !text.trim() || text.length > HISTORY_ITEM_MAX) return;\n"
+        "    var curTab = currentTab();\n"
+        "    if ((tab && tab.secret) || (curTab && curTab.secret && text === ta.value) || tabs.some(function(x){ return x.secret && x.text === text; })) return;",
+        "recent texts: no secret text",
+    ),
     # every tab switch has to fix up secret notes and read-only ones
     (
         "    body.classList.remove('drawer-open');\n    ta.scrollTop = 0;\n    out.scrollTop = 0;\n    setFormat(t.fmt || 'auto');\n    saveState();\n  }",
@@ -112,22 +130,22 @@ PATCHES = [
     ),
     (
         "text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt }; }),",
-        "text: t.id === activeTab ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt, nb: t.nb || undefined }; }),",
+        "text: t.id === activeTab || t.secret ? '' : t.text, fmt: t.id === activeTab ? state.fmt : t.fmt, nb: t.nb || undefined, secret: t.secret || undefined }; }),",
         "saveState nb",
     ),
     (
         "var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.text, fmt: t.fmt }; }) };",
-        "var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.text, fmt: t.fmt, nb: t.nb || undefined }; }) };",
+        "var full = { activeTab: activeTab, at: Date.now(), tabs: tabs.map(function(t){ return { id: t.id, name: t.name || undefined, pinned: t.pinned || undefined, text: t.secret ? '' : t.text, fmt: t.fmt, nb: t.nb || undefined, secret: t.secret || undefined }; }) };",
         "saveState nb (idb fallback)",
     ),
     (
         "return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] };",
-        "return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: typeof t.nb === 'string' ? t.nb : undefined, undo: [], redo: [] };",
+        "return { id: t.id, name: typeof t.name === 'string' ? t.name.slice(0, TAB_NAME_MAX) : '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: typeof t.nb === 'string' ? t.nb : undefined, secret: !!t.secret, undo: [], redo: [] };",
         "restore nb (localStorage)",
     ),
     (
         "tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', undo: [], redo: [] }; });",
-        "tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: t.nb || undefined, undo: [], redo: [] }; });",
+        "tabs = full.tabs.filter(function(t){ return t && t.id && typeof t.text === 'string'; }).map(function(t){ return { id: t.id, name: t.name || '', pinned: !!t.pinned, text: t.text, fmt: t.fmt || 'auto', nb: t.nb || undefined, secret: !!t.secret, undo: [], redo: [] }; });",
         "restore nb (IndexedDB)",
     ),
 ]
