@@ -1151,6 +1151,21 @@ function nbCommitMessage(list){
     if (state === 'locked') return 'قفل';
     return 'دفترچه';
   }
+  /** An empty state that offers the one thing worth doing next. */
+  function nbEmptyAct(kind){
+    if (kind === 'new') nbNewDialog(null, '');
+    else if (kind === 'settings') nbOpenSettings();
+    else if (kind === 'notes'){ NB.section = 'notes'; NB.query = ''; NB.colFilter = ''; NB.tagFilter = ''; nbRender(); }
+    else if (kind === 'clear-filters'){ NB.query = ''; NB.colFilter = ''; NB.tagFilter = ''; NB.focusSearch = true; nbRender(); }
+    else if (kind === 'today'){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); }
+    else if (kind === 'new-collection') nbCollectionDialog(-1, '');
+    else if (kind === 'trash-empty') nbEmptyTrash();
+  }
+  function nbEmptyBox(text, btn, kind, icon2){
+    return '<div class="nb-empty nb-empty-box" data-nb-ui><span>' + escapeHtml(text) + '</span>'
+      + (btn ? '<button type="button" class="btn-soft sm nb-empty-act" data-nb-empty="' + escapeHtml(kind) + '">' + icon(icon2 || 'plus') + escapeHtml(btn) + '</button>' : '')
+      + '</div>';
+  }
   function nbStatus(){
     var el = $('nbSync');
     if (!el) return;
@@ -1280,9 +1295,11 @@ function nbCommitMessage(list){
         + '<button type="button" class="btn-soft sm" data-nb-act="quick" title="ثبت سریع (یک متن کوتاه، بی عنوان)">' + icon('pen') + 'ثبت سریع</button>'
         + '</div>';
       var tree = nbTree(), hasTree = Object.keys(tree.folders).length || tree.notes.length;
-      html += hasTree ? nbTreeHtml(tree, 0, '', active)
-        : '<div class="nb-empty">دفترچه خالی است.<br>«یادداشت جدید» را بزن یا از تنظیمات دفترچه، مخزن گیت هاب را وصل کن'
-          + (C && C.repo ? ' و «گرفتن» را بزن تا یادداشت های مخزن بیایند.' : '.') + '</div>';
+      if (!noteCount){
+        html += nbEmptyBox('دفترچه خالی است.', C.repo ? 'یادداشت تازه' : 'وصل کردن مخزن گیت هاب', C.repo ? 'new' : 'settings', C.repo ? 'plus' : 'cloud');
+        if (C && C.repo) html += '<p class="nb-hint">«گرفتن» را بزن تا یادداشت های مخزن بیایند.</p>';
+      }
+      if (hasTree) html += nbTreeHtml(tree, 0, '', active);
       if (active) html += nbBacklinksHtml(active);
     } else if (NB.section === 'temps'){
       html += nbTempsHtml();
@@ -1304,7 +1321,7 @@ function nbCommitMessage(list){
       var tags = nbTagCounts();
       html += tags.length ? '<div class="nb-tags">' + tags.map(function(x){
         return '<button type="button" class="nb-chip' + (NB.tagFilter === x.tag ? ' on' : '') + '" data-nb-tag="' + escapeHtml(x.tag) + '">#' + escapeHtml(x.tag) + '<b>' + faNum(x.n) + '</b></button>';
-      }).join('') + '</div>' : '<div class="nb-empty">برچسبی پیدا نشد.<br>برچسب ها از فرادادهٔ یادداشت و از #برچسب داخل متن خوانده می شوند.</div>';
+      }).join('') + '</div>' : nbEmptyBox('برچسبی پیدا نشد. برچسب ها از فرادادهٔ یادداشت و از #برچسب داخل متن خوانده می شوند.', 'پوشه ها و یادداشت ها', 'notes', 'tree');
     } else {
       html += NB.conflicts.map(function(c, i){
         if (c.locked) return '<div class="nb-conflict-row"><b dir="auto">' + escapeHtml(nbTitle(c.path)) + '</b><small dir="auto">' + escapeHtml(c.path) + '</small>'
@@ -1388,6 +1405,8 @@ function nbCommitMessage(list){
       if (res){ nbResolve(NB.conflicts[+res.dataset.nbCi], res.dataset.nbResolve); return; }
       var note = e.target.closest('[data-nb-note]');
       if (note){ nbOpen(note.dataset.nbNote); return; }
+      var empty = e.target.closest('[data-nb-empty]');
+      if (empty){ nbEmptyAct(empty.dataset.nbEmpty); return; }
       var temp = e.target.closest('[data-nb-temp]');
       if (temp){ switchTab(temp.dataset.nbTemp); nbRender(); return; }
       var hs = e.target.closest('[data-nb-hist-save]');
@@ -2145,6 +2164,10 @@ function nbCommitMessage(list){
   ACTIONS['nb-settings'] = { label: 'تنظیمات دفترچه (مخزن، توکن، مجموعه ها)', icon: 'cloud', kw: 'notebook settings repo token git', run: nbOpenSettings };
   ACTIONS['nb-close'] = { label: 'بستن', icon: 'x', hidden: true, run: nbCloseSettings };
   ACTIONS['nb-new'] = { label: 'یادداشت تازه در دفترچه', icon: 'plus', kw: 'notebook new note daily', run: function(){ if (!NB.open) nbSidebar(true); nbSectionNotes(); nbNewDialog(); } };
+  ACTIONS['nb-search'] = { label: 'جستجو در یادداشت ها', icon: 'search', kbd: 'Alt Shift F', kw: 'notebook search find notes', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } };
+  ACTIONS['nb-cal'] = { label: 'تقویم دفترچه', icon: 'clock', kbd: 'Alt Shift C', kw: 'notebook calendar jalali month', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } };
+  ACTIONS['nb-tasks'] = { label: 'کارهای دفترچه', icon: 'check', kbd: 'Alt Shift T', kw: 'notebook tasks todos', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } };
+  ACTIONS['nb-keys'] = { label: 'کلیدهای میانبر', icon: 'keyboard', kw: 'keyboard shortcuts keys map', run: function(){ nbKeysDialog(); } };
   ACTIONS['nb-today'] = { label: 'یادداشت امروز (روزانه)', icon: 'clock', kw: 'notebook today daily journal', run: function(){
     var col = C.collections.filter(function(c){ return c.calendar === 'day'; })[0] || C.collections[0];
     var made = nbNewNote(col, new Date(), '');
@@ -2232,8 +2255,9 @@ function nbCommitMessage(list){
   }
   function nbSearchHtml(){
     if (!NB.query && !NB.colFilter && !NB.tagFilter) return '<div class="nb-empty">چیزی بنویس تا در متن همهٔ یادداشت ها بگردم.<br>ی «ی» و ک «ک» و نیم فاصله هم در نظر گرفته می شوند.</div>';
+    // (the empty result below offers clearing the filters)
     var res = nbSearchResults();
-    if (!res.length) return '<div class="nb-empty">چیزی پیدا نشد</div>';
+    if (!res.length) return nbEmptyBox('چیزی پیدا نشد.', 'پاک کردن فیلترها', 'clear-filters', 'x');
     return '<div class="nb-hint">' + faNum(res.length) + ' یادداشت</div>' + res.map(function(n){
       return '<div class="nb-row nb-note-row nb-res-row" data-nb-note="' + escapeHtml(n.path) + '" tabindex="0">'
         + icon('file') + '<span class="nb-res-main"><b dir="auto">' + escapeHtml(n.title) + '</b>'
@@ -2436,6 +2460,7 @@ function nbCommitMessage(list){
     return C.collections.filter(function(c){ return c.calendar && (!NB.calFilter || NB.calFilter === c.id); });
   }
   function nbCalHtml(){
+    if (!nbCalFiltered().length) return '<div class="nb-cal-sec">' + nbEmptyBox('هنوز مجموعه ای با تقویم نداری.', 'مجموعهٔ تازه…', 'new-collection', 'folder') + '</div>';
     if (!NB.calMonth){
       var t = nbCtx(new Date(), '', C.weekStart);
       NB.calMonth = { jy: +t.jy, jm: +t.jm };
@@ -3748,6 +3773,58 @@ function nbCommitMessage(list){
     document.addEventListener('touchend', end, { passive: true });
     document.addEventListener('touchcancel', end, { passive: true });
   })();
+
+  /* ================= نقشهٔ کلیدها ================= */
+  var NB_KEYS = [
+    { label: 'یادداشت تازه', kbd: 'Alt Shift N', run: function(){ nbNewDialog(null, ''); } },
+    { label: 'ثبت سریع (متن از هر جا)', kbd: 'Alt Shift I', run: function(){ nbQuickInbox(); } },
+    { label: 'یادداشت امروز', kbd: 'Alt Shift D', run: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
+    { label: 'جستجو در یادداشت ها', kbd: 'Alt Shift F', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } },
+    { label: 'تقویم', kbd: 'Alt Shift C', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } },
+    { label: 'کارها', kbd: 'Alt Shift T', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } },
+    { label: 'نوار کناری', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
+    { label: 'ویرایش / خواندن', kbd: 'Alt 2 یا Alt 3', run: function(){ setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview'); saveState(); } },
+    { label: 'ارسال به مخزن (در تب یادداشت)', kbd: 'Ctrl S', run: function(){ nbPush({ loud: true }); } },
+    { label: 'گرفتن از مخزن', kbd: 'Ctrl Alt R', run: function(){ nbPull({ loud: true }); } }
+  ];
+  function nbKeysRows(q){
+    var norm = nbNorm(q || '');
+    var mine = NB_KEYS.filter(function(k){ return !norm || nbNorm(k.label + ' ' + k.kbd).indexOf(norm) !== -1; });
+    var app = Object.keys(ACTIONS).filter(function(k){
+      var a = ACTIONS[k];
+      if (!a || !a.kbd || a.hidden) return false;
+      return !norm || nbNorm(a.label + ' ' + a.kbd).indexOf(norm) !== -1;
+    }).map(function(k){ return { label: ACTIONS[k].label, kbd: ACTIONS[k].kbd, run: function(){ runAction(k); } }; });
+    function rows(list){ return list.map(function(x){
+      return '<div class="nb-key-row"><span dir="auto">' + escapeHtml(x.label) + '</span><kbd dir="ltr">' + escapeHtml(x.kbd) + '</kbd></div>';
+    }).join(''); }
+    return '<h5 class="nb-key-h">دفترچه</h5>' + rows(mine)
+      + '<h5 class="nb-key-h">برنامه</h5>' + (app.length ? rows(app) : '<div class="nb-empty">چیزی پیدا نشد.</div>');
+  }
+  function nbKeysDialog(){
+    nbModalBox('کلیدهای میانبر',
+      '<input class="nb-input" id="nbKeysQ" type="search" dir="auto" placeholder="جستجوی کلید…">'
+      + '<div class="nb-keys" id="nbKeysList">' + nbKeysRows('') + '</div>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'keyboard');
+    $('nbKeysQ').addEventListener('input', function(){ $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
+  }
+  addEventListener('keydown', function(e){
+    var k = (e.key || '').toLowerCase();
+    if (k === '?' && !e.ctrlKey && !e.altKey && !e.metaKey){
+      var t = e.target;
+      if (t && t.closest && t.closest('textarea, input, [contenteditable]')) return;
+      e.preventDefault();
+      nbKeysDialog();
+      return;
+    }
+    if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
+    var hit = NB_KEYS.filter(function(x){
+      var m = /^Alt Shift ([A-Z])$/.exec(x.kbd);
+      return m && m[1].toLowerCase() === k;
+    })[0];
+    if (hit){ e.preventDefault(); e.stopPropagation(); hit.run(); return; }
+    if (k === 'r'){ e.preventDefault(); e.stopPropagation(); nbPull({ loud: true }); }
+  });
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;

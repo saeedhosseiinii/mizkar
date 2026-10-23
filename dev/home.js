@@ -66,7 +66,7 @@
     var tasks = homeTasks(), g = homeGroups(tasks), done = tasks.filter(function(t){ return t.done; }).length;
     var html = homeTaskSection('عقب افتاده', g.late, 50) + homeTaskSection('امروز', g.today, 50) + homeTaskSection('هفت روز آینده', g.week, 50)
       + homeTaskSection('بعدا', g.later, 50) + homeTaskSection('بدون تاریخ', g.none, 80);
-    return (html || '<div class="nb-empty">کار بازی نیست.<br>هر خط «- [ ] …» در یادداشت ها یک کار است؛ تاریخ سررسید را با «📅 1405-08-05» کنارش بنویس.</div>')
+    return (html || nbEmptyBox('کار بازی نیست. هر خط «- [ ] …» در یادداشت ها یک کار است؛ تاریخ سررسید را با «📅 1405-08-05» کنارش بنویس.', 'یادداشت امروز', 'today', 'clock'))
       + (done ? '<div class="nb-hint">' + faNum(done) + ' کار انجام شده</div>' : '');
   }
   function homeOpenNotes(){
