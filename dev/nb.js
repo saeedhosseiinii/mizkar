@@ -4359,7 +4359,10 @@ function nbCommitMessage(list){
       }, { passive: true });
     });
   })();
-  // pull down on the notes list (or «امروز») to pull from the repository
+  /* pull down on the notes list (or «امروز») to pull from the repository.
+     140px: a pull that long is one somebody means — a 70px flick was firing the sync by accident, and the hint
+     only says «رها کن» once the finger is really there. The bar under the hint fills up on the way. */
+  var NB_PULL = { arm: 16, ready: 140 };
   (function(){
     var y0 = 0, on = false, box = null;
     function start(e){
@@ -4375,17 +4378,18 @@ function nbCommitMessage(list){
       if (!on) return;
       var dy = e.touches[0].clientY - y0;
       if (dy < 0){ on = false; return; }
-      if (dy > 8){
-        var hint = $('nbPullHint');
-        if (!hint){
-          hint = document.createElement('div');
-          hint.id = 'nbPullHint';
-          hint.className = 'nb-pull-hint';
-          (box && box.id === 'nbList' ? box.parentNode : document.body).appendChild(hint);
-        }
-        hint.textContent = dy > 70 ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین';
-        hint.classList.toggle('ready', dy > 70);
+      if (dy < NB_PULL.arm) return;
+      var hint = $('nbPullHint');
+      if (!hint){
+        hint = document.createElement('div');
+        hint.id = 'nbPullHint';
+        hint.className = 'nb-pull-hint';
+        (box && box.id === 'nbList' ? box.parentNode : document.body).appendChild(hint);
       }
+      var enough = dy >= NB_PULL.ready;
+      hint.textContent = enough ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین';
+      hint.classList.toggle('ready', enough);
+      hint.style.setProperty('--nb-pull', String(Math.min(1, dy / NB_PULL.ready)));
     }
     function end(e){
       if (!on) return;
@@ -4393,12 +4397,13 @@ function nbCommitMessage(list){
       var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
       var hint = $('nbPullHint');
       if (hint) hint.remove();
-      if (dy > 70) nbPull({ loud: true });
+      if (dy >= NB_PULL.ready) nbPull({ loud: true });
     }
     document.addEventListener('touchstart', start, { passive: true });
     document.addEventListener('touchmove', move, { passive: true });
     document.addEventListener('touchend', end, { passive: true });
     document.addEventListener('touchcancel', end, { passive: true });
+    NB.pull = NB_PULL;                                        // the tests read the thresholds from here
   })();
 
   /* ================= نقشهٔ کلیدها ================= */

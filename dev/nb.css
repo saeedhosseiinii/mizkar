@@ -214,7 +214,11 @@ body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]
 /* the pull-to-refresh hint */
 .nb-pull-hint{
   position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;
-  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:99px;opacity:.85;
+  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px 6px;border-radius:99px;opacity:.85;
+}
+.nb-pull-hint::after{                                  /* how far the pull has come; full = «رها کن» */
+  content:"";position:absolute;left:8px;right:8px;bottom:3px;height:2px;border-radius:2px;
+  background:currentColor;opacity:.35;transform:scaleX(var(--nb-pull,0));transform-origin:right center;transition:transform .06s linear;
 }
 .nb-pull-hint.ready{ background:var(--accent);color:#fff; }
 #nbList{ position:relative; }

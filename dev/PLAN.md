@@ -20,6 +20,8 @@ brings the notebook panel out, a pull from the left edge takes it away, and in t
 the bar (a scroll does not count); in beta2 the FAB answers a finger even when the browser gives no click, and it
 steps aside for the panel, dialogs and the palette. `dev/shell.js` (pages and edges), `dev/m3.js` (the FAB),
 `dev/m3.css` + `dev/shell.css` (when it shows), `dev/test_ui.js` (§4 and the FAB).
+Pull-to-refresh sleeps longer: 140px (`dev/nb.js` `NB_PULL`) instead of a 70px flick, with the hint's bar filling
+on the way — a flick of half that no longer syncs by accident.
 
 ## Ground rules
 
