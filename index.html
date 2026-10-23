@@ -248,12 +248,12 @@
 <aside id="nb" aria-label="دفترچه">
   <div class="nb-grip" id="nbGrip" title="کشیدن: تغییر عرض نوار"></div>
   <div class="nb-head">
+    <button class="ib sm nb-close" type="button" id="nbClose" title="بستن پنل (Ctrl+\)" aria-label="بستن پنل"><svg class="i nb-rtl-back"><use href="#i-chev"/></svg></button>
     <span class="nb-h-title"><svg class="i"><use href="#i-tree"/></svg><span id="nbHeadTitle">دفترچه</span></span>
     <div class="nb-tabs" id="nbSecs" role="tablist" aria-label="بخش ها"></div>
     <span class="nb-h-sp"></span>
     <button class="nb-head-sync" type="button" id="nbHeadSync" aria-haspopup="dialog" title="همگام سازی" aria-label="همگام سازی"><i></i><b></b></button>
     <button class="ib sm" type="button" id="nbPlus" aria-haspopup="menu" title="تازه: یادداشت، ثبت سریع، امروز، پوشه" aria-label="تازه"><svg class="i"><use href="#i-plus"/></svg></button>
-    <button class="ib sm" type="button" id="nbClose" title="بستن" aria-label="بستن"><svg class="i"><use href="#i-x"/></svg></button>
   </div>
   <div class="nb-body" id="nbBody"></div>
 </aside>
@@ -11661,6 +11661,8 @@ var NB_CSS = [
   '.ph-title[data-crumbs]{ gap:2px; min-width:0; }',
   '.nb-flash{ animation:nb-flash 1.2s ease; }',
   '@keyframes nb-flash{ 0%,60%{ background:color-mix(in srgb, var(--accent) 22%, transparent); } 100%{ background:transparent; } }',
+  '/* the panel closes from its right edge, under the top bar\'s button that opens it */',
+  '#nb .nb-head .nb-close{ order:-1; flex:none; }',
   '',
 ].join('\n');
 

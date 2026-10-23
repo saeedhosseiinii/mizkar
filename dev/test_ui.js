@@ -1404,6 +1404,7 @@ async function until(fn, ms = 3000) {
   eq('in this order from the right: ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات',
     [...near.children].map(at), ['edit', 'history', 'tools', 'palette', 'settings']);
   ok('the panel button is at the right edge of the bar, above the panel', bar.firstElementChild === doc.getElementById('btnNotebook'));
+  ok('and the panel closes from its right edge too (first in its head)', doc.querySelector('#nb .nb-head').firstElementChild === doc.getElementById('nbClose'));
   const expBox = doc.querySelector('header.bar .ui-export');
   ok('«خروجی» stands alone at the far end', !!expBox && !!expBox.querySelector('#btnExport') && bar.lastElementChild === expBox);
   ok('nothing is left in the old group', !doc.querySelector('header.bar .bar-end #btnSettings'));

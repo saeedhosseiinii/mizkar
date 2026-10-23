@@ -245,3 +245,5 @@ body.ui-calm #btnExport .bp-label{ display:none; }
 .ph-title[data-crumbs]{ gap:2px; min-width:0; }
 .nb-flash{ animation:nb-flash 1.2s ease; }
 @keyframes nb-flash{ 0%,60%{ background:color-mix(in srgb, var(--accent) 22%, transparent); } 100%{ background:transparent; } }
+/* the panel closes from its right edge, under the top bar's button that opens it */
+#nb .nb-head .nb-close{ order:-1; flex:none; }
