@@ -4359,45 +4359,62 @@ function nbCommitMessage(list){
       }, { passive: true });
     });
   })();
-  /* pull down on the notes list (or «امروز») to pull from the repository.
-     140px: a pull that long is one somebody means — a 70px flick was firing the sync by accident, and the hint
-     only says «رها کن» once the finger is really there. The bar under the hint fills up on the way. */
-  var NB_PULL = { arm: 16, ready: 140 };
+  /* pull down on the notes list (or the page) to pull from the repository — but only while what is under the
+     finger is really at its top: scrolling a long note back up must never end in a sync. 200px, and the bar
+     under the hint fills on the way. */
+  var NB_PULL = { arm: 24, ready: 200 };
   (function(){
-    var y0 = 0, on = false, box = null;
+    var y0 = 0, on = false, holder = null, scroller = null;
+    /** The box that really scrolls under a finger: a pane scrolls in its own .preview, not in the wrapper. */
+    function scrollBoxOf(el){
+      for (var p = el; p && p !== document.documentElement; p = p.parentElement){
+        if (p.clientHeight > 40 && p.scrollHeight - p.clientHeight > 4) return p;
+      }
+      return document.scrollingElement || document.documentElement;
+    }
+    /** Still at the very top, so a downward finger is a pull and not a scroll? */
+    function atTop(){
+      if (scroller && scroller.scrollTop > 2) return false;
+      var win = document.scrollingElement || document.documentElement;
+      return !win || win.scrollTop <= 2;
+    }
+    function show(said, ready, part){
+      var h = $('nbPullHint');
+      if (!h){
+        h = document.createElement('div');
+        h.id = 'nbPullHint';
+        h.className = 'nb-pull-hint';
+        (holder && holder.id === 'nbList' ? holder.parentNode : document.body).appendChild(h);
+      }
+      h.textContent = said;
+      h.classList.toggle('ready', ready);
+      h.style.setProperty('--nb-pull', String(part));
+    }
+    function drop(){ var h = $('nbPullHint'); if (h) h.remove(); }
     function start(e){
+      on = false;
       if (!C || !C.repo) return;
-      var list = e.target.closest('#nbList, #zoomWrap');
+      var list = e.target.closest('#nbList, #zoomWrap, .preview');
       if (!list || e.touches.length !== 1) return;
-      var scroller = list.id === 'nbList' ? list : (list.scrollTop != null ? list : null);
-      var top = list.id === 'nbList' ? list.scrollTop : (list.scrollTop || 0);
-      if (top > 2) return;
-      box = list; y0 = e.touches[0].clientY; on = true;
+      holder = list; scroller = scrollBoxOf(e.target);
+      if (!atTop()){ scroller = null; return; }
+      y0 = e.touches[0].clientY; on = true;
     }
     function move(e){
       if (!on) return;
       var dy = e.touches[0].clientY - y0;
-      if (dy < 0){ on = false; return; }
+      if (dy < 0 || !atTop()){ on = false; drop(); return; }        // it scrolled after all: not a pull
       if (dy < NB_PULL.arm) return;
-      var hint = $('nbPullHint');
-      if (!hint){
-        hint = document.createElement('div');
-        hint.id = 'nbPullHint';
-        hint.className = 'nb-pull-hint';
-        (box && box.id === 'nbList' ? box.parentNode : document.body).appendChild(hint);
-      }
       var enough = dy >= NB_PULL.ready;
-      hint.textContent = enough ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین';
-      hint.classList.toggle('ready', enough);
-      hint.style.setProperty('--nb-pull', String(Math.min(1, dy / NB_PULL.ready)));
+      show(enough ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین', enough, Math.min(1, dy / NB_PULL.ready));
     }
     function end(e){
       if (!on) return;
       on = false;
       var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
-      var hint = $('nbPullHint');
-      if (hint) hint.remove();
-      if (dy >= NB_PULL.ready) nbPull({ loud: true });
+      var pulled = dy >= NB_PULL.ready && atTop();
+      drop();
+      if (pulled) nbPull({ loud: true });
     }
     document.addEventListener('touchstart', start, { passive: true });
     document.addEventListener('touchmove', move, { passive: true });

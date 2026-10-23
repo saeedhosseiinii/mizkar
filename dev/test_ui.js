@@ -1050,6 +1050,8 @@ async function until(fn, ms = 3000) {
     const css = doc.getElementById('appStyle').textContent;
     return /100dvh/.test(css) && /safe-area-inset-bottom/.test(css) && /#nbNav\b/.test(css) && /overscroll-behavior:contain/.test(css);
   })());
+  ok('the Markdown toolbar has all its buttons', doc.querySelectorAll('.mdbar .mdb').length >= 13, doc.querySelectorAll('.mdbar .mdb').length);
+  ok('and on a phone it wraps instead of hiding buttons behind a scroll', /\.pane\.editor \.mdbar\{[^}]*flex-wrap:wrap/.test(doc.getElementById('appStyle').textContent));
   console.log('\n— a sideways finger turns the phone\'s pages —');
   const wideW0 = win.innerWidth;
   Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true, writable: true });
@@ -1114,10 +1116,11 @@ async function until(fn, ms = 3000) {
   doc.getElementById('nbMenu').hidden = true;
   console.log('\n— the pull from the top asks for more —');
   ok('the notebook is connected for the pull', !!nb.ui.cfg().repo, nb.ui.cfg().repo);
-  eq('the pull wants 140px, not 70', [nb.ui.state().pull.arm, nb.ui.state().pull.ready], [16, 140]);
+  eq('the pull wants 200px now', [nb.ui.state().pull.arm, nb.ui.state().pull.ready], [24, 200]);
   const pullAt = async (dy) => {
     const box = doc.getElementById('zoomWrap');
     box.dispatchEvent(tev('touchstart', 200, 200));
+    if (dy === 'noMove'){ await sleep(20); return { shown: !!doc.getElementById('nbPullHint') }; }
     box.dispatchEvent(tev('touchmove', 200, 200 + Math.round(dy / 2)));
     box.dispatchEvent(tev('touchmove', 200, 200 + dy));
     const hint = doc.getElementById('nbPullHint');
@@ -1126,16 +1129,36 @@ async function until(fn, ms = 3000) {
     const filled = hint ? hint.style.getPropertyValue('--nb-pull') : '';
     box.dispatchEvent(tev('touchend', 200, 200 + dy));
     await sleep(80);
-    return { said, ready, filled, gone: !doc.getElementById('nbPullHint') };
+    return { said, shown: !!said, ready, filled, gone: !doc.getElementById('nbPullHint') };
   };
   const reqBefore = repo.req.length;
-  const short = await pullAt(70);
+  const short = await pullAt(120);
   await sleep(80);
-  ok('70px shows the hint, but it is not «رها کن» yet', !short.ready && /بکش پایین/.test(short.said) && short.gone, short);
+  ok('120px shows the hint, but it is not «رها کن» yet', !short.ready && /بکش پایین/.test(short.said) && short.gone, short);
   eq('and nothing is asked of the repository', repo.req.length, reqBefore);
-  const long = await pullAt(150);
-  ok('150px says «رها کن تا تازه شود» and fills the bar', long.ready && long.filled === '1', long);
+  const long = await pullAt(260);
+  ok('260px says «رها کن تا تازه شود» and fills the bar', long.ready && long.filled === '1', long);
   ok('and the repository is asked for the changes', repo.req.length > reqBefore, repo.req.length - reqBefore);
+  // a long note scrolled back up: the same finger motion must not sync
+  const scrollProbeEl = doc.getElementById('nbList');
+  const meta = (k, v) => Object.defineProperty(scrollProbeEl, k, { value: v, configurable: true, writable: true });
+  meta('clientHeight', 200); meta('scrollHeight', 900); meta('scrollTop', 40);
+  const reqScrolled = repo.req.length;
+  const rowScrolled = doc.querySelector('#nbList [data-nb-note]') || doc.getElementById('nbList');
+  rowScrolled.dispatchEvent(tev('touchstart', 200, 200));
+  rowScrolled.dispatchEvent(tev('touchmove', 200, 460));
+  const hintedWhileScrolled = !!doc.getElementById('nbPullHint');
+  rowScrolled.dispatchEvent(tev('touchend', 200, 460));
+  await sleep(120);
+  ok('a scrolled list is not a pull: no hint', !hintedWhileScrolled);
+  eq('and no sync', repo.req.length, reqScrolled);
+  meta('scrollTop', 0);
+  const reqTop = repo.req.length;
+  rowScrolled.dispatchEvent(tev('touchstart', 200, 200));
+  rowScrolled.dispatchEvent(tev('touchmove', 200, 460));
+  rowScrolled.dispatchEvent(tev('touchend', 200, 460));
+  await sleep(150);
+  ok('while the list is at its top the same drag does pull', repo.req.length > reqTop, repo.req.length - reqTop);
   Object.defineProperty(win, 'innerWidth', { value: wideW0, configurable: true, writable: true });
   win.dispatchEvent(new win.Event('resize'));
   await sleep(30);
