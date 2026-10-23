@@ -66,6 +66,8 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
   body.nb-nav-on .pane{ height:auto !important; border-radius:0; border-inline:0; box-shadow:none; }
   body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }
   .preview, #nbList, #nbBody, textarea#input{ overscroll-behavior:contain; }
+  /* no double-tap zoom over the reading area: two taps must reach the in-place editor, not zoom the page */
+  .preview, #zoomWrap, #nbList, #nbBody{ touch-action:manipulation; }
 
   /* the top bar: one row; its popovers come up from the bottom */
   body.ui-calm .bar{ flex-wrap:nowrap; overflow:hidden; gap:6px; min-height:52px; padding:6px 10px; position:relative;
@@ -243,6 +245,8 @@ body.readmode .work{ margin-right:0 !important; }
   body.nb-tabs-in-bar .bar .ui-near{ margin-inline-start:auto; flex:none; }
   body.nb-tabs-in-bar .bar .ui-export{ margin-inline-start:0; flex:none; }
 }
+/* the Markdown bar never hides a button behind a sideways scroll (its own scrollbar is invisible): it wraps */
+.mdbar{ flex-wrap:wrap; overflow-x:visible; row-gap:2px; }
 .bar .nb-toggle{ flex:none; }
 body.ui-calm #btnExport{ background:transparent; color:var(--ink-2); border:1px solid var(--border); box-shadow:none; width:40px; height:40px; border-radius:999px; padding:0; justify-content:center; }
 body.ui-calm #btnExport .chev{ display:none; }   /* with the label hidden, the caret only crowds the icon */

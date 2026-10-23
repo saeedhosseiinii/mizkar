@@ -4366,9 +4366,9 @@ function nbCommitMessage(list){
     });
   })();
   /* pull down on the notes list (or the page) to pull from the repository — but only while what is under the
-     finger is really at its top: scrolling a long note back up must never end in a sync. 200px, and the bar
-     under the hint fills on the way. */
-  var NB_PULL = { arm: 24, ready: 200 };
+     finger is really at its top: scrolling a long note back up must never end in a sync. 110px — a thumb's
+     pull — and the bar under the hint fills on the way. */
+  var NB_PULL = { arm: 24, ready: 110 };
   (function(){
     var y0 = 0, on = false, holder = null, scroller = null;
     /** The box that really scrolls under a finger: a pane scrolls in its own .preview, not in the wrapper. */

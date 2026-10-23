@@ -1052,6 +1052,7 @@ async function until(fn, ms = 3000) {
   })());
   ok('the Markdown toolbar has all its buttons', doc.querySelectorAll('.mdbar .mdb').length >= 13, doc.querySelectorAll('.mdbar .mdb').length);
   ok('and on a phone it wraps instead of hiding buttons behind a scroll', /\.pane\.editor \.mdbar\{[^}]*flex-wrap:wrap/.test(doc.getElementById('appStyle').textContent));
+  ok('the reading area has no double-tap zoom (two taps must reach the editor)', /\.preview, #zoomWrap, #nbList, #nbBody\{ touch-action:manipulation; \}/.test(doc.getElementById('appStyle').textContent));
   console.log('\n— a sideways finger turns the phone\'s pages —');
   const wideW0 = win.innerWidth;
   Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true, writable: true });
@@ -1116,7 +1117,7 @@ async function until(fn, ms = 3000) {
   doc.getElementById('nbMenu').hidden = true;
   console.log('\n— the pull from the top asks for more —');
   ok('the notebook is connected for the pull', !!nb.ui.cfg().repo, nb.ui.cfg().repo);
-  eq('the pull wants 200px now', [nb.ui.state().pull.arm, nb.ui.state().pull.ready], [24, 200]);
+  eq('the pull wants a thumb (110px), not a flick', [nb.ui.state().pull.arm, nb.ui.state().pull.ready], [24, 110]);
   const pullAt = async (dy) => {
     const box = doc.getElementById('zoomWrap');
     box.dispatchEvent(tev('touchstart', 200, 200));
@@ -1132,12 +1133,12 @@ async function until(fn, ms = 3000) {
     return { said, shown: !!said, ready, filled, gone: !doc.getElementById('nbPullHint') };
   };
   const reqBefore = repo.req.length;
-  const short = await pullAt(120);
+  const short = await pullAt(60);
   await sleep(80);
-  ok('120px shows the hint, but it is not «رها کن» yet', !short.ready && /بکش پایین/.test(short.said) && short.gone, short);
+  ok('60px shows the hint, but it is not «رها کن» yet', !short.ready && /بکش پایین/.test(short.said) && short.gone, short);
   eq('and nothing is asked of the repository', repo.req.length, reqBefore);
-  const long = await pullAt(260);
-  ok('260px says «رها کن تا تازه شود» and fills the bar', long.ready && long.filled === '1', long);
+  const long = await pullAt(170);
+  ok('170px says «رها کن تا تازه شود» and fills the bar', long.ready && long.filled === '1', long);
   ok('and the repository is asked for the changes', repo.req.length > reqBefore, repo.req.length - reqBefore);
   // a long note scrolled back up: the same finger motion must not sync
   const scrollProbeEl = doc.getElementById('nbList');
