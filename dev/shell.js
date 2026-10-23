@@ -18,6 +18,13 @@
     nbShellSync();
   }
   /** «بیشتر» on a phone: the sections without a place on the bottom bar, the new-note actions, settings. */
+  /** Everything a phone needs when it keeps opening an old copy: drop the workers and the caches, then reload. */
+  function nbHardRefresh(){
+    var cachesGone = (window.caches ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }) : Promise.resolve());
+    var workersGone = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }) : Promise.resolve());
+    var again = function(){ try{ location.reload(); }catch(e){} };
+    Promise.all([workersGone, cachesGone]).then(again, again);
+  }
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
@@ -31,6 +38,8 @@
       { label: 'یادداشت امروز', act: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
       null,
       { label: 'همگام سازی: ' + (($('nbSync') && $('nbSync').textContent) || 'دفترچه'), act: function(){ nbToggleSyncPop(null); } },
+      null,
+      { label: 'تازه سازی کامل (پاک کردن کش)', act: nbHardRefresh },
       { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
       { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } }
     ];
@@ -151,7 +160,8 @@
     }
     themeColor();
     new MutationObserver(themeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
-    window.nbMobile = { phoneItems: phoneItems, themeColor: themeColor, nav: nav };
+    window.nbMobile = {
+      hardRefresh: nbHardRefresh, phoneItems: phoneItems, themeColor: themeColor, nav: nav };
 
     function sync(){
       var size = nbSize(), t = currentTab(), path = t && t.nb ? t.nb : '';

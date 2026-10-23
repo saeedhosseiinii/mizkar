@@ -223,6 +223,26 @@ def main():
         html, n = re.subn(pattern, lambda m: new, html, count=1)
         if n != 1:
             raise SystemExit(f'regex anchor «{what}» matched {n} times, expected exactly 1')
+    # the app's own «update» button must not be answerable from an older worker's cache
+    OLD_UPDATE = """    fetch('index.html', { cache: 'no-store' }).then(function(r){
+      if (!r.ok) throw new Error(r.status);
+      return (window.caches ? caches.keys() : Promise.resolve([])).then(function(keys){
+        return Promise.all(keys.filter(function(k){ return /^mizkar-/.test(k); }).map(function(k){ return caches.open(k).then(function(c){ return c.put('index.html', r.clone()); }); }));
+      });
+    })"""
+    NEW_UPDATE = """    // ?v=… keeps an older offline worker from answering this with its own cached copy, and the fresh page goes
+    // into every cache that already holds one (the betas' caches are not named mizkar-*)
+    fetch('index.html?v=' + Date.now(), { cache: 'no-store' }).then(function(r){
+      if (!r.ok) throw new Error(r.status);
+      return (window.caches ? caches.keys() : Promise.resolve([])).then(function(keys){
+        return Promise.all(keys.map(function(k){
+          return caches.open(k).then(function(c){
+            return c.match('index.html').then(function(hit){ return hit ? c.put('index.html', r.clone()) : null; });
+          });
+        }));
+      });
+    })"""
+    PATCHES.append((OLD_UPDATE, NEW_UPDATE, 'update fetch bypasses an old worker'))
     for old, new, what in PATCHES:
         html = replace_once(html, old, new, what)
     print(f'patched the app: {len(PATCHES) + len(REGEX_PATCHES)} places')

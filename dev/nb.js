@@ -3790,16 +3790,64 @@ function nbCommitMessage(list){
     var t = currentTab();
     if (!t || !t.nb) return false;
     var sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-    if (!sel.trim()) return false;                            // nothing selected: the browser menu is fine
+    var onTask = nbCaretOnTask();
+    // nothing selected and no task under the caret: the browser's own menu (copy, paste) is the useful one
+    if (!sel.trim() && !onTask) return false;
     e.preventDefault();
-    nbMenu(e.clientX, e.clientY, [
+    var items = [];
+    if (onTask) items.push({ label: 'تاریخ سررسید…', act: nbDueAtCaret }, { label: 'بدون تاریخ', act: function(){ var at = nbCaretLine(); nbDueOnLine(null, at.from, at.to); } }, null);
+    if (sel.trim()) items.push(
       { label: 'پیوند به یادداشت…', act: function(){ nbWrapSelection(t, sel); } },
       { label: 'یادداشت تازه از انتخاب', act: function(){ nbNoteFromSelection(t, sel); } },
       { label: 'کار کن', act: function(){ nbMakeTasks(t, sel); } },
       null,
       { label: 'کپی', act: function(){ copyToClipboard('متن', sel).then(function(ok){ toast(ok ? 'کپی شد' : 'کپی نشد', 'copy'); }); } }
-    ]);
+    );
+    nbMenu(e.clientX, e.clientY, items);
     return true;
+  }
+  /** Is the line the caret sits on a task line? (the phone's long press and a right click both land here) */
+  function nbCaretOnTask(){
+    if (!ta || ta.readOnly) return false;
+    var text = ta.value, a = ta.selectionStart || 0;
+    var from = text.lastIndexOf('\n', Math.max(0, a - 1)) + 1, to = text.indexOf('\n', a);
+    return /^\s*[-*+]\s+\[[ xX]\]/.test(text.slice(from, to < 0 ? text.length : to));
+  }
+  /** «😅 📅» — the due date of the line under the caret, chosen in the Shamsi calendar. */
+  function nbDueAtCaret(){
+    var at = nbCaretLine();
+    var cur = (HOME_DUE_RE.exec(at.line) || [])[0];
+    nbDateDialog({ title: 'تاریخ سررسید', allowEmpty: true,
+      value: cur ? nbShamsiStamp(cur.replace(/^[^0-9۰-۹٠-٩]*/, '')) : '',
+      onOk: function(stamp){ nbDueOnLine(stamp, at.from, at.to); } });
+  }
+  /** Where the caret sits: the line, and its offsets in the editor. The line is kept: the caret may move while
+      the calendar is open, and the date belongs to the line that was right-clicked. */
+  function nbCaretLine(){
+    var text = ta.value, a = ta.selectionStart || 0;
+    var from = text.lastIndexOf('\n', Math.max(0, a - 1)) + 1, to = text.indexOf('\n', a);
+    if (to < 0) to = text.length;
+    return { from: from, to: to, line: text.slice(from, to) };
+  }
+  /** Writes «📅 ۱۴۰۵/۰۸/۰۸» on one line as one edit (empty stamp takes it off). */
+  function nbDueOnLine(stamp, atFrom, atTo){
+    var t = currentTab();
+    if (!t || !t.nb || ta.readOnly){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
+    var text = ta.value;
+    var from = atFrom == null ? nbCaretLine().from : atFrom;
+    var to = atTo == null ? nbCaretLine().to : atTo;
+    if (to > text.length) to = text.length;
+    var line = text.slice(from, to), m = HOME_TASK_RE.exec(line), next;
+    if (m){
+      var inner = homeStripDue(m[3]);
+      if (stamp) inner = (inner ? inner.replace(/\s+$/, '') + ' ' : '') + '📅 ' + stamp;
+      next = m[1] + '- [' + m[2] + '] ' + inner;
+    } else {
+      var plain = homeStripDue(line).replace(/\s+$/, '');
+      next = stamp ? (plain ? plain + ' 📅 ' + stamp : '📅 ' + stamp) : plain;
+    }
+    nbEditApply(text.slice(0, from) + next + text.slice(to), from, from + next.length);
+    toast(stamp ? 'سررسید: ' + nbShamsiLabel(stamp) : 'تاریخ سررسید برداشته شد', 'clock');
   }
   /** Writes the editor and lets the app sync the tab, the working copy and the preview. */
   /** Puts new text in the editor as if typed (undo, save, send). A read-only note refuses. */
@@ -3881,11 +3929,19 @@ function nbCommitMessage(list){
       var target = e.target;
       var inField = target.closest('textarea, input, [contenteditable]');
       var hasSel = !!(window.getSelection && String(window.getSelection()).trim());
-      if (inField && !hasSel) return;                    // the phone's own selection UI belongs there
+      // inside a field the phone's own selection UI belongs — except the notebook's editor, where a task
+      // line or a selection has its own menu (the inline check below decides)
+      if (inField && !hasSel && target !== ta) return;
       if (target.closest('#tabs, .mdbar, .status, #nbMenu')) return;   // those have their own long press
       var t0 = e.touches[0];
       x0 = t0.clientX; y0 = t0.clientY;
-      timer = setTimeout(function(){ timer = 0; if (typeof NBD === 'object' && NBD && NBD.on) return; nbLongPressAt(x0, y0); }, 450);
+      timer = setTimeout(function(){
+        timer = 0;
+        if (typeof NBD === 'object' && NBD && NBD.on) return;
+        // in the editor a long press is ours when it means something: a task line, or something selected
+        if (target === ta && !nbCaretOnTask() && ta.selectionEnd <= ta.selectionStart) return;
+        nbLongPressAt(x0, y0, target);
+      }, 450);
     }, { passive: true });
     document.addEventListener('touchmove', function(e){
       if (!timer) return;
@@ -4524,6 +4580,25 @@ function nbCommitMessage(list){
     cfg: function(o){ if (o){ Object.assign(C, o); nbSaveCfg(); nbSay(); } return C; },
     unlock: nbUnlock, load: nbLoad
   };
+  /* Two quick taps on the reading pane open the in-place editor. A phone browser only sends dblclick when it is
+     not still guessing whether the second tap meant a zoom; the notebook reads the two taps itself and hands the
+     app the dblclick it expects. */
+  (function(){
+    var last = 0, lx = 0, ly = 0, done = 0;
+    document.addEventListener('touchstart', function(e){
+      if (!(window.matchMedia && matchMedia('(max-width: 760px)').matches)) return;
+      if (e.touches.length !== 1) return;
+      var t = e.target;
+      if (!t || !t.closest || t.closest('a,button,input,textarea,[contenteditable],.mdbar,.status,#nbTop,#nbNav,#nbMenu,#nb,#m3Fab,[data-ui],.mdc')) return;
+      var now = Date.now(), x = e.touches[0].clientX, y = e.touches[0].clientY;
+      var twice = now - last < 360 && Math.abs(x - lx) < 28 && Math.abs(y - ly) < 28;
+      last = now; lx = x; ly = y;
+      if (!twice || now < done) return;
+      done = now + 900;
+      try { t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: x, clientY: y })); } catch(err){}
+    }, { passive: true });
+  })();
+
   window.mizkarNotebook = NB;
   // the app calls these by name (switchTab, render, the palette); this module is a closure, so they are published
   window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); nbShellSync(); };

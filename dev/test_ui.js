@@ -2039,6 +2039,32 @@ async function until(fn, ms = 3000) {
   eq('writing offers reading, with a book', [writing.lab, /i-book/.test(writing.ico)], ['خواندن', true]);
   ok('and back again', editTop.getAttribute('aria-label') === 'ویرایش' && /i-pen/.test(editTop.innerHTML));
 
+  console.log('\n— a phone stuck on an old copy has a way out —');
+  ok('the app update button cannot be answered by an old worker', /fetch\('index\.html\?v=' \+ Date\.now\(\)/.test(fs.readFileSync(HTML, 'utf8')));
+  ok('and the «بیشتر» screen offers a full refresh', typeof win.nbMobile.hardRefresh === 'function');
+
+  console.log('\n— the due date from inside the editor —');
+  nb.ui.write('پ/کارها.md', '# کارها\n\n- [ ] خرید نان\n\nیک بند ساده\n');
+  nb.ui.open('پ/کارها.md');
+  await sleep(80);
+  const dueField = doc.getElementById('input');
+  const taskAt = dueField.value.indexOf('- [ ]');
+  dueField.selectionStart = dueField.selectionEnd = taskAt + 4;
+  ok('a long press on a task line opens the menu', nb.ui.longPressAt(60, 60, dueField) === true);
+  ok('  and it offers «تاریخ سررسید…»', /تاریخ سررسید/.test(doc.getElementById('nbMenu').textContent));
+  doc.querySelectorAll('#nbMenu .mi')[0].click();
+  await sleep(90);
+  const okBtn = [].slice.call(doc.querySelectorAll('[data-nb-dp="ok"]')).pop();
+  ok('a Shamsi picker opened', !!okBtn);
+  if (okBtn) okBtn.click();
+  await sleep(120);
+  ok('the task line got «📅»', /📅 1405-08-0\d/.test(nb.ui.files()['پ/کارها.md'].text));
+  // a plain line: no menu, the browser's own copy/paste menu is better there
+  doc.getElementById('nbMenu').hidden = true;   // the earlier menu must not count as «opened»
+  const plainNow = dueField.value.indexOf('یک بند');   // the due date shifted the offsets below it
+  dueField.selectionStart = dueField.selectionEnd = plainNow + 2;
+  eq('a long press on ordinary text stays with the browser', nb.ui.longPressAt(60, 60, dueField), false);
+
   console.log('\n— the worker asks the network for the page first —');
   const swSrc = fs.readFileSync(require('path').join(require('path').dirname(HTML), 'sw.js'), 'utf8');
   ok('a navigation goes to the network (with the saved copy as the fallback, not the other way round)',
