@@ -723,6 +723,49 @@ async function until(fn, ms = 3000) {
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
 
+  console.log('\n— §4: the phone gets a bottom bar and sheets —');
+  const nav = doc.getElementById('nbNav');
+  ok('a bottom bar is there', !!nav && doc.body.classList.contains('nb-nav-on'));
+  eq('with the five places', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.dataset.nbNav), ['home', 'notes', 'search', 'cal', 'new']);
+  eq('and their names', [...nav.querySelectorAll('[data-nb-nav]')].map((b) => b.textContent.trim()), ['امروز', 'دفترچه', 'جستجو', 'تقویم', 'تازه']);
+  nb.ui.sidebar(false);
+  const tabsBeforeNav = doc.querySelectorAll('#tabsList .tab').length;
+  nav.querySelector('[data-nb-nav="home"]').click();
+  await sleep(80);
+  ok('«امروز» opens the day page', doc.querySelectorAll('#tabsList .tab').length >= tabsBeforeNav);
+  nav.querySelector('[data-nb-nav="search"]').click();
+  await sleep(60);
+  eq('«جستجو» opens the drawer on search', nb.ui.state().section, 'search');
+  eq('and the drawer with it', doc.body.classList.contains('nb-open'), true);
+  nb.ui.sidebar(false);
+  nav.querySelector('[data-nb-nav="new"]').click();
+  await sleep(40);
+  const navMenu = [...doc.querySelectorAll('#nbMenu .mi')].map((b) => b.textContent.trim());
+  ok('«تازه» offers a note, a quick capture and today', ['یادداشت جدید', 'ثبت سریع', 'یادداشت امروز'].every((s) => navMenu.some((l) => l.indexOf(s) !== -1)), navMenu);
+  doc.getElementById('nbMenu').hidden = true;
+  ok('the theme colour follows the theme for the phone bar', (() => {
+    const meta = doc.querySelector('meta[name="theme-color"]');
+    return !!meta && !!meta.getAttribute('content');
+  })(), (doc.querySelector('meta[name="theme-color"]') || {}).content);
+  ok('the desktop-only controls drop out on a phone', (() => {
+    const items = [{ label: 'بزرگ نمایی (۱۰۰%)' }, { label: 'حالت مطالعه' }];
+    const onPhone = win.nbMobile.phoneItems(items, 380), onDesk = win.nbMobile.phoneItems(items, 1440);
+    return onPhone.length === 1 && onDesk.length === 2;
+  })());
+  ok('the phone rules are in the stylesheet', (() => {
+    const css = doc.getElementById('appStyle').textContent;
+    return /100dvh/.test(css) && /safe-area-inset-bottom/.test(css) && /#nbNav\b/.test(css) && /overscroll-behavior:contain/.test(css);
+  })());
+  console.log('\n— the Back button closes the top layer —');
+  nb.ui.sidebar(true);
+  await sleep(30);
+  ok('the drawer counts as a layer', nb.ui.closeTopLayer() === true && !doc.body.classList.contains('nb-open'));
+  nb.ui.newDialog(nb.ui.cfg().collections[0].id, '');
+  await sleep(40);
+  ok('a dialog closes before anything else', nb.ui.closeTopLayer() === true && doc.getElementById('nbMini').hidden);
+  doc.getElementById('nbMenu').hidden = false;
+  ok('and a menu too', nb.ui.closeTopLayer() === true && doc.getElementById('nbMenu').hidden);
+
   console.log('\n— §7: recent texts live in the sidebar «موقت» —');
   ok('the top bar no longer shows the clock button', /body\.ui-calm \.ui-near #btnHistory[^{]*\{[^}]*display:none/.test(doc.getElementById('appStyle').textContent));
   // a couple of recent texts, one of them closed, plus an open temp tab

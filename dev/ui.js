@@ -74,7 +74,7 @@
       more.addEventListener('click', function(e){
         e.stopPropagation();
         closePops();
-        menuAt(more, [
+        menuAt(more, (typeof nbMobile === 'object' && nbMobile ? nbMobile.phoneItems : function(x){ return x; })([
           { label: 'بزرگ‌نمایی (' + $('zLvl').textContent + ')', act: act('zoom-in') },
           { label: 'کوچک‌نمایی', act: act('zoom-out') },
           { label: 'اندازهٔ اصلی', act: act('zoom-reset') },
@@ -83,7 +83,7 @@
           { label: 'حالت مطالعه', act: act('read') },
           { label: 'تمام‌صفحه', act: act('fs') },
           { label: 'ارائه (اسلاید)', act: act('present') }
-        ]);
+        ]));
       });
     }
 
@@ -173,5 +173,60 @@
         b.setAttribute('aria-pressed', String(!open && b.dataset.nbRail === sec));
       });
     };
+  })();
+  /* === §4: on a phone the app gets a bottom bar and its own kind of sheets === */
+  var nbMobile = (function(){
+    var NAV = [
+      ['home', 'clock', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
+      ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه']
+    ];
+    var nav = document.createElement('nav');
+    nav.id = 'nbNav';
+    nav.setAttribute('aria-label', 'بخش ها');
+    nav.innerHTML = NAV.map(function(x){
+      return '<button type="button" class="nb-nav-b" data-nb-nav="' + x[0] + '" aria-label="' + x[2] + '">' + icon(x[1]) + '<span>' + x[2] + '</span></button>';
+    }).join('');
+    document.body.appendChild(nav);
+    body.classList.add('nb-nav-on');
+    nav.addEventListener('click', function(e){
+      var b = e.target.closest('[data-nb-nav]');
+      if (!b) return;
+      e.stopPropagation();
+      var what = b.dataset.nbNav;
+      if (what === 'new'){
+        nbMenu(12, innerHeight - 190, [
+          { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },
+          { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
+          { label: 'یادداشت امروز', act: function(){ if (typeof ACTIONS === 'object' && ACTIONS['nb-today']) ACTIONS['nb-today'].run(); else nbNewDialog(); } }
+        ]);
+        return;
+      }
+      if (what === 'home'){ openTab(''); return; }
+      NB.section = what;
+      nbSidebar(true);
+    });
+    // the ⋯ menu on the preview header drops the desktop-only bits on a phone
+    function phoneItems(items, w){
+      if ((w || innerWidth) > 760) return items;
+      return items.filter(function(it){
+        return !/بزرگ نمایی|کوچک نمایی|اندازهٔ اصلی|حالت دست/.test(it.label);
+      });
+    }
+    // theme-color follows the theme, so the phone's own bar matches the app
+    function themeColor(){
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta){
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.appendChild(meta);
+      }
+      var bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      meta.setAttribute('content', bg || '#ffffff');
+    }
+    themeColor();
+    new MutationObserver(themeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    var api = { phoneItems: phoneItems, themeColor: themeColor, nav: nav };
+    window.nbMobile = api;
+    return api;
   })();
   /* === /UI === */

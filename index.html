@@ -11293,6 +11293,80 @@ var NB_CSS = [
   '.nb-hist-row:hover .nb-hist-btns,.nb-hist-row:focus-within .nb-hist-btns,.nb-hist-row:focus .nb-hist-btns{opacity:1;}',
   '@media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }',
   '',
+  '/* ================= §4 موبایل: حس اپ ================= */',
+  ':root{ --nb-nav-h: 0px; }',
+  '@media (max-width:760px){',
+  '  html,body{ height:100dvh; }',
+  '  .app{ height:100dvh !important; box-sizing:border-box; }',
+  '  body.nb-nav-on{ --nb-nav-h: 56px; }',
+  '  body.nb-nav-on .app{ padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); }',
+  '  .bar, .tabs{ padding-inline:calc(10px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px)); }',
+  '  #zoomWrap, #nbBody, textarea#input{ overscroll-behavior:contain; }',
+  '}',
+  '/* the bottom bar itself */',
+  '#nbNav{',
+  '  display:none;position:fixed;left:0;right:0;bottom:0;z-index:205;',
+  '  height:calc(56px + env(safe-area-inset-bottom, 0px));',
+  '  padding-bottom:env(safe-area-inset-bottom, 0px);',
+  '  background:var(--surface);border-top:1px solid var(--border);',
+  '  align-items:stretch;justify-content:space-around;gap:2px;',
+  '}',
+  '@media (max-width:760px){ body.nb-nav-on #nbNav{ display:flex; } }',
+  '.nb-nav-b{',
+  '  flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;',
+  '  border:0;background:none;color:var(--muted);font:inherit;font-size:.66rem;font-weight:600;cursor:pointer;padding:6px 2px;',
+  '}',
+  '.nb-nav-b .i{ width:22px;height:22px; }',
+  '.nb-nav-b:active,.nb-nav-b[aria-pressed="true"]{ color:var(--accent); }',
+  '#nbNav [data-nb-nav="new"]{ color:#fff; }',
+  '#nbNav [data-nb-nav="new"] .i{ background:var(--accent);border-radius:50%;padding:6px;width:34px;height:34px;box-sizing:border-box; }',
+  '/* the drawer becomes a sheet from the bottom on a phone */',
+  '@media (max-width:760px){',
+  '  #nb{',
+  '    top:auto !important;bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;',
+  '    right:0 !important;left:0 !important;width:auto !important;max-height:78dvh;height:78dvh;',
+  '    border-radius:18px 18px 0 0;border-inline-start:0;border-top:1px solid var(--border);',
+  '    box-shadow:0 -20px 50px -24px rgba(15,23,42,.5);transition:transform .22s ease,opacity .22s ease;',
+  '  }',
+  '  #nb .nb-grip{ display:none; }',
+  '  #nb .nb-head{ position:relative;padding-top:14px; }',
+  '  #nb .nb-head::before{',
+  '    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);',
+  '    width:44px;height:4px;border-radius:99px;background:var(--border-strong, #cbd5e1);opacity:.8;',
+  '  }',
+  '  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }',
+  '  #nbBody .elbtn.xs, #nbBody .ib.sm{ min-height:32px;padding-inline:10px; }',
+  '}',
+  '/* no hover on a phone: the buttons that only showed on hover are always there */',
+  '@media (max-width:760px){',
+  '  .nb-row-acts,.nb-act,.nb-note-acts{ opacity:1 !important; }',
+  '}',
+  '/* the Markdown toolbar stays above the soft keyboard */',
+  '@media (max-width:760px){',
+  '  body.ip-on #work[data-view="editor"] .pane.editor .mdbar, .pane.editor .mdbar{',
+  '    position:fixed;left:0;right:0;bottom:var(--nb-kb, 0px);z-index:6;',
+  '    background:var(--surface);border-top:1px solid var(--border);border-bottom:0;',
+  '    padding:6px calc(8px + env(safe-area-inset-left, 0px)) 6px calc(8px + env(safe-area-inset-right, 0px));',
+  '    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);transition:bottom .15s;',
+  '  }',
+  '  body.ip-on #work[data-view="editor"] textarea#input{ padding-bottom:64px; }',
+  '}',
+  '/* desktop-only controls leave the phone alone */',
+  '@media (max-width:760px){',
+  '  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],',
+  '  [data-action="present"], [data-action="fs"]{ display:none !important; }',
+  '  #outline, #outlineBtn{ display:none !important; }',
+  '  #splitBar, .split{ display:none !important; }',
+  '}',
+  'body:not(.ui-calm) #nbNav{ display:none; }',
+  '/* the pull-to-refresh hint */',
+  '.nb-pull-hint{',
+  '  position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;',
+  '  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:99px;opacity:.85;',
+  '}',
+  '.nb-pull-hint.ready{ background:var(--accent);color:#fff; }',
+  '#nbList{ position:relative; }',
+  '',
   '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
   'body.ui-calm #fmtChips{display:none;}',
   'body.ui-calm #viewSeg{display:none;}',
@@ -12588,7 +12662,9 @@ function nbCommitMessage(list){
     });
   }
   function nbSidebar(force, remember){
+    var was = NB.open;
     NB.open = force === undefined ? !NB.open : !!force;
+    if (innerWidth <= 760 && NB.open !== was && NB.open) nbLayerPushed();
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
     if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
@@ -12894,7 +12970,7 @@ function nbCommitMessage(list){
 
   /* --- small dialogs, in the app's own style --- */
   function nbModalBox(title, bodyHtml, footHtml, ico, target){
-    if (innerWidth < 760) nbSidebar(false);          // on a phone the drawer would be in the way
+    if (innerWidth < 760){ nbSidebar(false); nbLayerPushed(); }   // on a phone the drawer would be in the way
     var m = $(target || 'nbMini');
     m.hidden = false;
     m.innerHTML = '<div class="modal-box nb-mini-box" role="dialog" aria-modal="true">'
@@ -15049,6 +15125,92 @@ function nbCommitMessage(list){
     $('nbMiniOk').onclick = function(){ nbCloseMini(); nbHistOpen(idx); };
   }
 
+  /* ================= لمس: کشیدن شیت به پایین، دکمهٔ بازگشت، کشیدن برای گرفتن تازه ================= */
+  var nbHistoryDepth = 0;
+  function nbLayerPushed(){ try { history.pushState({ nbLayer: ++nbHistoryDepth }, ''); } catch(e){} }
+  function nbLayerPopped(){ if (nbHistoryDepth > 0) nbHistoryDepth--; }
+  // the top layer closes with the phone's back button instead of leaving the page
+  function nbCloseTopLayer(){
+    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu');
+    if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return true; }
+    if (mini && !mini.hidden){ nbCloseMini(); return true; }
+    if (modal && !modal.hidden){ nbCloseSettings(); return true; }
+    if (menu && !menu.hidden){ menu.hidden = true; return true; }
+    if (NB.open){ nbSidebar(false); return true; }
+    return false;
+  }
+  addEventListener('popstate', function(){ if (nbCloseTopLayer()) nbLayerPopped(); });
+  // a swipe down on the drawer closes it, like a sheet
+  (function(){
+    var y0 = 0, x0 = 0, on = false;
+    var sheet = $('nb');
+    if (!sheet) return;
+    sheet.addEventListener('touchstart', function(e){
+      if (innerWidth > 760 || !NB.open || e.touches.length !== 1) return;
+      var box = sheet.getBoundingClientRect();
+      if (e.touches[0].clientY - box.top > 96) return;      // only from the top strip of the sheet
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; on = true;
+      sheet.style.transition = 'none';
+    }, { passive: true });
+    sheet.addEventListener('touchmove', function(e){
+      if (!on) return;
+      var dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+      if (dx > 40 || dy < 0){ on = false; sheet.style.transform = ''; sheet.style.transition = ''; return; }
+      sheet.style.transform = 'translateY(' + Math.min(dy, 200) + 'px)';
+    }, { passive: true });
+    ['touchend', 'touchcancel'].forEach(function(k){
+      sheet.addEventListener(k, function(e){
+        if (!on) return;
+        on = false;
+        var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+        if (dy > 70) nbSidebar(false);
+      }, { passive: true });
+    });
+  })();
+  // pull down on the notes list (or «امروز») to pull from the repository
+  (function(){
+    var y0 = 0, on = false, box = null;
+    function start(e){
+      if (!C || !C.repo) return;
+      var list = e.target.closest('#nbList, #zoomWrap');
+      if (!list || e.touches.length !== 1) return;
+      var scroller = list.id === 'nbList' ? list : (list.scrollTop != null ? list : null);
+      var top = list.id === 'nbList' ? list.scrollTop : (list.scrollTop || 0);
+      if (top > 2) return;
+      box = list; y0 = e.touches[0].clientY; on = true;
+    }
+    function move(e){
+      if (!on) return;
+      var dy = e.touches[0].clientY - y0;
+      if (dy < 0){ on = false; return; }
+      if (dy > 8){
+        var hint = $('nbPullHint');
+        if (!hint){
+          hint = document.createElement('div');
+          hint.id = 'nbPullHint';
+          hint.className = 'nb-pull-hint';
+          (box && box.id === 'nbList' ? box.parentNode : document.body).appendChild(hint);
+        }
+        hint.textContent = dy > 70 ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین';
+        hint.classList.toggle('ready', dy > 70);
+      }
+    }
+    function end(e){
+      if (!on) return;
+      on = false;
+      var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
+      var hint = $('nbPullHint');
+      if (hint) hint.remove();
+      if (dy > 70) nbPull({ loud: true });
+    }
+    document.addEventListener('touchstart', start, { passive: true });
+    document.addEventListener('touchmove', move, { passive: true });
+    document.addEventListener('touchend', end, { passive: true });
+    document.addEventListener('touchcancel', end, { passive: true });
+  })();
+
   /* === HOME: «امروز», tasks, recent notes, notes in the palette — Mizkar === */
   var HOME_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
   /** A due date written in a task: 📅 1405-08-05 (Shamsi) or 📅 2026-10-27, also «due: …». */
@@ -15284,7 +15446,7 @@ function nbCommitMessage(list){
       more.addEventListener('click', function(e){
         e.stopPropagation();
         closePops();
-        menuAt(more, [
+        menuAt(more, (typeof nbMobile === 'object' && nbMobile ? nbMobile.phoneItems : function(x){ return x; })([
           { label: 'بزرگ‌نمایی (' + $('zLvl').textContent + ')', act: act('zoom-in') },
           { label: 'کوچک‌نمایی', act: act('zoom-out') },
           { label: 'اندازهٔ اصلی', act: act('zoom-reset') },
@@ -15293,7 +15455,7 @@ function nbCommitMessage(list){
           { label: 'حالت مطالعه', act: act('read') },
           { label: 'تمام‌صفحه', act: act('fs') },
           { label: 'ارائه (اسلاید)', act: act('present') }
-        ]);
+        ]));
       });
     }
 
@@ -15383,6 +15545,61 @@ function nbCommitMessage(list){
         b.setAttribute('aria-pressed', String(!open && b.dataset.nbRail === sec));
       });
     };
+  })();
+  /* === §4: on a phone the app gets a bottom bar and its own kind of sheets === */
+  var nbMobile = (function(){
+    var NAV = [
+      ['home', 'clock', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
+      ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه']
+    ];
+    var nav = document.createElement('nav');
+    nav.id = 'nbNav';
+    nav.setAttribute('aria-label', 'بخش ها');
+    nav.innerHTML = NAV.map(function(x){
+      return '<button type="button" class="nb-nav-b" data-nb-nav="' + x[0] + '" aria-label="' + x[2] + '">' + icon(x[1]) + '<span>' + x[2] + '</span></button>';
+    }).join('');
+    document.body.appendChild(nav);
+    body.classList.add('nb-nav-on');
+    nav.addEventListener('click', function(e){
+      var b = e.target.closest('[data-nb-nav]');
+      if (!b) return;
+      e.stopPropagation();
+      var what = b.dataset.nbNav;
+      if (what === 'new'){
+        nbMenu(12, innerHeight - 190, [
+          { label: 'یادداشت جدید', act: function(){ nbNewDialog(); } },
+          { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
+          { label: 'یادداشت امروز', act: function(){ if (typeof ACTIONS === 'object' && ACTIONS['nb-today']) ACTIONS['nb-today'].run(); else nbNewDialog(); } }
+        ]);
+        return;
+      }
+      if (what === 'home'){ openTab(''); return; }
+      NB.section = what;
+      nbSidebar(true);
+    });
+    // the ⋯ menu on the preview header drops the desktop-only bits on a phone
+    function phoneItems(items, w){
+      if ((w || innerWidth) > 760) return items;
+      return items.filter(function(it){
+        return !/بزرگ نمایی|کوچک نمایی|اندازهٔ اصلی|حالت دست/.test(it.label);
+      });
+    }
+    // theme-color follows the theme, so the phone's own bar matches the app
+    function themeColor(){
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta){
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.appendChild(meta);
+      }
+      var bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      meta.setAttribute('content', bg || '#ffffff');
+    }
+    themeColor();
+    new MutationObserver(themeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    var api = { phoneItems: phoneItems, themeColor: themeColor, nav: nav };
+    window.nbMobile = api;
+    return api;
   })();
   /* === /UI === */
 
@@ -15610,6 +15827,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, syncPop: function(){ return $('nbSyncPop'); },
+    closeTopLayer: nbCloseTopLayer, layers: function(){ return nbHistoryDepth; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,

@@ -1176,7 +1176,9 @@ function nbCommitMessage(list){
     });
   }
   function nbSidebar(force, remember){
+    var was = NB.open;
     NB.open = force === undefined ? !NB.open : !!force;
+    if (innerWidth <= 760 && NB.open !== was && NB.open) nbLayerPushed();
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
     if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
@@ -1482,7 +1484,7 @@ function nbCommitMessage(list){
 
   /* --- small dialogs, in the app's own style --- */
   function nbModalBox(title, bodyHtml, footHtml, ico, target){
-    if (innerWidth < 760) nbSidebar(false);          // on a phone the drawer would be in the way
+    if (innerWidth < 760){ nbSidebar(false); nbLayerPushed(); }   // on a phone the drawer would be in the way
     var m = $(target || 'nbMini');
     m.hidden = false;
     m.innerHTML = '<div class="modal-box nb-mini-box" role="dialog" aria-modal="true">'
@@ -3637,6 +3639,92 @@ function nbCommitMessage(list){
     $('nbMiniOk').onclick = function(){ nbCloseMini(); nbHistOpen(idx); };
   }
 
+  /* ================= لمس: کشیدن شیت به پایین، دکمهٔ بازگشت، کشیدن برای گرفتن تازه ================= */
+  var nbHistoryDepth = 0;
+  function nbLayerPushed(){ try { history.pushState({ nbLayer: ++nbHistoryDepth }, ''); } catch(e){} }
+  function nbLayerPopped(){ if (nbHistoryDepth > 0) nbHistoryDepth--; }
+  // the top layer closes with the phone's back button instead of leaving the page
+  function nbCloseTopLayer(){
+    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu');
+    if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return true; }
+    if (mini && !mini.hidden){ nbCloseMini(); return true; }
+    if (modal && !modal.hidden){ nbCloseSettings(); return true; }
+    if (menu && !menu.hidden){ menu.hidden = true; return true; }
+    if (NB.open){ nbSidebar(false); return true; }
+    return false;
+  }
+  addEventListener('popstate', function(){ if (nbCloseTopLayer()) nbLayerPopped(); });
+  // a swipe down on the drawer closes it, like a sheet
+  (function(){
+    var y0 = 0, x0 = 0, on = false;
+    var sheet = $('nb');
+    if (!sheet) return;
+    sheet.addEventListener('touchstart', function(e){
+      if (innerWidth > 760 || !NB.open || e.touches.length !== 1) return;
+      var box = sheet.getBoundingClientRect();
+      if (e.touches[0].clientY - box.top > 96) return;      // only from the top strip of the sheet
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; on = true;
+      sheet.style.transition = 'none';
+    }, { passive: true });
+    sheet.addEventListener('touchmove', function(e){
+      if (!on) return;
+      var dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+      if (dx > 40 || dy < 0){ on = false; sheet.style.transform = ''; sheet.style.transition = ''; return; }
+      sheet.style.transform = 'translateY(' + Math.min(dy, 200) + 'px)';
+    }, { passive: true });
+    ['touchend', 'touchcancel'].forEach(function(k){
+      sheet.addEventListener(k, function(e){
+        if (!on) return;
+        on = false;
+        var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+        if (dy > 70) nbSidebar(false);
+      }, { passive: true });
+    });
+  })();
+  // pull down on the notes list (or «امروز») to pull from the repository
+  (function(){
+    var y0 = 0, on = false, box = null;
+    function start(e){
+      if (!C || !C.repo) return;
+      var list = e.target.closest('#nbList, #zoomWrap');
+      if (!list || e.touches.length !== 1) return;
+      var scroller = list.id === 'nbList' ? list : (list.scrollTop != null ? list : null);
+      var top = list.id === 'nbList' ? list.scrollTop : (list.scrollTop || 0);
+      if (top > 2) return;
+      box = list; y0 = e.touches[0].clientY; on = true;
+    }
+    function move(e){
+      if (!on) return;
+      var dy = e.touches[0].clientY - y0;
+      if (dy < 0){ on = false; return; }
+      if (dy > 8){
+        var hint = $('nbPullHint');
+        if (!hint){
+          hint = document.createElement('div');
+          hint.id = 'nbPullHint';
+          hint.className = 'nb-pull-hint';
+          (box && box.id === 'nbList' ? box.parentNode : document.body).appendChild(hint);
+        }
+        hint.textContent = dy > 70 ? 'رها کن تا تازه شود' : 'برای تازه سازی بکش پایین';
+        hint.classList.toggle('ready', dy > 70);
+      }
+    }
+    function end(e){
+      if (!on) return;
+      on = false;
+      var dy = ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0) - y0;
+      var hint = $('nbPullHint');
+      if (hint) hint.remove();
+      if (dy > 70) nbPull({ loud: true });
+    }
+    document.addEventListener('touchstart', start, { passive: true });
+    document.addEventListener('touchmove', move, { passive: true });
+    document.addEventListener('touchend', end, { passive: true });
+    document.addEventListener('touchcancel', end, { passive: true });
+  })();
+
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
   nbSlot();
@@ -3665,6 +3753,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, syncPop: function(){ return $('nbSyncPop'); },
+    closeTopLayer: nbCloseTopLayer, layers: function(){ return nbHistoryDepth; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,

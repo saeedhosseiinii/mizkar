@@ -236,3 +236,77 @@ body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]
 .nb-hist-btns{display:flex;gap:3px;flex:none;opacity:0;transition:opacity .12s;}
 .nb-hist-row:hover .nb-hist-btns,.nb-hist-row:focus-within .nb-hist-btns,.nb-hist-row:focus .nb-hist-btns{opacity:1;}
 @media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }
+
+/* ================= §4 موبایل: حس اپ ================= */
+:root{ --nb-nav-h: 0px; }
+@media (max-width:760px){
+  html,body{ height:100dvh; }
+  .app{ height:100dvh !important; box-sizing:border-box; }
+  body.nb-nav-on{ --nb-nav-h: 56px; }
+  body.nb-nav-on .app{ padding-bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)); }
+  .bar, .tabs{ padding-inline:calc(10px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px)); }
+  #zoomWrap, #nbBody, textarea#input{ overscroll-behavior:contain; }
+}
+/* the bottom bar itself */
+#nbNav{
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:205;
+  height:calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+  background:var(--surface);border-top:1px solid var(--border);
+  align-items:stretch;justify-content:space-around;gap:2px;
+}
+@media (max-width:760px){ body.nb-nav-on #nbNav{ display:flex; } }
+.nb-nav-b{
+  flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  border:0;background:none;color:var(--muted);font:inherit;font-size:.66rem;font-weight:600;cursor:pointer;padding:6px 2px;
+}
+.nb-nav-b .i{ width:22px;height:22px; }
+.nb-nav-b:active,.nb-nav-b[aria-pressed="true"]{ color:var(--accent); }
+#nbNav [data-nb-nav="new"]{ color:#fff; }
+#nbNav [data-nb-nav="new"] .i{ background:var(--accent);border-radius:50%;padding:6px;width:34px;height:34px;box-sizing:border-box; }
+/* the drawer becomes a sheet from the bottom on a phone */
+@media (max-width:760px){
+  #nb{
+    top:auto !important;bottom:calc(var(--nb-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+    right:0 !important;left:0 !important;width:auto !important;max-height:78dvh;height:78dvh;
+    border-radius:18px 18px 0 0;border-inline-start:0;border-top:1px solid var(--border);
+    box-shadow:0 -20px 50px -24px rgba(15,23,42,.5);transition:transform .22s ease,opacity .22s ease;
+  }
+  #nb .nb-grip{ display:none; }
+  #nb .nb-head{ position:relative;padding-top:14px; }
+  #nb .nb-head::before{
+    content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    width:44px;height:4px;border-radius:99px;background:var(--border-strong, #cbd5e1);opacity:.8;
+  }
+  #nbBody .nb-row, #nbBody .nb-hist-row, #nbBody .nb-pend-row{ min-height:44px; }
+  #nbBody .elbtn.xs, #nbBody .ib.sm{ min-height:32px;padding-inline:10px; }
+}
+/* no hover on a phone: the buttons that only showed on hover are always there */
+@media (max-width:760px){
+  .nb-row-acts,.nb-act,.nb-note-acts{ opacity:1 !important; }
+}
+/* the Markdown toolbar stays above the soft keyboard */
+@media (max-width:760px){
+  body.ip-on #work[data-view="editor"] .pane.editor .mdbar, .pane.editor .mdbar{
+    position:fixed;left:0;right:0;bottom:var(--nb-kb, 0px);z-index:6;
+    background:var(--surface);border-top:1px solid var(--border);border-bottom:0;
+    padding:6px calc(8px + env(safe-area-inset-left, 0px)) 6px calc(8px + env(safe-area-inset-right, 0px));
+    box-shadow:0 -8px 20px -14px rgba(15,23,42,.35);transition:bottom .15s;
+  }
+  body.ip-on #work[data-view="editor"] textarea#input{ padding-bottom:64px; }
+}
+/* desktop-only controls leave the phone alone */
+@media (max-width:760px){
+  #btnHand, #zLvl, [data-action="zoom-in"], [data-action="zoom-out"], [data-action="zoom-reset"],
+  [data-action="present"], [data-action="fs"]{ display:none !important; }
+  #outline, #outlineBtn{ display:none !important; }
+  #splitBar, .split{ display:none !important; }
+}
+body:not(.ui-calm) #nbNav{ display:none; }
+/* the pull-to-refresh hint */
+.nb-pull-hint{
+  position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:8;
+  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:99px;opacity:.85;
+}
+.nb-pull-hint.ready{ background:var(--accent);color:#fff; }
+#nbList{ position:relative; }
