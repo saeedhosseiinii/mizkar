@@ -7700,7 +7700,9 @@ var NB_CSS = [
   '.nb-set-app .pop-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; flex-wrap:wrap; }',
   '@media (max-width:760px){',
   '  #nbModal{ padding:0; align-items:stretch; }',
-  '  #nbModal .nb-set-box{ width:100% !important; max-width:none; height:100dvh; max-height:none; border-radius:0; }',
+  '  #nbModal:not(.nb-set-in){ padding:10vh 16px 16px; align-items:flex-end; background:rgba(5,8,15,.42); }',
+  '  #nbModal:not(.nb-set-in) .nb-set-box{ width:100% !important; max-width:none; height:auto; max-height:78dvh; border-radius:20px 20px 12px 12px; }',
+  '  #nbModal.nb-set-in .nb-set-box{ width:100% !important; max-width:none; height:100dvh; max-height:none; border-radius:0; }',
   '  .nb-set-main{ grid-template-columns:minmax(0,1fr); }',
   '  .nb-set-nav{ border:0; background:none; padding:6px 8px; }',
   '  .nb-set-item{ min-height:58px; }',
@@ -10546,6 +10548,47 @@ function nbCommitMessage(list){
     nbDrawSettings(typeof sec === 'string' ? sec : (innerWidth <= 760 ? '' : 'connect'));
   }
   function nbCloseSettings(){ $('nbModal').hidden = true; }
+
+  /**
+   * Backdrop click closes every modal / full-screen sheet. The dimmed `.modal` (or `#cmp`) is the
+   * target; a click inside `.modal-box` / `.cmp-box` does not reach it. Wired once for all of them so
+   * settings («متن و ظاهر») and any future dialog behave the same as toolbox / PDF / prompts.
+   */
+  (function nbBackdropDismiss(){
+    if (document.documentElement.dataset.nbBackdrop) return;
+    document.documentElement.dataset.nbBackdrop = '1';
+    function dismissModal(m){
+      if (!m || m.hidden) return;
+      if (m.id === 'nbModal'){ nbCloseSettings(); return; }
+      if (m.id === 'nbMini'){ nbCloseMini('nbMini2'); nbCloseMini(); return; }
+      if (m.id === 'nbMini2'){ nbCloseMini('nbMini2'); return; }
+      if (m.id === 'pdfModal' && typeof closePdf === 'function'){ closePdf(); return; }
+      if (m.id === 'faModal' && typeof closeFaEdit === 'function'){ closeFaEdit(); return; }
+      if (m.id === 'timeModal' && typeof closeTimeConverter === 'function'){ closeTimeConverter(); return; }
+      if (m.id === 'netModal' && typeof closeNetCalc === 'function'){ closeNetCalc(); return; }
+      if (m.id === 'toolModal' && typeof closeToolbox === 'function'){ closeToolbox(); return; }
+      var btn = m.querySelector('[data-action^="close"], [data-action$="-close"], [data-nb-mini-close]');
+      if (btn){ btn.click(); return; }
+      m.hidden = true;
+    }
+    document.addEventListener('click', function(e){
+      var t = e.target;
+      if (!t || !t.id && !(t.classList && t.classList.contains('modal'))) {
+        // still allow .modal without relying on id alone
+      }
+      if (t && t.classList && t.classList.contains('modal') && !t.hidden){
+        dismissModal(t);
+        return;
+      }
+      if (t && t.id === 'cmp' && !t.hidden && typeof closeCompare === 'function'){
+        closeCompare();
+        return;
+      }
+      if (t && t.id === 'palette' && !t.hidden && typeof closePalette === 'function'){
+        closePalette();
+      }
+    }); // bubble: same phase as the existing per-modal listeners; dismiss is idempotent
+  })();
 
   /* --- wiring --- */
   function nbActivePath(){ var t = currentTab(); return t && t.nb ? t.nb : ''; }
