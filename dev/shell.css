@@ -77,7 +77,9 @@ body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
     padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);
   }
   #nbTop .ib{ min-width:44px; min-height:44px; }
-  .nb-top-t{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.02rem; padding-inline:4px; }
+  .nb-top-t{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:inherit; font-size:1.02rem; font-weight:700;
+    padding:8px 4px; border:0; background:none; color:var(--ink); text-align:start; cursor:text; border-radius:8px; }
+  .nb-top-t:active{ background:var(--soft); }
   .nb-top-sync{ border:0; background:none; width:36px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .nb-top-sync i{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
   .nb-top-sync.nb-ok i{ background:#16a34a; }

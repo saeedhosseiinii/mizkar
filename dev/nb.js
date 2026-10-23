@@ -1815,15 +1815,37 @@ function nbCommitMessage(list){
   });
 
   /* --- actions that change the notebook --- */
-  function nbRenameDialog(path, name){
+  /** The first «# …» line of a text, or ''. */
+  function nbH1(text){ var m = /^#[ \t]+(.+?)[ \t#]*$/m.exec(nbParseFm(text).body); return m ? m[1].trim() : ''; }
+  /**
+   * Renames a note (its file). The title line follows when it was the same as the old name, and every
+   * [[link]] to it is fixed. Returns the new path, or '' when nothing changed.
+   */
+  function nbRenameDialog(path, name, opts){
+    opts = opts || {};
     var folder = nbFolder(path), ext = /\.(md|markdown|txt)$/i.exec(path);
     var target = (folder ? folder + '/' : '') + nbSlug(name) + (ext ? ext[0] : '.md');
     var oldTitle = nbTitle(path);
-    if (nbMoveNote(path, target)){
-      var fixed = nbFixLinks(oldTitle, nbTitle(target));
-      toast('نام عوض شد: ' + nbTitle(target) + (fixed ? ' — ' + faNum(fixed) + ' پیوند هم درست شد' : ''), 'pen');
+    if (target === path || !nbSlug(name)) return '';
+    if (!nbMoveNote(path, target)) return '';
+    var f = NB.files[target];
+    if (!opts.keepH1 && f && !(f.enc && f.plain == null) && nbSlug(nbH1(nbTextOf(f))) === oldTitle){
+      var text = nbTextOf(f);
+      nbPutNoteText(target, text.replace(/^(#[ \t]+).+$/m, function(all, hash){ return hash + name.trim(); }));
     }
+    var fixed = nbFixLinks(oldTitle, nbTitle(target));
+    toast('نام عوض شد: ' + nbTitle(target) + (fixed ? ' — ' + faNum(fixed) + ' پیوند هم درست شد' : ''), 'pen',
+      { label: 'بازگشت', icon: 'undo', run: function(){ nbRenameDialog(target, oldTitle, { keepH1: opts.keepH1 }); } });
+    return target;
   }
+  /** The tab bar renamed a notebook tab: the note gets that name (or the tab goes back to the note's name). */
+  function nbTabRenamed(t, name){
+    var path = t.nb;
+    if (!path || !name || nbSlug(name) === nbTitle(path)){ t.name = nbTitle(path); drawTabs(); return; }
+    if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); t.name = nbTitle(path); drawTabs(); return; }
+    if (!nbRenameDialog(path, name)){ t.name = nbTitle(path); drawTabs(); }
+  }
+  window.nbTabRenamed = nbTabRenamed;
   function nbMoveDialog(path){
     nbPrompt('پوشهٔ تازه (خالی = ریشه)', nbFolder(path), function(folder){
       var target = (folder ? folder.replace(/^\/+|\/+$/g, '') + '/' : '') + path.split('/').pop();
@@ -4378,7 +4400,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    fmDialog: nbFmDialog, fmWrite: nbFmWrite, shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
+    rename: nbRenameDialog, h1: nbH1, fmDialog: nbFmDialog, fmWrite: nbFmWrite, shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
     trash: function(){ return NB.trash; }, trashRestore: nbTrashRestore, emptyTrash: nbEmptyTrash, menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,

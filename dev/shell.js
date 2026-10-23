@@ -66,7 +66,7 @@
     top.setAttribute('role', 'toolbar');
     top.setAttribute('aria-label', 'یادداشت');
     top.innerHTML = '<button type="button" class="ib" data-nb-top="back" aria-label="بازگشت"><svg class="i nb-rtl-back"><use href="#i-chev"/></svg></button>'
-      + '<b class="nb-top-t" id="nbTopTitle" dir="auto"></b>'
+      + '<button type="button" class="nb-top-t" id="nbTopTitle" data-nb-top="rename" dir="auto" title="تغییر نام"></button>'
       + '<button type="button" class="nb-top-sync" data-nb-top="sync" aria-label="وضعیت همگام سازی"><i></i></button>'
       + '<button type="button" class="ib" data-nb-top="edit" aria-label="ویرایش"><svg class="i"><use href="#i-pen"/></svg></button>'
       + '<button type="button" class="ib" data-nb-top="more" aria-label="گزینه ها"><span class="ui-dots">⋯</span></button>';
@@ -86,6 +86,9 @@
         setView(state.view === 'preview' ? 'editor' : 'preview');
         saveState();
         if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
+      } else if (w === 'rename' && path){
+        if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
+        nbPrompt('نام یادداشت', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); });
       } else if (w === 'sync'){
         $('nbSync').click();
       } else if (w === 'more' && path){

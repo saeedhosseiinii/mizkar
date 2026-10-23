@@ -1685,6 +1685,42 @@ async function until(fn, ms = 3000) {
   eq('one tap and the notebook uses it', nb.ui.cfg().branch, 'main');
   doc.querySelector('[data-action="nb-close"]').click();
 
+  console.log('\n— renaming from the title —');
+  nb.ui.write('نام/برنامه سفر.md', '# برنامه سفر\nمتن\n');
+  nb.ui.write('نام/پیوند دهنده.md', 'ببین [[برنامه سفر]]\n');
+  nb.ui.open('نام/برنامه سفر.md');
+  await sleep(40);
+  const renTab = doc.querySelector('#tabsList .tab[aria-selected="true"]');
+  renTab.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true }));
+  const rn = doc.querySelector('#tabsList .tab-rn');
+  rn.value = 'سفر شمال';
+  rn.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(40);
+  ok('renaming the tab renames the note', !!nb.ui.files()['نام/سفر شمال.md'] && !nb.ui.files()['نام/برنامه سفر.md']);
+  ok('the title line followed, it was the same name', /^# سفر شمال$/m.test(nb.ui.files()['نام/سفر شمال.md'].text));
+  ok('links to it were fixed', /\[\[سفر شمال\]\]/.test(nb.ui.files()['نام/پیوند دهنده.md'].text));
+  ok('the tree shows the new name', [...doc.querySelectorAll('#nbBody [data-nb-note]')].some((r) => r.dataset.nbNote === 'نام/سفر شمال.md') || !nb.ui.state().open);
+  // the title line edited in place renames the note too
+  const editTa = doc.getElementById('input');
+  const para = [...doc.querySelectorAll('#zoomWrap h1')].find((x) => x.textContent.includes('سفر شمال'));
+  para.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, clientX: 50, clientY: 50 }));
+  await sleep(30);
+  editTa.value = editTa.value.replace('# سفر شمال', '# سفر شمال و گیلان');
+  editTa.dispatchEvent(new win.Event('input', { bubbles: true }));
+  editTa.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(60);
+  ok('editing the title line renames the note when they went together', !!nb.ui.files()['نام/سفر شمال و گیلان.md'] && !nb.ui.files()['نام/سفر شمال.md'], Object.keys(nb.ui.files()).filter((p) => p.startsWith('نام/')));
+  nb.ui.write('روزانه/1405/08/1405-08-09.md', '# ۹ آبان\n');
+  nb.ui.open('روزانه/1405/08/1405-08-09.md');
+  await sleep(40);
+  doc.querySelector('#zoomWrap h1').dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, clientX: 50, clientY: 50 }));
+  await sleep(30);
+  editTa.value = '# ۹ آبان — جمعه\n';
+  editTa.dispatchEvent(new win.Event('input', { bubbles: true }));
+  editTa.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  await sleep(60);
+  ok('a dated note keeps its file name (its title was never the name)', !!nb.ui.files()['روزانه/1405/08/1405-08-09.md']);
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

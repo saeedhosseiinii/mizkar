@@ -76,6 +76,8 @@
     var t = ipTab();
     if (!t) return;
     if (ipReadOnly(t)){ toast('این پوشه فقط خواندنی است', 'x'); return; }
+    // the title line and the file name go together only when they were the same before editing
+    ip.h1 = nbSlug(nbH1(ta.value)) === nbTitle(t.nb) ? nbH1(ta.value) : null;
     var lines = ta.value.split('\n'), pos = 0;
     line = Math.max(0, Math.min(line, lines.length - 1));
     for (var i = 0; i < line; i++) pos += lines[i].length + 1;
@@ -91,7 +93,14 @@
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
-    if (!ipTab()) return;
+    var t = ipTab();
+    if (!t) return;
+    var h1 = nbH1(ta.value);
+    if (ip.h1 != null && h1 && h1 !== ip.h1 && nbSlug(h1) !== nbTitle(t.nb) && !ipReadOnly(t)){
+      ip.h1 = null;
+      nbSyncActiveNote();
+      nbRenameDialog(t.nb, h1, { keepH1: true });
+    }
     var line = ta.value.slice(0, ta.selectionStart).split('\n').length - 1;
     setView('preview');
     saveState();

@@ -124,6 +124,12 @@ PATCHES = [
         "    if (typeof nbPaletteItems === 'function') list.push.apply(list, nbPaletteItems());\n",
         "palette notes",
     ),
+    # a notebook tab renamed in the tab bar renames its note (the tree, the links, the repository follow)
+    (
+        "          t.name = name;\n          saveState();\n        }\n        drawTabs();",
+        "          t.name = name;\n          saveState();\n          if (t.nb && typeof window.nbTabRenamed === 'function') window.nbTabRenamed(t, name);\n        }\n        drawTabs();",
+        "renameTab → nbTabRenamed",
+    ),
     # every tab switch has to fix up secret notes and read-only ones
     (
         "    body.classList.remove('drawer-open');\n    ta.scrollTop = 0;\n    out.scrollTop = 0;\n    setFormat(t.fmt || 'auto');\n    saveState();\n  }",
