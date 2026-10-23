@@ -110,6 +110,8 @@
     /* the tabs join the top bar (one row instead of two): brand · tabs · the controls · export */
     var tabsRow = $('tabs'), bar = document.querySelector('header.bar'), brand = bar && bar.querySelector('.brand');
     if (tabsRow && bar && brand){ brand.parentNode.insertBefore(tabsRow, brand.nextSibling); body.classList.add('nb-tabs-in-bar'); }
+    // the panel's button sits at the right edge of the top bar, right above the panel it opens
+    if ($('btnNotebook') && bar && brand){ bar.insertBefore($('btnNotebook'), bar.firstChild); $('btnNotebook').classList.add('nb-toggle'); }
     if ($('btnExport')){ $('btnExport').setAttribute('aria-label', 'خروجی'); $('btnExport').setAttribute('data-tip', 'خروجی: PDF، HTML، Word، لینک…'); }
 
     /* a note's page head shows where it lives (روزانه › 1405 › 08 › …) instead of «پیش‌نمایش»; a folder opens in the panel */

@@ -29,11 +29,17 @@ body:not(.nb-open) #nb{ transform:translateX(102%); visibility:hidden; transitio
 body.nb-open #nbBack{ opacity:1; pointer-events:auto; }
 #btnNotebook[aria-pressed="true"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
 
-/* desktop: beside the page, under every popover and dialog */
+/* desktop: beside the page, a card like the page's own panes, under every popover and dialog */
 @media (min-width:1100px){
   #nbBack{ display:none; }
-  #nb{ z-index:var(--z-panel-docked); box-shadow:none; }
-  body.nb-open .work{ margin-right:var(--nb-w, 340px); }        /* the panel is on the right; inline-end would be the left in RTL */
+  #nb{
+    z-index:var(--z-panel-docked); box-shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 30px -18px rgba(15,23,42,.18);
+    top:calc(var(--nb-top, 96px) + 10px); bottom:calc(var(--nb-bottom, 28px) + 6px); right:12px;
+    border:1px solid var(--border); border-radius:18px;
+  }
+  body:not(.nb-open) #nb{ transform:translateX(calc(100% + 24px)); }
+  body.nb-open .work{ margin-right:calc(var(--nb-w, 340px) + 12px); }   /* the panel is on the right; inline-end would be the left in RTL */
+  #nb .nb-grip{ left:-5px; width:8px; }
 }
 /* tablet: over the page, the whole height */
 @media (min-width:761px) and (max-width:1099px){
@@ -228,6 +234,7 @@ body.readmode .work{ margin-right:0 !important; }
   body.nb-tabs-in-bar .bar .ui-near{ margin-inline-start:auto; flex:none; }
   body.nb-tabs-in-bar .bar .ui-export{ margin-inline-start:0; flex:none; }
 }
+.bar .nb-toggle{ flex:none; }
 body.ui-calm #btnExport{ background:transparent; color:var(--ink-2); border:1px solid var(--border); box-shadow:none; width:36px; height:36px; padding:0; justify-content:center; }
 body.ui-calm #btnExport:hover{ color:var(--accent); border-color:var(--border-strong); }
 body.ui-calm #btnExport .bp-label{ display:none; }
