@@ -323,8 +323,11 @@ var APP_CSS = [
   /* top bar */
   '.bar{position:relative;z-index:30;display:flex;align-items:center;gap:12px;padding:10px 16px;background:color-mix(in srgb,var(--surface) 70%,transparent);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--border);}',
   '.brand{display:flex;align-items:center;gap:10px;flex:none;}',
-  '.logo{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 8px 20px -8px color-mix(in srgb,var(--accent) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.3);}',
+  '.logo{width:34px;height:34px;border:0;padding:0;border-radius:11px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 8px 20px -8px color-mix(in srgb,var(--accent) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.3);cursor:pointer;font:inherit;}',
   '.logo .i{stroke-width:2.4;}',
+  '.logo:hover{filter:brightness(1.06);}',
+  '.logo:active{transform:scale(.96);}',
+  '.logo[aria-pressed="true"]{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px;}',
   '.brand-name{font-weight:800;font-size:1.02rem;letter-spacing:-.01em;white-space:nowrap;}',
   '.chips{display:flex;gap:2px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:13px;overflow-x:auto;scrollbar-width:none;min-width:0;}',
   '.chips::-webkit-scrollbar{display:none;}',
@@ -7515,7 +7518,7 @@ var NB_CSS = [
   '#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; z-index:2; }',
   '#nbBack{ position:fixed; inset:0; z-index:var(--z-backdrop); background:rgba(6,10,18,.42); opacity:0; pointer-events:none; transition:opacity .2s ease; }',
   'body.nb-open #nbBack{ opacity:1; pointer-events:auto; }',
-  '#btnNotebook[aria-pressed="true"]{ background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }',
+  /* notebook toggle lives on the brand logo (#btnBrand); the old tree button is gone */
   '',
   '/* desktop: beside the page, a card like the page\'s own panes, under every popover and dialog */',
   '@media (min-width:1100px){',
@@ -7562,7 +7565,7 @@ var NB_CSS = [
   '  #nbTop [data-nb-top="edit"][data-for="read"] .i{ width:18px; height:18px; }',
   '',
   '  /* the page: one column filling the space between the top bar and the bottom bar */',
-  '  .tabs, .status, #btnNotebook{ display:none !important; }',
+  '  .tabs, .status{ display:none !important; }',
   '  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{',
   '    display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:minmax(0,1fr) !important;',
   '    gap:0 !important; padding:0 !important; flex:1; min-height:0;',
@@ -7781,7 +7784,6 @@ var NB_CSS = [
   '}',
   '/* the Markdown bar never hides a button behind a sideways scroll (its own scrollbar is invisible): it wraps */',
   '.mdbar{ flex-wrap:wrap; overflow-x:visible; row-gap:2px; }',
-  '.bar .nb-toggle{ flex:none; }',
   'body.ui-calm #btnExport{ background:transparent; color:var(--ink-2); border:1px solid var(--border); box-shadow:none; width:40px; height:40px; border-radius:999px; padding:0; justify-content:center; }',
   'body.ui-calm #btnExport .chev{ display:none; }   /* with the label hidden, the caret only crowds the icon */',
   'body.ui-calm #btnExport:hover{ color:var(--accent); border-color:var(--border-strong); }',
@@ -9377,7 +9379,7 @@ function nbCommitMessage(list){
     NB.open = force === undefined ? !NB.open : !!force;
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
-    if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
+    if ($('btnBrand')) $('btnBrand').setAttribute('aria-pressed', String(NB.open));
     if (remember !== false) storeSet('mz2-nbopen', NB.open ? '1' : '0');
     if (typeof nbShellSync === 'function') nbShellSync();
     if (NB.open) nbRender();
@@ -12766,8 +12768,7 @@ function nbCommitMessage(list){
       saveState();
       if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
     });
-    var nbBtn = $('btnNotebook');
-    bar.insertBefore(edit, nbBtn ? nbBtn.nextSibling : bar.firstChild);
+    bar.insertBefore(edit, bar.firstChild);
     function syncEdit(){
       var on = state.view !== 'preview';
       edit.setAttribute('aria-pressed', String(on));
@@ -12854,13 +12855,13 @@ function nbCommitMessage(list){
     }
 
     // §1a: every control but «خروجی» gathers next to the brand, in this order from the right:
-    // sidebar · ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات. «خروجی» stays alone at the far end.
+    // ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات. Notebook opens from the brand logo. «خروجی» stays at the end.
     var header = document.querySelector('header.bar');
     if (header){
       var near = document.createElement('div');
       near.className = 'ui-near';
       header.insertBefore(near, bar);
-      [ $('btnNotebook'), edit,
+      [ edit,
         $('btnHistory') && $('btnHistory').closest('.pop-wrap'),
         tools, pal,
         $('btnSettings') && $('btnSettings').closest('.pop-wrap')
@@ -12881,7 +12882,7 @@ function nbCommitMessage(list){
                        a note is a page of its own with a top bar (← title · sync · edit · ⋯), every menu is a sheet;
        tablet  761–1099 the panel slides over the page from the right, behind a backdrop;
        desktop ≥ 1100  the panel sits beside the page.
-     On tablet and desktop one button opens the panel: the notebook button at the start of the top bar. */
+     On tablet and desktop the brand logo toggles the notebook panel on the right. */
   function nbSize(){ return innerWidth <= 760 ? 'phone' : innerWidth < 1100 ? 'tablet' : 'desk'; }
   var NB_SECTION_NAMES = { notes: 'یادداشت‌ها', temps: 'موقت', search: 'جستجو', cal: 'تقویم', tasks: 'کارها', tags: 'برچسب‌ها', trash: 'سطل بازیافت', conflicts: 'تعارض‌ها' };
 
@@ -13039,8 +13040,6 @@ function nbCommitMessage(list){
     /* the tabs join the top bar (one row instead of two): brand · tabs · the controls · export */
     var tabsRow = $('tabs'), bar = document.querySelector('header.bar'), brand = bar && bar.querySelector('.brand');
     if (tabsRow && bar && brand){ brand.parentNode.insertBefore(tabsRow, brand.nextSibling); body.classList.add('nb-tabs-in-bar'); }
-    // the panel's button sits at the right edge of the top bar, right above the panel it opens
-    if ($('btnNotebook') && bar && brand){ bar.insertBefore($('btnNotebook'), bar.firstChild); $('btnNotebook').classList.add('nb-toggle'); }
     if ($('btnExport')){ $('btnExport').setAttribute('aria-label', 'خروجی'); $('btnExport').setAttribute('data-tip', 'خروجی: PDF، HTML، Word، لینک…'); }
 
     /* a note's page head shows where it lives (روزانه › 1405 › 08 › …) instead of «پیش‌نمایش»; a folder opens in the panel */
@@ -13120,7 +13119,7 @@ function nbCommitMessage(list){
       });
       var head = $('nbHeadTitle');
       if (head) head.textContent = size === 'phone' ? (NB_SECTION_NAMES[NB.section] || 'دفترچه') : 'دفترچه';
-      var btn = $('btnNotebook');
+      var btn = $('btnBrand');
       if (btn) btn.setAttribute('aria-pressed', String(NB.open));
     }
     addEventListener('resize', function(){ sync(); if (NB.open) nbSlot(); });

@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl" data-skin="m3">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-23T23:25Z">
+<meta name="app-version" content="2026-10-23T23:30Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -70,7 +70,7 @@
 
 <header class="bar">
   <div class="brand">
-    <span class="logo"><svg class="i"><use href="#i-logo"/></svg></span>
+    <button type="button" class="logo" id="btnBrand" data-action="notebook" aria-pressed="false" data-tip="دفترچه · Ctrl+\" aria-label="دفترچه میزکار"><svg class="i"><use href="#i-logo"/></svg></button>
     <span class="brand-name">میزکار <sup style="color:#f59e0b;font-size:.62em;font-weight:800">نسخهٔ ۲</sup></span>
   </div>
   <div class="chips" id="fmtChips" role="tablist" aria-label="فرمت ورودی">
@@ -97,7 +97,6 @@
       <button type="button" data-view="preview" data-tip="فقط پیش‌نمایش — Ctrl+V متن را عوض می‌کند · Alt+3" aria-label="فقط پیش‌نمایش"><svg class="i"><use href="#i-file"/></svg></button>
     </div>
     <span class="sep"></span>
-    <button class="ib" type="button" data-action="notebook" id="btnNotebook" aria-pressed="false" data-tip="دفترچه: یادداشت های گیت هاب · Ctrl+\" aria-label="دفترچه"><svg class="i"><use href="#i-tree"/></svg></button>
     <button class="ib" type="button" data-action="open" data-tip="باز کردن فایل · Ctrl+O" aria-label="باز کردن فایل"><svg class="i"><use href="#i-folder"/></svg></button>
     <button class="ib" type="button" data-action="theme" data-tip="تغییر تم" aria-label="تغییر تم"><svg class="i"><use id="themeUse" href="#i-moon"/></svg></button>
     <button class="ib" type="button" data-action="dir" id="btnDir" data-tip="جهت پایه: راست‌به‌چپ" aria-label="تغییر جهت"><span class="dir-tag" id="dirTag">RTL</span></button>
