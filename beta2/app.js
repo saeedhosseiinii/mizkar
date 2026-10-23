@@ -7479,23 +7479,8 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
-  /* tint behind transparent glyphs; while selecting, hide tint and show real text so dblclick does not double/garble */
-  'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}',
-  'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  'body.ip-tint textarea#input::selection{color:transparent;-webkit-text-fill-color:transparent;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  'body.ip-tint textarea#input::-moz-selection{color:transparent;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  'body.ip-tint.ip-has-sel textarea#input{color:var(--ink);-webkit-text-fill-color:var(--ink);}',
-  'body.ip-tint.ip-has-sel textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  'body.ip-tint.ip-has-sel textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 40%,transparent);}',
-  'body.ip-tint.ip-has-sel .ta-md{visibility:hidden;}',
-  '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:plaintext;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
-  '.ta-md[hidden]{display:none;}',
-  '.ta-md .mk-h{color:var(--accent);}',
-  '.ta-md .mk-m{color:color-mix(in srgb,var(--accent) 70%,var(--muted));}',
-  '.ta-md .mk-c{color:var(--tok-str,#047857);background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:3px;}',
-  '.ta-md .mk-l{color:var(--tok-fn,#0369a1);}',
-  '.ta-md .mk-t{color:#d97706;}',
-  '.ta-md .mk-fm{color:var(--muted);}',
+  /* Markdown tint overlay disabled while editing (was doubling/garbling RTL selection). Keep hooks for a later editor. */
+  '.ta-md{display:none!important;}',
   'body.ip-on #zoomWrap li.task > .box{cursor:pointer;}',
   'body.ip-on #zoomWrap{cursor:text;}',
   '',
@@ -13713,48 +13698,13 @@ function nbCommitMessage(list){
       return m;
     });
   }
-  function ipSelSync(){
-    if (!body.classList.contains('ip-tint') || document.activeElement !== ta){
-      body.classList.remove('ip-has-sel');
-      return;
-    }
-    body.classList.toggle('ip-has-sel', ta.selectionStart !== ta.selectionEnd);
-  }
   function ipTint(){
+    /* Keep ip-tint for phone chrome (تمام bar, nav); never draw the markdown overlay — it broke RTL select. */
     var on = !!ipTab() && state.view === 'editor';
     body.classList.toggle('ip-tint', on);
-    if (!on){ body.classList.remove('ip-has-sel'); if (ip.md) ip.md.hidden = true; return; }
-    if (!ip.md){
-      ip.md = document.createElement('div');
-      ip.md.className = 'ta-md';
-      ip.md.setAttribute('aria-hidden', 'true');
-      ta.parentNode.insertBefore(ip.md, ta);
-    }
-    var cs = getComputedStyle(ta);
-    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-      'whiteSpace', 'overflowWrap', 'wordBreak', 'textAlign', 'direction', 'unicodeBidi', 'textIndent'].forEach(function(k){ ip.md.style[k] = cs[k]; });
-    ip.md.style.top = ta.offsetTop + 'px'; ip.md.style.left = ta.offsetLeft + 'px';
-    ip.md.style.width = ta.clientWidth + 'px'; ip.md.style.height = ta.clientHeight + 'px';
-    var st = { fence: false, fm: false }, lines = ta.value.split('\n');
-    ip.md.innerHTML = lines.map(function(line, i){
-      if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
-      if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
-      var html = ipTintLine(line, st);
-      /* only fences get an LTR wrap — per-line dir on prose desyncs wrap from the textarea and breaks click/select */
-      if (st.fence || /^\s*(```|~~~)/.test(line)) return '<span dir="ltr">' + html + '</span>';
-      return html;
-    }).join('\n') + '\n ';
-    ip.md.hidden = false;
-    ip.md.scrollTop = ta.scrollTop;
+    body.classList.remove('ip-has-sel');
+    if (ip.md) ip.md.hidden = true;
   }
-  /* selection: hide the tint layer so glyphs are not drawn twice (that was the «بهم‌ریختگی») */
-  document.addEventListener('selectionchange', ipSelSync);
-  ta.addEventListener('keyup', ipSelSync);
-  ta.addEventListener('mouseup', ipSelSync);
-  ta.addEventListener('blur', function(){ body.classList.remove('ip-has-sel'); });
-  ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } ipSelSync(); });
-  ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
-  if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
   /** However the editor was entered (double click, E, the edit buttons): remember the title it opened with. */
   function ipArm(){
     var t = ipTab();
