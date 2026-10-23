@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl" data-skin="m3">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-10-23T22:35Z">
+<meta name="app-version" content="2026-10-23T22:53Z">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -185,7 +185,7 @@
       </span>
       <button type="button" class="mdb" data-md="hr" title="خط جداکننده" aria-label="خط جداکننده"><span class="mdt">―</span></button>
     </div>
-    <textarea id="input" dir="auto" spellcheck="false" placeholder="متن خود را اینجا بچسبانید…" aria-label="ورودی"></textarea>
+    <textarea id="input" dir="rtl" spellcheck="false" placeholder="متن خود را اینجا بچسبانید…" aria-label="ورودی"></textarea>
   </section>
   <div class="divider" id="divider" role="separator" aria-orientation="vertical" aria-label="تغییر اندازهٔ ستون‌ها — دوبار کلیک برای نصف‌کردن" tabindex="0"></div>
   <section class="pane out">
@@ -4633,10 +4633,17 @@ var APP_CSS = [
   '.elbtn{display:inline-flex;align-items:center;gap:5px;font-size:.72rem;font-weight:600;line-height:1.6;padding:3px 9px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--ink-2);cursor:pointer;font-family:Vazirmatn,Inter,sans-serif;}',
   '.elbtn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--border));}',
   '.elbtn .i{width:13px;height:13px;}',
-  '@media(hover:none){.eltools{opacity:.9;}}',
+  '@media(hover:none){.eltools{opacity:1;}}',
   '.codewrap:hover .cbtn,.cbtn:focus-visible{opacity:1;}',
   '.codewrap:hover .clang{opacity:0;}',
-  '@media(hover:none){.cbtn{opacity:.9;}.clang{display:none;}}',
+  '@media(hover:none){.cbtn{opacity:1;}.clang{display:none;}'
+  + '.codewrap,.elwrap{display:flex;flex-direction:column;align-items:stretch;gap:0;padding-top:0!important;}'
+  + '.codewrap>.cbtn,.codewrap>.eltools,.elwrap>.eltools{position:static;opacity:1;align-self:flex-end;margin:0 0 8px;flex-wrap:wrap;max-width:100%;}'
+  + '.codewrap>.cbtn{order:-2;}.codewrap>.eltools{order:-1;display:flex;gap:6px;}'
+  + '.elwrap>.eltools{order:-1;display:flex;gap:6px;margin-bottom:8px;}'
+  + '.elwrap>.tfilter{order:-2;margin-bottom:6px;}'
+  + '.codewrap>pre,.elwrap>.twrap,.elwrap>pre,.elwrap>.math-display{order:1;min-width:0;}'
+  + '}',
   /* status bar */
   '.status{display:flex;align-items:center;gap:16px;height:36px;flex:none;padding:0 22px;font-size:.73rem;color:var(--muted);}',
   '.st-fmt{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--ink-2);}',
@@ -4730,6 +4737,7 @@ var APP_CSS = [
   '.fabs{position:absolute;bottom:22px;left:34px;z-index:35;display:none;align-items:center;gap:10px;}',
   '#work[data-view="preview"] .fabs{display:flex;}',
   '#work[data-view="preview"] .preview{padding-bottom:110px;}',
+  '@media(max-width:760px){#work[data-view="preview"] .preview{padding-bottom:calc(132px + env(safe-area-inset-bottom,0px));}}',
   'body.readmode .fabs,body.drawer-open .fabs{display:none !important;}',
   '.fab{display:inline-flex;align-items:center;gap:9px;height:50px;padding:0 22px 0 18px;border-radius:17px;border:0;cursor:pointer;color:#fff;font-weight:800;font-size:.92rem;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,var(--accent-2)));box-shadow:0 16px 36px -12px color-mix(in srgb,var(--accent) 85%,transparent),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,filter .15s;}',
   '.fab:hover{transform:translateY(-2px);filter:brightness(1.06);}',
@@ -8384,6 +8392,7 @@ if (typeof document !== 'undefined'){
         if (cr.left < br.left || cr.right > br.right) box.scrollLeft += cr.left < br.left ? cr.left - br.left - 8 : cr.right - br.right + 8;
       }
     });
+    if (typeof syncInputDir === 'function') syncInputDir();
     render();
   }
   /**
@@ -8402,6 +8411,7 @@ if (typeof document !== 'undefined'){
     if (v !== 'preview') body.classList.remove('drawer-open');
     state.view = v;
     work.setAttribute('data-view', v);
+    if (v !== 'preview' && typeof syncInputDir === 'function') syncInputDir();
     if (window.requestAnimationFrame) requestAnimationFrame(function(){ if (typeof updateOutline === 'function') updateOutline(); });
     Array.prototype.forEach.call(document.querySelectorAll('#viewSeg button'), function(b){
       b.setAttribute('aria-pressed', String(b.dataset.view === v));
@@ -8445,12 +8455,32 @@ if (typeof document !== 'undefined'){
     if (persist) storeSet('mz2-theme', theme);
     processMermaid(theme, null, false);
   }
+  /**
+   * The editor must not use dir="auto": that attribute looks only at the first strong character, so a
+   * Persian note that begins with "## ۳. box …" or "box‌ای …" flips the whole textarea to LTR. Preview
+   * already uses textDir(); here we keep RTL for Persian prose and LTR only for code-like formats.
+   */
+  function syncInputDir(){
+    if (!ta) return;
+    var dir;
+    if (state.ltr) dir = 'ltr';
+    else {
+      var fmt = (typeof effectiveFormat === 'function' ? effectiveFormat() : state.fmt) || 'auto';
+      var codeLike = /^(json|yaml|yml|toml|ini|xml|sql|csv|log|diff|jwt|cron|js|ts|css|html|code)$/i.test(fmt);
+      var sample = (ta.value || '').slice(0, 4000);
+      dir = (codeLike && typeof hasRTL === 'function' && !hasRTL(sample)) ? 'ltr' : 'rtl';
+    }
+    ta.setAttribute('dir', dir);
+    var md = document.querySelector('.ta-md');
+    if (md) md.setAttribute('dir', dir);
+  }
   function setLtr(on){
     state.ltr = on;
     body.classList.toggle('ltren', on);
     $('dirTag').textContent = on ? 'LTR' : 'RTL';
     $('stDir').textContent = on ? 'LTR' : 'RTL';
     $('btnDir').setAttribute('data-tip', on ? 'جهت پایه: چپ‌به‌راست' : 'جهت پایه: راست‌به‌چپ');
+    syncInputDir();
   }
   function setReadMode(on){
     state.read = on;
@@ -11540,14 +11570,15 @@ var NB_CSS = [
   '  body.nb-note-page .bar{ display:none !important; }',
   '  body.nb-note-page #nbTop{ display:flex; }',
   '  #nbTop{',
-  '    flex:none; position:relative; z-index:30; align-items:center; gap:16px; min-height:52px;',
-  '    padding:calc(4px + env(safe-area-inset-top, 0px)) 6px 4px; background:var(--surface); border-bottom:1px solid var(--border);',
+  '    flex:none; position:relative; z-index:30; align-items:center; gap:8px; min-height:52px;',
+  '    padding:calc(4px + env(safe-area-inset-top, 0px)) 8px 4px; background:var(--surface); border-bottom:1px solid var(--border);',
   '  }',
-  '  /* The app\'s hover toolbars (کپی on code blocks, اکسل/تصویر on tables and diagrams) are absolutely placed over',
-  '     the top of the block. A touch device has no hover and always shows them, so they cover the first line of the',
-  '     code / the header row of the table. Give them their own band above the content. */',
+  '  #nbTop .ib{ min-width:44px; min-height:44px; flex:none; }',
+  '  #nbTop .nb-top-t{ min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-inline:4px; }',
+  '  #nbTop .nb-top-sync{ flex:none; margin-inline:2px; }',
+  '  /* Touch: کپی/اکسل/تصویر must not cover the first line — put them in a flow row above the block. */',
   '  body.nb-nav-on .pane.out .codewrap,',
-  '  body.nb-nav-on .pane.out .elwrap{ padding-top:38px; }',
+  '  body.nb-nav-on .pane.out .elwrap{ padding-top:0; }',
   '',
   '  /* The table-size picker lives in the bottom toolbar. The app\'s own phone rule turns a .pop into a sheet, but its',
   '     JS then pins this one *under the table button* — which is 740px down a 740px screen, so the picker opened off',
@@ -16834,6 +16865,7 @@ function nbCommitMessage(list){
       { label: 'همگام سازی: ' + (($('nbSync') && $('nbSync').textContent) || 'دفترچه'), act: function(){ nbToggleSyncPop(null); } },
       null,
       { label: 'تازه سازی کامل (پاک کردن کش)', act: nbHardRefresh },
+      { label: 'پشتیبان zip دفترچه', act: function(){ if (typeof nbDownloadZip === 'function') nbDownloadZip(''); else runAction('nb-zip'); } },
       { label: 'ابزارها و فرمان ها', act: function(){ runAction('palette'); } },
       { label: 'تنظیمات', act: function(){ nbOpenSettings(''); } },
       null,
@@ -17356,7 +17388,7 @@ function nbCommitMessage(list){
      Notebook tabs open in reading view; a double-click (or E) turns the same column into the Markdown source,
      caret on the line and word that was clicked, Markdown tinted; Esc goes back to reading at the same spot.
      Ticking ☐ works while reading. Temp tabs keep the two columns. */
-  var ip = { tempView: null, wasNb: false, md: null, raf: 0, note: '' };
+  var ip = { tempView: null, wasNb: false, md: null, raf: 0, note: '', outsideUntil: 0 };
   function ipTab(){ var t = currentTab(); return t && t.nb ? t : null; }
   function ipReadOnly(t){ return !!(t && nbReadOnly(t.nb)); }
   /** Called after a tab switch or a note opening: notes read, temp tabs get back the view they had. */
@@ -17437,6 +17469,8 @@ function nbCommitMessage(list){
     for (var i = 0; i < line; i++) pos += lines[i].length + 1;
     var inLine = word ? lines[line].indexOf(word) : -1;
     if (inLine > 0) pos += inLine;
+    // a phone's second tap also fires a compatibility mousedown on the preview; ignore it or we bounce back to reading
+    ip.outsideUntil = Date.now() + 800;
     setView('editor');
     saveState();
     ta.focus();
@@ -17444,6 +17478,7 @@ function nbCommitMessage(list){
     var paneTop = ta.getBoundingClientRect().top;
     ta.scrollTop = Math.max(0, ipCaretTop(pos) - (typeof screenY === 'number' ? screenY - paneTop : ta.clientHeight / 3));
     ipTint();
+    if (typeof syncInputDir === 'function') syncInputDir();
   }
   /** Editing → reading, the preview scrolled to the block of the caret line. */
   function ipRead(){
@@ -17493,6 +17528,7 @@ function nbCommitMessage(list){
   var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
+    if (Date.now() < (ip.outsideUntil || 0)) return;
     if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;
     ipRead();
   }, true);
@@ -17933,6 +17969,12 @@ function nbCommitMessage(list){
     if (storeGet('mz2-nbopen') === '1') nbSidebar(true, false);   // the drawer stays where it was left
     if (NB.openOnLoad){ var on = NB.openOnLoad; NB.openOnLoad = ''; if (NB.files[on]) nbOpen(on); }
     if (typeof nbShellSync === 'function') nbShellSync();
+    if (typeof syncInputDir === 'function') syncInputDir();
+    // once per device: how to enter edit on a phone (double-tap used to look broken)
+    if (!storeGet('mz2-tip-edit') && nbSize() === 'phone'){
+      storeSet('mz2-tip-edit', '1');
+      setTimeout(function(){ toast('برای ویرایش: دکمهٔ مداد بالا، یا دو ضربه روی متن', 'pen'); }, 900);
+    }
   });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
@@ -17975,12 +18017,27 @@ function nbCommitMessage(list){
       if (e.touches.length !== 1) return;
       var t = e.target;
       if (!t || !t.closest || t.closest('a,button,input,textarea,[contenteditable],.mdbar,.status,#nbTop,#nbNav,#nbMenu,#nb,#m3Fab,[data-ui],.mdc')) return;
+      if (!t.closest || !t.closest('#zoomWrap')) return;
       var now = Date.now(), x = e.touches[0].clientX, y = e.touches[0].clientY;
-      var twice = now - last < 750 && Math.abs(x - lx) < 40 && Math.abs(y - ly) < 40;
+      var twice = now - last < 750 && Math.abs(x - lx) < 48 && Math.abs(y - ly) < 48;
       last = now; lx = x; ly = y;
       if (!twice || now < done) return;
       done = now + 900;
-      try { t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: x, clientY: y })); } catch(err){}
+      // open the editor directly: synthetic dblclick + the phone's follow-up mousedown used to cancel each other
+      if (state.view === 'preview'){
+        if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function'){
+          var block = t.closest(IP_BLOCKS);
+          ipEdit(block ? ipLineOf(block) : 0, '', block ? block.getBoundingClientRect().top : y);
+          return;
+        }
+        // temp tabs on a phone: no in-place caret map, but two taps still open the editor
+        if (innerWidth <= 760){
+          setView('editor'); saveState();
+          setTimeout(function(){ ta.focus(); }, 0);
+          return;
+        }
+      }
+      try { t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y })); } catch(err){}
     }, { passive: true });
   })();
 
@@ -18025,6 +18082,7 @@ function nbCommitMessage(list){
     setWidth(WIDTHS[s.width] ? s.width : 'wide');
     setAccent(typeof s.accent === 'number' ? s.accent : 0);
     setLtr(!!s.ltr);
+    syncInputDir();
     if (s.read) setReadMode(true);
     if (s.faRules && typeof s.faRules === 'object') state.faRules = s.faRules;
     if (s.jsonView === 'tree' || s.jsonView === 'text') state.jsonView = s.jsonView;
