@@ -243,6 +243,21 @@ def main():
       });
     })"""
     PATCHES.append((OLD_UPDATE, NEW_UPDATE, 'update fetch bypasses an old worker'))
+    # code blocks get the same «تصویر» tool tables have (a touch device has no hover: the button must be there)
+    PATCHES.append((
+        "      var w = document.createElement('div');\n      w.className = 'codewrap';\n",
+        "      var w = document.createElement('div');\n"
+        "      w.className = 'codewrap elwrap';   // elwrap: the app's own «تصویر» tool knows how to find the block\n",
+        'code wrapper carries elwrap'))
+    PATCHES.append((
+        "      b.innerHTML = icon('copy') + '<span>کپی</span>';\n      w.appendChild(b);\n",
+        "      b.innerHTML = icon('copy') + '<span>کپی</span>';\n      w.appendChild(b);\n"
+        "      var cdTools = document.createElement('div');\n"
+        "      cdTools.className = 'eltools';\n"
+        "      cdTools.setAttribute('data-ui', '');\n"
+        "      cdTools.innerHTML = '<button type=\"button\" class=\"elbtn\" data-el=\"png\" title=\"کپی تصویر این بخش\">' + icon('image') + 'تصویر</button>';\n"
+        "      w.appendChild(cdTools);\n",
+        'code block image tool'))
     for old, new, what in PATCHES:
         html = replace_once(html, old, new, what)
     print(f'patched the app: {len(PATCHES) + len(REGEX_PATCHES)} places')

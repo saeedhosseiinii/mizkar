@@ -8125,7 +8125,7 @@ if (typeof document !== 'undefined'){
     Array.prototype.forEach.call(zoomWrap.querySelectorAll('pre:not(.mermaid)'), function(pre){
       if (pre.parentNode.classList.contains('codewrap')) return;
       var w = document.createElement('div');
-      w.className = 'codewrap';
+      w.className = 'codewrap elwrap';   // elwrap: the app's own «تصویر» tool knows how to find the block
       pre.parentNode.insertBefore(w, pre);
       w.appendChild(pre);
       var lang = pre.getAttribute('data-lang') || (pre.classList.contains('code') ? FMT_LABELS[renderedFmt] : '');
@@ -8142,6 +8142,11 @@ if (typeof document !== 'undefined'){
       b.setAttribute('data-ui', '');
       b.innerHTML = icon('copy') + '<span>کپی</span>';
       w.appendChild(b);
+      var cdTools = document.createElement('div');
+      cdTools.className = 'eltools';
+      cdTools.setAttribute('data-ui', '');
+      cdTools.innerHTML = '<button type="button" class="elbtn" data-el="png" title="کپی تصویر این بخش">' + icon('image') + 'تصویر</button>';
+      w.appendChild(cdTools);
     });
   }
   /** Typesets $…$ / $$…$$ with the embedded KaTeX; a bad formula shows in red instead of breaking the page. */
