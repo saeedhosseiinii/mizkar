@@ -11066,7 +11066,8 @@ var NB_CSS = [
   'body.nb-open #nbBack{ opacity:1; pointer-events:auto; }',
   '@media (min-width:1100px){',
   '  #nbBack{ display:none; }',
-  '  body.nb-open .work{ margin-inline-end:var(--nb-w, 328px); }',
+  '  body.nb-open .work{ margin-right:var(--nb-w, 328px); }        /* the drawer is on the right; inline-end is the left in RTL */',
+  '  #nb{ z-index:25; }                                              /* docked: under the bar\'s popovers, the palette and dialogs */',
   '}',
   '#nb .nb-head{ display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); background:var(--surface-2); }',
   '#nb .nb-head .nb-h-title{ font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px; color:var(--ink); }',
@@ -11103,7 +11104,7 @@ var NB_CSS = [
   '#nb .nb-saved{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:0 6px; }',
   '#nb .nb-empty, #nb .nb-hint{ color:var(--muted); font-size:12px; line-height:1.9; padding:10px 8px; }',
   '#nb .nb-foot{ border-top:1px solid var(--border); padding:6px 10px; font-size:11.5px; color:var(--muted); background:var(--surface-2); }',
-  '#nb .nb-grip{ position:absolute; inset-inline-start:0; top:0; bottom:0; width:6px; cursor:col-resize; }',
+  '#nb .nb-grip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:col-resize; }',
   '#nb .nb-conflict-row{ border:1px solid var(--border); border-radius:10px; padding:8px; margin:6px 2px; background:var(--surface-2); }',
   '#nb .nb-conflict-row small{ display:block; color:var(--muted); font-size:11px; margin:2px 0 6px; word-break:break-all; }',
   '#nb .nb-cf-btns{ display:flex; gap:4px; flex-wrap:wrap; }',
@@ -11218,6 +11219,7 @@ var NB_CSS = [
   '/* --- dialogs from the notebook must sit above the drawer and its backdrop (the app\'s .modal is 97) --- */',
   '#nbMini, #nbModal{ z-index: 420; }',
   '#nbSyncPop{ z-index: 420; }',
+  '#nbSyncPop:not([hidden]){ display:block; }          /* the app\'s .pop shows only with .open; this one goes by hidden */',
   '#nbMenu{ z-index: 430; }',
   '.nb-sug{ z-index: 425; }',
   '/* on a phone they come up as a sheet from the bottom, so the keyboard never hides them */',
@@ -11304,6 +11306,7 @@ var NB_CSS = [
   '  #zoomWrap, #nbBody, textarea#input{ overscroll-behavior:contain; }',
   '}',
   '/* the bottom bar itself */',
+  '.toast{ z-index:450; }',
   '#nbNav{',
   '  display:none;position:fixed;left:0;right:0;bottom:0;z-index:205;',
   '  height:calc(56px + env(safe-area-inset-bottom, 0px));',
@@ -11441,8 +11444,22 @@ var NB_CSS = [
   '}',
   '',
   '@media (max-width:760px){',
-  '  /* هنگام ویرایش، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */',
-  '  body.ip-on #nbNav{ display:none; }',
+  '  /* هنگام ویرایش (نه خواندن)، نوار پایین کنار می رود تا نوار ابزار Markdown جایش را بگیرد */',
+  '  body.ip-tint #nbNav, body.nb-nav-on:has(textarea#input:focus) #nbNav{ display:none; }',
+  '  /* backdrop-filter نوار بالا، پنجره های fixed داخلش را به خود نوار می بست و overflow:hidden آن ها را می برید */',
+  '  body.ui-calm .bar{ backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--surface); }',
+  '  body.ui-calm .bar .pop{ top:calc(60px + env(safe-area-inset-top, 0px)); max-height:calc(100dvh - 140px); overflow:auto; z-index:430; }',
+  '  /* پیام ها بالای نوار پایین و کشو */',
+  '  body.nb-nav-on .toast{ bottom:calc(var(--nb-nav-h, 56px) + 12px + env(safe-area-inset-bottom, 0px)); }',
+  '  /* پنجرهٔ همگام سازی روی گوشی شیت پایین است */',
+  '  #nbSyncPop{ position:fixed; left:8px; right:8px; bottom:calc(var(--nb-nav-h, 56px) + 8px + env(safe-area-inset-bottom, 0px)); top:auto;',
+  '    width:auto; min-width:0; max-height:70dvh; overflow:auto; z-index:430; }',
+  '  /* صفحه یک ستون است و همهٔ ارتفاع را می گیرد؛ نمای دوستونه روی گوشی فقط ویرایشگر را نشان می دهد */',
+  '  body.app.nb-nav-on{ height:100dvh; }',
+  '  body.nb-nav-on .work, body.nb-nav-on .work[data-view]{ display:grid !important; grid-template-rows:minmax(0,1fr); }',
+  '  body.nb-nav-on .pane{ height:auto; }',
+  '  body.nb-nav-on .work[data-view="split"] .pane.out{ display:none; }',
+  '  .preview, #nbList, #nbBody{ overscroll-behavior-y:contain; }',
   '  body.ip-on #work[data-view="editor"] .pane.editor .mdbar{ bottom:calc(var(--nb-kb, 0px) + env(safe-area-inset-bottom, 0px)); }',
   '}',
   '',
@@ -11454,6 +11471,17 @@ var NB_CSS = [
   '  .status .st-nb, .status .st-upd, .status .st-k, .status .st-fmt{ min-height:40px; }',
   '  /* نوار ابزار Markdown: دکمه های بلندتر برای انگشت */',
   '  .mdbar .mdb{ min-width:34px; min-height:34px; }',
+  '}',
+  '',
+  '/* reading mode, the slides and print show the page alone: the notebook\'s chrome steps aside */',
+  'body.readmode #nb, body.readmode #nbRail, body.readmode #nbEdge, body.readmode #nbNav, body.readmode #nbBack,',
+  'body:has(#deck:not([hidden])) #nb, body:has(#deck:not([hidden])) #nbRail, body:has(#deck:not([hidden])) #nbEdge,',
+  'body:has(#deck:not([hidden])) #nbNav, body:has(#deck:not([hidden])) #nbBack{ display:none !important; }',
+  'body.readmode .work{ margin-right:0 !important; }',
+  '@media print{',
+  '  #nb, #nbRail, #nbEdge, #nbNav, #nbBack, #nbMenu, #nbMini, #nbMini2, #nbModal, #nbSyncPop, .nb-drag-ghost, .ta-md{ display:none !important; }',
+  '  .work{ margin-right:0 !important; }',
+  '  body.nb-nav-on{ padding-bottom:0 !important; height:auto !important; }',
   '}',
   '',
   '/* --- calm layout: the chips, view buttons and tool icons move into menus (ui.js) --- */',
@@ -11501,7 +11529,7 @@ var NB_CSS = [
   '}',
   '.nb-rail-b:hover{background:var(--soft);color:var(--ink);}',
   '.nb-rail-b[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);}',
-  '@media (min-width:1100px){ body.nb-rail-on:not(.nb-open) .work{margin-inline-end:46px;} }',
+  '@media (min-width:1100px){ body.nb-rail-on:not(.nb-open) .work{margin-right:46px;} #nbRail{z-index:25;} }',
   '@media (max-width:1099px){ #nbRail{display:none !important;} }',
   '.ui-edit,.ui-tools{width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;font-size:.8rem;font-weight:600;}',
   '.ui-edit[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}',
@@ -12791,7 +12819,6 @@ function nbCommitMessage(list){
   function nbSidebar(force, remember){
     var was = NB.open;
     NB.open = force === undefined ? !NB.open : !!force;
-    if (innerWidth <= 760 && NB.open !== was && NB.open) nbLayerPushed();
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
     if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
@@ -13101,7 +13128,7 @@ function nbCommitMessage(list){
 
   /* --- small dialogs, in the app's own style --- */
   function nbModalBox(title, bodyHtml, footHtml, ico, target){
-    if (innerWidth < 760){ nbSidebar(false); nbLayerPushed(); }   // on a phone the drawer would be in the way
+    if (innerWidth <= 760) nbSidebar(false);                     // on a phone the drawer would be in the way
     var m = $(target || 'nbMini');
     m.hidden = false;
     m.innerHTML = '<div class="modal-box nb-mini-box" role="dialog" aria-modal="true">'
@@ -13699,7 +13726,7 @@ function nbCommitMessage(list){
     });
     addEventListener('mousemove', function(e){
       if (!dragging) return;
-      var w2 = Math.max(240, Math.min(720, e.clientX - document.documentElement.getBoundingClientRect().left));
+      var w2 = Math.max(240, Math.min(720, innerWidth - e.clientX));     // the drawer grows leftwards from the right edge
       document.documentElement.style.setProperty('--nb-w', Math.round(w2) + 'px');
     });
     addEventListener('mouseup', function(){
@@ -13740,22 +13767,27 @@ function nbCommitMessage(list){
   document.addEventListener('visibilitychange', nbAutoTick);
   addEventListener('keydown', function(e){
     if (e.key === 'Escape'){
-      var mini = $('nbMini'), menu = $('nbMenu'), mod = $('nbModal');
-      if (menu && !menu.hidden){ menu.hidden = true; return; }
-      if (mini && !mini.hidden){ nbCloseMini(); return; }
-      if (mod && !mod.hidden){ nbCloseSettings(); return; }
-      if (NB.open && document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')){ nbSidebar(false); }
+      if (typeof NBD === 'object' && NBD.on) return;              // drag.js cancels the drag; nothing else closes
+      var mini = $('nbMini'), mini2 = $('nbMini2'), menu = $('nbMenu'), mod = $('nbModal');
+      // one Esc closes one layer: the editor's own Esc (back to reading) must not run as well
+      var done = function(){ e.preventDefault(); e.stopPropagation(); };
+      if (menu && !menu.hidden){ nbMenuClose(); return done(); }
+      if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return done(); }
+      if (mini && !mini.hidden){ nbCloseMini(); return done(); }
+      if (mod && !mod.hidden){ nbCloseSettings(); return done(); }
+      if (NB.open && document.activeElement && document.activeElement.closest && document.activeElement.closest('#nb')){ nbSidebar(false); done(); }
       return;
     }
     if (!(e.ctrlKey || e.metaKey)) return;
-    var k = (e.key || '').toLowerCase();
-    if (k === 's' || (e.key === '\\' && !e.shiftKey)){
-      if (k === 's' && !nbActivePath() && !e.shiftKey) return;   // plain Ctrl+S keeps exporting the page
+    // e.code: the same keys work on the Persian layout (where e.key is «س»)
+    var isS = e.code === 'KeyS', isBs = e.code === 'Backslash';
+    if (isS && !e.shiftKey && !e.altKey){
+      if (!nbActivePath()) return;                                  // plain Ctrl+S keeps exporting the page
       e.preventDefault(); e.stopPropagation();
       nbSyncActiveNote(); nbPush({ loud: true });
       return;
     }
-    if (e.key === '\\'){ e.preventDefault(); e.stopPropagation(); nbSidebar(); }
+    if (isBs && !e.shiftKey){ e.preventDefault(); e.stopPropagation(); nbSidebar(); }
   }, true);
 
   /* --- palette and toolbar actions --- */
@@ -13779,10 +13811,6 @@ function nbCommitMessage(list){
   ACTIONS['nb-zip'] = { label: 'دانلود دفترچه به صورت zip', icon: 'download', kw: 'notebook zip export backup', run: function(){ nbDownloadZip(''); } };
   ACTIONS['nb-find'] = { label: 'جستجو در یادداشت های دفترچه', icon: 'search', kbd: 'Ctrl Shift F', kw: 'notebook search find grep', run: function(){
     NB.section = 'search'; NB.focusSearch = true;
-    if (!NB.open) nbSidebar(true); else nbRender();
-  } };
-  ACTIONS['nb-cal'] = { label: 'تقویم دفترچه (شمسی)', icon: 'clock', kw: 'notebook calendar jalali month', run: function(){
-    NB.section = 'cal';
     if (!NB.open) nbSidebar(true); else nbRender();
   } };
   ACTIONS['nb-tags'] = { label: 'برچسب های دفترچه', icon: 'hash', kw: 'notebook tags', run: function(){
@@ -15345,20 +15373,49 @@ function nbCommitMessage(list){
   }
 
   /* ================= لمس: کشیدن شیت به پایین، دکمهٔ بازگشت، کشیدن برای گرفتن تازه ================= */
-  var nbHistoryDepth = 0;
-  function nbLayerPushed(){ try { history.pushState({ nbLayer: ++nbHistoryDepth }, ''); } catch(e){} }
-  function nbLayerPopped(){ if (nbHistoryDepth > 0) nbHistoryDepth--; }
-  // the top layer closes with the phone's back button instead of leaving the page
+  /*
+   * The phone's back button closes the top layer instead of leaving the page. One history entry stands for
+   * «something is open», whatever opened it: watching the layers (not every place that opens one) keeps the
+   * entry honest, and a layer closed by its own ✕ takes its entry back with it.
+   */
+  var nbBack = { entry: false, ignore: false, timer: 0 };
+  function nbBackOn(){ return innerWidth <= 760; }
+  function nbSomethingOpen(){ return nbLayerOpen() || (NB.open && nbBackOn()); }
+  function nbBackSync(){
+    clearTimeout(nbBack.timer);
+    // after the current task: a dialog that closes and opens the next one at once is still «open»
+    nbBack.timer = setTimeout(function(){
+      if (!nbBackOn()) return;
+      var open = nbSomethingOpen();
+      if (open && !nbBack.entry){ try { history.pushState({ nbLayer: 1 }, ''); nbBack.entry = true; } catch(e){} }
+      else if (!open && nbBack.entry){ nbBack.entry = false; nbBack.ignore = true; try { history.back(); } catch(e){ nbBack.ignore = false; } }
+    }, 0);
+  }
   function nbCloseTopLayer(){
-    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu');
+    var mini = $('nbMini'), mini2 = $('nbMini2'), modal = $('nbModal'), menu = $('nbMenu'), pal = $('palette'), deck = $('deck');
+    if (menu && !menu.hidden){ nbMenuClose(); return true; }
     if (mini2 && !mini2.hidden){ nbCloseMini('nbMini2'); return true; }
     if (mini && !mini.hidden){ nbCloseMini(); return true; }
     if (modal && !modal.hidden){ nbCloseSettings(); return true; }
-    if (menu && !menu.hidden){ menu.hidden = true; return true; }
+    if (pal && !pal.hidden && typeof closePalette === 'function'){ closePalette(); return true; }
+    if (deck && !deck.hidden && typeof closeDeck === 'function'){ closeDeck(); return true; }
     if (NB.open){ nbSidebar(false); return true; }
     return false;
   }
-  addEventListener('popstate', function(){ if (nbCloseTopLayer()) nbLayerPopped(); });
+  addEventListener('popstate', function(){
+    if (nbBack.ignore){ nbBack.ignore = false; return; }      // our own step back after a layer closed itself
+    if (!nbBack.entry) return;
+    nbBack.entry = false;
+    nbCloseTopLayer();
+    nbBackSync();                                            // something is still open: the next back closes that
+  });
+  (function(){
+    var watch = new MutationObserver(nbBackSync);
+    ['nbMini', 'nbMini2', 'nbModal', 'nbMenu', 'palette', 'deck'].forEach(function(id){
+      if ($(id)) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+    });
+    watch.observe(body, { attributes: true, attributeFilter: ['class'] });
+  })();
   // a swipe down on the drawer closes it, like a sheet
   (function(){
     var y0 = 0, x0 = 0, on = false;
@@ -15441,7 +15498,7 @@ function nbCommitMessage(list){
     { label: 'نوار کناری', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
     { label: 'ویرایش / خواندن', kbd: 'Alt 2 یا Alt 3', run: function(){ setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview'); saveState(); } },
     { label: 'ارسال به مخزن (در تب یادداشت)', kbd: 'Ctrl S', run: function(){ nbPush({ loud: true }); } },
-    { label: 'گرفتن از مخزن', kbd: 'Ctrl Alt R', run: function(){ nbPull({ loud: true }); } }
+    { label: 'گرفتن از مخزن', kbd: 'Alt Shift R', run: function(){ nbPull({ loud: true }); } }
   ];
   function nbKeysRows(q){
     var norm = nbNorm(q || '');
@@ -15464,23 +15521,29 @@ function nbCommitMessage(list){
       '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'keyboard');
     $('nbKeysQ').addEventListener('input', function(){ $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
   }
+  /** A dialog, menu, palette or the slides is in front: single keys belong to it. */
+  function nbLayerOpen(){
+    return !!document.querySelector('#nbMenu:not([hidden]), #nbMini:not([hidden]), #nbMini2:not([hidden]), #nbModal:not([hidden]), .modal:not([hidden]), .palette:not([hidden]), .deck:not([hidden])');
+  }
   addEventListener('keydown', function(e){
-    var k = (e.key || '').toLowerCase();
-    if (k === '?' && !e.ctrlKey && !e.altKey && !e.metaKey){
+    if ((e.key === '?' || e.key === '؟') && !e.ctrlKey && !e.altKey && !e.metaKey){
       var t = e.target;
-      if (t && t.closest && t.closest('textarea, input, [contenteditable]')) return;
+      if (t && t.closest && t.closest('textarea, input, select, [contenteditable]')) return;
+      if (nbLayerOpen()) return;
       e.preventDefault();
       nbKeysDialog();
       return;
     }
     if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
+    var letter = /^Key([A-Z])$/.exec(e.code || '');
+    if (!letter) return;
     var hit = NB_KEYS.filter(function(x){
       var m = /^Alt Shift ([A-Z])$/.exec(x.kbd);
-      return m && m[1].toLowerCase() === k;
+      return m && m[1] === letter[1];
     })[0];
-    if (hit){ e.preventDefault(); e.stopPropagation(); hit.run(); return; }
-    if (k === 'r'){ e.preventDefault(); e.stopPropagation(); nbPull({ loud: true }); }
-  });
+    // capture phase, and stopped here: the app's own Alt+N (without Shift) must not run as well
+    if (hit){ e.preventDefault(); e.stopPropagation(); hit.run(); }
+  }, true);
 
   /* === HOME: «امروز», tasks, recent notes, notes in the palette — Mizkar === */
   var HOME_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
@@ -15780,7 +15843,7 @@ function nbCommitMessage(list){
     document.body.appendChild(edge);
 
     var RAIL = [
-      ['notes', 'tree', 'دفترچه'], ['home', 'file', 'امروز'], ['search', 'search', 'جستجو'],
+      ['notes', 'tree', 'دفترچه'], ['home', 'sun', 'امروز'], ['search', 'search', 'جستجو'],
       ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'text', 'موقت']
     ];
     var rail = document.createElement('nav');
@@ -15798,7 +15861,7 @@ function nbCommitMessage(list){
       if (!b) return;
       e.stopPropagation();
       var what = b.dataset.nbRail;
-      if (what === 'home'){ openTab(''); return; }        // an empty page shows «امروز»
+      if (what === 'home'){ nbGoHome(); return; }
       NB.section = what;
       nbSidebar(true);
     });
@@ -15815,10 +15878,17 @@ function nbCommitMessage(list){
       });
     };
   })();
+  /** «امروز» is the empty page: an empty temp tab is reused instead of opening one more each time. */
+  function nbGoHome(){
+    var empty = tabs.filter(function(t){ return !t.nb && !String(t.text || '').trim(); })[0];
+    if (empty){ if (empty.id !== activeTab) switchTab(empty.id); else render(); }
+    else openTab('');
+    if (innerWidth <= 1099 && NB.open) nbSidebar(false);            // the page is behind the drawer there
+  }
   /* === §4: on a phone the app gets a bottom bar and its own kind of sheets === */
   var nbMobile = (function(){
     var NAV = [
-      ['home', 'clock', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
+      ['home', 'sun', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
       ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه']
     ];
     var nav = document.createElement('nav');
@@ -15842,7 +15912,7 @@ function nbCommitMessage(list){
         ]);
         return;
       }
-      if (what === 'home'){ openTab(''); return; }
+      if (what === 'home'){ nbGoHome(); return; }
       NB.section = what;
       nbSidebar(true);
     });
@@ -15876,7 +15946,7 @@ function nbCommitMessage(list){
      Notebook tabs open in reading view; a double-click (or E) turns the same column into the Markdown source,
      caret on the line and word that was clicked, Markdown tinted; Esc goes back to reading at the same spot.
      Ticking ☐ works while reading. Temp tabs keep the two columns. */
-  var ip = { tempView: null, wasNb: false, md: null, raf: 0 };
+  var ip = { tempView: null, wasNb: false, md: null, raf: 0, note: '' };
   function ipTab(){ var t = currentTab(); return t && t.nb ? t : null; }
   function ipReadOnly(t){ return !!(t && nbReadOnly(t.nb)); }
   /** Called after a tab switch or a note opening: notes read, temp tabs get back the view they had. */
@@ -15885,6 +15955,8 @@ function nbCommitMessage(list){
     body.classList.toggle('ip-on', !!t);
     if (t && !ip.wasNb){ ip.tempView = state.view; }
     if (t && state.view !== 'preview' && state.view !== 'editor') setView('preview');
+    if (t && t.nb !== ip.note && state.view === 'editor' && document.activeElement !== ta) setView('preview');   // another note opens to read
+    ip.note = t ? t.nb : '';
     if (!t && ip.wasNb && ip.tempView && ip.tempView !== state.view) setView(ip.tempView);
     ip.wasNb = !!t;
     ipTint();
@@ -15999,7 +16071,7 @@ function nbCommitMessage(list){
   });
   // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
   // judged where it starts, so a selection dragged out of the text never counts
-  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbModal, .findbar, #palette, .toast, .fabs';
+  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbRail, #nbEdge, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;
@@ -16009,7 +16081,7 @@ function nbCommitMessage(list){
     var t = ipTab();
     if (!t || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && e.target === ta && state.view === 'editor'){ e.preventDefault(); e.stopPropagation(); ipRead(); return; }
-    if (e.code === 'KeyE' && state.view === 'preview' && !e.shiftKey && !isEditable(e.target) && palette.hidden){
+    if (e.code === 'KeyE' && state.view === 'preview' && !e.shiftKey && !isEditable(e.target) && !state.read && !nbLayerOpen()){
       e.preventDefault(); e.stopPropagation();
       var first = ipBlocks().filter(function(b){ return b.getBoundingClientRect().bottom > out.getBoundingClientRect().top + 8; })[0];
       ipEdit(first ? ipLineOf(first) : 0, '', first ? first.getBoundingClientRect().top : undefined);
@@ -16365,7 +16437,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    closeTopLayer: nbCloseTopLayer, layers: function(){ return nbHistoryDepth; },
+    closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
     quick: nbQuickInbox, encrypt: nbToggleEncrypt, isEncrypted: nbIsEncrypted, encryptText: nbEncrypt, decryptText: nbDecrypt,

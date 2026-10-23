@@ -141,7 +141,7 @@
     document.body.appendChild(edge);
 
     var RAIL = [
-      ['notes', 'tree', 'دفترچه'], ['home', 'file', 'امروز'], ['search', 'search', 'جستجو'],
+      ['notes', 'tree', 'دفترچه'], ['home', 'sun', 'امروز'], ['search', 'search', 'جستجو'],
       ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'text', 'موقت']
     ];
     var rail = document.createElement('nav');
@@ -159,7 +159,7 @@
       if (!b) return;
       e.stopPropagation();
       var what = b.dataset.nbRail;
-      if (what === 'home'){ openTab(''); return; }        // an empty page shows «امروز»
+      if (what === 'home'){ nbGoHome(); return; }
       NB.section = what;
       nbSidebar(true);
     });
@@ -176,10 +176,17 @@
       });
     };
   })();
+  /** «امروز» is the empty page: an empty temp tab is reused instead of opening one more each time. */
+  function nbGoHome(){
+    var empty = tabs.filter(function(t){ return !t.nb && !String(t.text || '').trim(); })[0];
+    if (empty){ if (empty.id !== activeTab) switchTab(empty.id); else render(); }
+    else openTab('');
+    if (innerWidth <= 1099 && NB.open) nbSidebar(false);            // the page is behind the drawer there
+  }
   /* === §4: on a phone the app gets a bottom bar and its own kind of sheets === */
   var nbMobile = (function(){
     var NAV = [
-      ['home', 'clock', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
+      ['home', 'sun', 'امروز'], ['notes', 'tree', 'دفترچه'], ['search', 'search', 'جستجو'],
       ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه']
     ];
     var nav = document.createElement('nav');
@@ -203,7 +210,7 @@
         ]);
         return;
       }
-      if (what === 'home'){ openTab(''); return; }
+      if (what === 'home'){ nbGoHome(); return; }
       NB.section = what;
       nbSidebar(true);
     });

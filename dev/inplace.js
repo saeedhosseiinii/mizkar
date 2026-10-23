@@ -2,7 +2,7 @@
      Notebook tabs open in reading view; a double-click (or E) turns the same column into the Markdown source,
      caret on the line and word that was clicked, Markdown tinted; Esc goes back to reading at the same spot.
      Ticking ☐ works while reading. Temp tabs keep the two columns. */
-  var ip = { tempView: null, wasNb: false, md: null, raf: 0 };
+  var ip = { tempView: null, wasNb: false, md: null, raf: 0, note: '' };
   function ipTab(){ var t = currentTab(); return t && t.nb ? t : null; }
   function ipReadOnly(t){ return !!(t && nbReadOnly(t.nb)); }
   /** Called after a tab switch or a note opening: notes read, temp tabs get back the view they had. */
@@ -11,6 +11,8 @@
     body.classList.toggle('ip-on', !!t);
     if (t && !ip.wasNb){ ip.tempView = state.view; }
     if (t && state.view !== 'preview' && state.view !== 'editor') setView('preview');
+    if (t && t.nb !== ip.note && state.view === 'editor' && document.activeElement !== ta) setView('preview');   // another note opens to read
+    ip.note = t ? t.nb : '';
     if (!t && ip.wasNb && ip.tempView && ip.tempView !== state.view) setView(ip.tempView);
     ip.wasNb = !!t;
     ipTint();
@@ -125,7 +127,7 @@
   });
   // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
   // judged where it starts, so a selection dragged out of the text never counts
-  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbModal, .findbar, #palette, .toast, .fabs';
+  var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbRail, #nbEdge, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;
@@ -135,7 +137,7 @@
     var t = ipTab();
     if (!t || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && e.target === ta && state.view === 'editor'){ e.preventDefault(); e.stopPropagation(); ipRead(); return; }
-    if (e.code === 'KeyE' && state.view === 'preview' && !e.shiftKey && !isEditable(e.target) && palette.hidden){
+    if (e.code === 'KeyE' && state.view === 'preview' && !e.shiftKey && !isEditable(e.target) && !state.read && !nbLayerOpen()){
       e.preventDefault(); e.stopPropagation();
       var first = ipBlocks().filter(function(b){ return b.getBoundingClientRect().bottom > out.getBoundingClientRect().top + 8; })[0];
       ipEdit(first ? ipLineOf(first) : 0, '', first ? first.getBoundingClientRect().top : undefined);

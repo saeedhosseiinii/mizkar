@@ -783,12 +783,12 @@ async function until(fn, ms = 3000) {
   ok('the list can be searched', doc.querySelectorAll('#nbKeysList .nb-key-row').length >= 1 && doc.getElementById('nbKeysList').textContent.indexOf('تقویم') !== -1, doc.getElementById('nbKeysList').textContent.slice(0, 60));
   doc.querySelector('#nbMini [data-nb-mini-close]').click();
   await sleep(30);
-  doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'N', altKey: true, shiftKey: true, bubbles: true }));
+  doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ن', code: 'KeyN', altKey: true, shiftKey: true, bubbles: true }));
   await sleep(50);
-  ok('Alt Shift N makes a new note', !doc.getElementById('nbMini').hidden);
+  ok('Alt Shift N makes a new note (Persian layout too)', !doc.getElementById('nbMini').hidden);
   doc.querySelector('#nbMini [data-nb-mini-close]').click();
   await sleep(30);
-  doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'C', altKey: true, shiftKey: true, bubbles: true }));
+  doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'C', code: 'KeyC', altKey: true, shiftKey: true, bubbles: true }));
   await sleep(50);
   eq('Alt Shift C opens the calendar', nb.ui.state().section, 'cal');
 
@@ -981,6 +981,31 @@ async function until(fn, ms = 3000) {
   ok('a dialog closes before anything else', nb.ui.closeTopLayer() === true && doc.getElementById('nbMini').hidden);
   doc.getElementById('nbMenu').hidden = false;
   ok('and a menu too', nb.ui.closeTopLayer() === true && doc.getElementById('nbMenu').hidden);
+  const wideW = win.innerWidth;
+  Object.defineProperty(win, 'innerWidth', { value: 390, configurable: true, writable: true });
+  nb.ui.newDialog(nb.ui.cfg().collections[0].id, '');
+  await sleep(30);
+  ok('on a phone an open dialog holds one history entry', nb.ui.backEntry() === true);
+  doc.querySelector('#nbMini [data-nb-mini-close]').click();
+  await sleep(60);
+  ok('closing it with ✕ gives the entry back', nb.ui.backEntry() === false);
+  nb.ui.sidebar(true);
+  nb.ui.newDialog(nb.ui.cfg().collections[0].id, '');
+  doc.getElementById('nbMenu').hidden = false;
+  await sleep(30);
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: null }));
+  await sleep(30);
+  ok('Back closes the top layer first', doc.getElementById('nbMenu').hidden && !doc.getElementById('nbMini').hidden);
+  ok('and what is under it still holds an entry', nb.ui.backEntry() === true);
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: null }));
+  await sleep(30);
+  ok('the next Back closes the dialog', doc.getElementById('nbMini').hidden && nb.ui.backEntry() === false);
+  nb.ui.sidebar(true);
+  await sleep(30);
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: null }));
+  await sleep(30);
+  ok('the next Back closes the drawer', !doc.body.classList.contains('nb-open') && nb.ui.backEntry() === false);
+  Object.defineProperty(win, 'innerWidth', { value: wideW, configurable: true, writable: true });
 
   console.log('\n— §7: recent texts live in the sidebar «موقت» —');
   ok('the top bar no longer shows the clock button', /body\.ui-calm \.ui-near #btnHistory[^{]*\{[^}]*display:none/.test(doc.getElementById('appStyle').textContent));
@@ -1337,7 +1362,11 @@ async function until(fn, ms = 3000) {
   const tabsBefore = doc.querySelectorAll('#tabsList .tab').length;
   rail.querySelector('[data-nb-rail="home"]').click();
   await sleep(80);
-  eq('«امروز» opens its page', doc.querySelectorAll('#tabsList .tab').length, tabsBefore + 1);
+  const tabsHome = doc.querySelectorAll('#tabsList .tab').length;
+  ok('«امروز» opens its page', !doc.getElementById('input').value.trim() && tabsHome <= tabsBefore + 1, [tabsBefore, tabsHome]);
+  rail.querySelector('[data-nb-rail="home"]').click();
+  await sleep(80);
+  eq('a second «امروز» reuses that empty page', doc.querySelectorAll('#tabsList .tab').length, tabsHome);
 
   console.log('\n— moves, discards and dates stay honest —');
   await until(() => !nb.ui.state().busy, 4000);
