@@ -378,17 +378,19 @@ function nbCommitMessage(list){
    */
   function nbSaveCfg(){
     if (!C.lockToken){
-      delete C.tokenEnc;
+      delete C.tokenEnc; delete C.gistTokenEnc;
       nbProfiles().forEach(function(pr){ delete pr.tokenEnc; });
       return idbSet('nb-cfg', C, 'meta');
     }
     if (!NB.tokenPass) return Promise.resolve(false);      // locked and not opened: what is stored stays as it is
     var copy = JSON.parse(JSON.stringify(C)), pass = NB.tokenPass;
     function seal(token, prev){ return token ? nbEncrypt(token, pass, NB.localSalt) : Promise.resolve(prev || ''); }
-    copy.token = '';
-    return Promise.all([seal(C.token, C.tokenEnc)].concat(nbProfiles().map(function(pr){ return seal(pr.token, pr.tokenEnc); })))
+    copy.token = ''; copy.gistToken = '';
+    return Promise.all([seal(C.token, C.tokenEnc), seal(C.gistToken, C.gistTokenEnc)].concat(nbProfiles().map(function(pr){ return seal(pr.token, pr.tokenEnc); })))
       .then(function(sealed){
         copy.tokenEnc = C.tokenEnc = sealed[0];
+        copy.gistTokenEnc = C.gistTokenEnc = sealed[1];
+        sealed.splice(1, 1);
         (copy.profiles || []).forEach(function(pr, i){ pr.token = ''; pr.tokenEnc = sealed[i + 1]; nbProfiles()[i].tokenEnc = sealed[i + 1]; });
         return idbSet('nb-cfg', copy, 'meta');
       });
@@ -401,6 +403,7 @@ function nbCommitMessage(list){
         if (!pass) return resolve(false);
         nbDecrypt(C.tokenEnc, pass).then(function(token){
           NB.tokenPass = pass; NB.locked = false; C.token = token;
+          if (C.gistTokenEnc) nbDecrypt(C.gistTokenEnc, pass).then(function(t){ C.gistToken = t; }, function(){});
           return Promise.all(nbProfiles().map(function(pr){
             return pr.tokenEnc ? nbDecrypt(pr.tokenEnc, pass).then(function(t){ pr.token = t; }, function(){}) : null;
           }));
@@ -1660,6 +1663,9 @@ function nbCommitMessage(list){
       { label: 'نمایش در درخت', act: function(){ nbShowInTree(path); } },
       { label: 'انتقال به مجموعه…', act: function(){ nbMoveToCollection(path); } },
       null,
+      { label: 'اشتراک‌گذاری…', act: function(){ nbShareDialog(path); } },
+      { label: 'اشتراک‌های این یادداشت', act: function(){ NB.shareFilter = path; nbOpenSettings('shares'); } },
+      null,
       { label: 'تاریخچه و برگرداندن', act: function(){ nbShowHistory(path); } },
       { label: NB.files[path] && NB.files[path].enc ? 'برداشتن رمز' : 'رمزگذاری', act: function(){ nbToggleEncrypt(path); } },
       { label: 'کپی پیوند [[]]', act: function(){
@@ -2143,6 +2149,7 @@ function nbCommitMessage(list){
     ['cols', 'folder', 'مجموعه ها', 'پوشه + تقویم + قالب'],
     ['notes', 'clock', 'یادداشت ها و تقویم', 'هفته، پیوست ها، فقط خواندنی'],
     ['view', 'sliders', 'متن و ظاهر', 'اندازه، رنگ، تم، جهت'],
+    ['shares', 'link', 'اشتراک‌ها', 'لینک های گیست، برداشتن'],
     ['security', 'lock', 'امنیت', 'قفل توکن، یادداشت های رمزدار'],
     ['about', 'file', 'درباره', 'نسخه، کلیدهای میانبر']
   ];
@@ -2216,6 +2223,7 @@ function nbCommitMessage(list){
     if (sec === 'view') return '<div id="nbSetViewSlot"></div>'
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-run="theme">تم روشن / تیره</button>'
       + '<button class="btn-soft sm" type="button" data-nb-run="dir">جهت پایه: راست‌به‌چپ / چپ‌به‌راست</button></div>';
+    if (sec === 'shares') return nbSharesSectionHtml();
     if (sec === 'security') return ''
       + nbSw('nbLock', C.lockToken, 'قفل توکن با گذرواژه', 'توکن فقط رمزشده در مرورگر می ماند؛ با هر بار باز کردن برنامه یک بار گذرواژه می خواهد', NB.locked)
       + '<h5>یادداشت های رمزدار</h5>'
@@ -2243,6 +2251,8 @@ function nbCommitMessage(list){
     $('nbSetTitle').textContent = cur ? cur[2] : 'تنظیمات';
     $('nbModalBody').innerHTML = cur ? nbSetSectionHtml(cur[0]) : '';
     if (cur && cur[0] === 'view' && $('nbSetViewSlot')) $('nbSetViewSlot').appendChild(nbSetViewBox());
+    if (cur && cur[0] === 'shares') nbSharesFill(NB.shareFilter || '');
+    if (!cur || cur[0] !== 'shares') NB.shareFilter = '';
     if (!m.dataset.wired){ m.dataset.wired = '1'; nbWireSettings(m); }
   }
   var nbSharedBefore = '';
@@ -2258,6 +2268,7 @@ function nbCommitMessage(list){
     if ($('nbIdle')) C.idleSeconds = +$('nbIdle').value || 20;
     if ($('nbWeekStart')) C.weekStart = $('nbWeekStart').value;
     if ($('nbGreg')) C.showGregorian = $('nbGreg').checked;
+    if ($('nbGistToken') && !NB.locked) C.gistToken = $('nbGistToken').value.trim();
     var shared = C.weekStart + '|' + C.attachments;
     nbSaveCfg(); nbSay();
     if (nbSharedBefore && shared !== nbSharedBefore) nbCollectionsChanged(true);
@@ -2287,6 +2298,7 @@ function nbCommitMessage(list){
       nbSettingsApply();
     });
     m.addEventListener('click', function(e){
+      if (nbSharesClick(e)) return;
       var item = e.target.closest('[data-nb-set]');
       if (item){ nbDrawSettings(item.dataset.nbSet); return; }
       if (e.target.closest('[data-nb-set-back]')){ nbDrawSettings(''); return; }
@@ -2454,6 +2466,8 @@ function nbCommitMessage(list){
   ACTIONS['nb-search'] = { label: 'جستجو در یادداشت ها', icon: 'search', kbd: 'Alt Shift F', kw: 'notebook search find notes', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } };
   ACTIONS['nb-cal'] = { label: 'تقویم دفترچه', icon: 'clock', kbd: 'Alt Shift C', kw: 'notebook calendar jalali month', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } };
   ACTIONS['nb-tasks'] = { label: 'کارهای دفترچه', icon: 'check', kbd: 'Alt Shift T', kw: 'notebook tasks todos', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } };
+  ACTIONS['nb-share'] = { label: 'اشتراک‌گذاری این یادداشت (گیست)…', icon: 'link', kw: 'share gist link password', run: function(){ var p = nbActivePath(); if (p) nbShareDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
+  ACTIONS['nb-shares'] = { label: 'اشتراک‌ها (لینک های گیست)', icon: 'link', kw: 'shares gists links', run: function(){ nbOpenSettings('shares'); } };
   ACTIONS['nb-keys'] = { label: 'کلیدهای میانبر', icon: 'keyboard', kw: 'keyboard shortcuts keys map', run: function(){ nbKeysDialog(); } };
   ACTIONS['nb-today'] = { label: 'یادداشت امروز (روزانه)', icon: 'clock', kw: 'notebook today daily journal', run: function(){
     var col = C.collections.filter(function(c){ return c.calendar === 'day'; })[0] || C.collections[0];
@@ -4256,6 +4270,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
+    shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
     trash: function(){ return NB.trash; }, trashRestore: nbTrashRestore, emptyTrash: nbEmptyTrash, menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,

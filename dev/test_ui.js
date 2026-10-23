@@ -13,7 +13,7 @@ html = html.replace(/<script id="katexLib">[\s\S]*?<\/script>/, '<script id="kat
 html = html.replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/, '');
 
 /* ------------------------------------------------------------------ fake GitHub, in memory */
-const repo = { files: new Map(), commits: [], apiCommits: 0, refs: {}, blobs: new Map(), trees: new Map(), req: [] };
+const repo = { files: new Map(), commits: [], apiCommits: 0, refs: {}, blobs: new Map(), trees: new Map(), req: [], gists: new Map(), gistAuth: [] };
 function blobSha(text) { return crypto.createHash('sha1').update('blob ' + Buffer.byteLength(text) + '\0' + text).digest('hex'); }
 function head() { return repo.commits.length ? repo.commits[repo.commits.length - 1].sha : ''; }
 function putRemote(path, text) {
@@ -78,6 +78,22 @@ function handleApi(method, url, body) {
   }
   const p = decodeURIComponent(u.pathname).replace(/^\/repos\/[^/]+\/[^/]+/, '');
   const bodyObj = body ? JSON.parse(body) : null;
+  // gists: create, list, read, update, delete
+  if (p === '/gists' && method === 'POST') {
+    const id = crypto.randomBytes(16).toString('hex'), files = {};
+    for (const [n, f] of Object.entries(bodyObj.files)) files[n] = { filename: n, content: f.content, truncated: false, raw_url: 'https://gist.githubusercontent.com/x/' + id + '/raw/' + n };
+    repo.gists.set(id, { id, description: bodyObj.description, public: bodyObj.public, files, created_at: new Date().toISOString() });
+    return apiResponse(repo.gists.get(id), 201);
+  }
+  if (p === '/gists' && method === 'GET') return apiResponse([...repo.gists.values()]);
+  const gm = /^\/gists\/([0-9a-f]+)$/.exec(p);
+  if (gm) {
+    const g = repo.gists.get(gm[1]);
+    if (!g) return apiResponse({ message: 'Not Found' }, 404);
+    if (method === 'GET') return apiResponse(g);
+    if (method === 'PATCH') { for (const [n, f] of Object.entries(bodyObj.files)) g.files[n].content = f.content; return apiResponse(g); }
+    if (method === 'DELETE') { repo.gists.delete(gm[1]); return apiResponse(null, 204); }
+  }
   if (p === '' && method === 'GET') return apiResponse({ full_name: 'me/notes', private: true, permissions: { push: true } });
   if (p === '/git/ref/heads/main' && method === 'GET') {
     if (!head()) return apiResponse({ message: 'Not Found' }, 404);
@@ -179,6 +195,7 @@ const dom = new JSDOM(html, {
     win.fetch = (url, init) => {
       const method = (init && init.method) || 'GET';
       const body = init && init.body;
+      if (String(url).startsWith('https://api.github.com/gists')) repo.gistAuth.push(method + ' ' + !!(init && init.headers && init.headers.Authorization));
       if (String(url).startsWith('https://api.github.com') || String(url).startsWith('https://gitlab.com/api/v4')) {
         return Promise.resolve(handleApi(method, String(url), body));
       }
@@ -605,7 +622,7 @@ async function until(fn, ms = 3000) {
   ok('config.json in the repository carries the collections', cfgFile && cfgFile.dirty && JSON.parse(cfgFile.text).collections.some((c) => c.name === 'سفرها'));
   nb.ui.settings();
   await sleep(20);
-  ok('settings is one page with a list of sections', doc.querySelectorAll('#nbSetNav [data-nb-set]').length === 7 && !!doc.getElementById('nbRepo'));
+  ok('settings is one page with a list of sections', doc.querySelectorAll('#nbSetNav [data-nb-set]').length === 8 && !!doc.getElementById('nbRepo'));
   doc.querySelector('#nbSetNav [data-nb-set="cols"]').click();
   ok('«مجموعه ها» lists the collections, one row each', doc.querySelectorAll('.nb-colrow').length === nb.ui.cfg().collections.length);
   doc.querySelector('#nbSetNav [data-nb-set="sync"]').click();
@@ -1557,6 +1574,57 @@ async function until(fn, ms = 3000) {
   ok('restoring then makes it a new note again', nb.ui.files()['سطل/فقط اینجا.md'] && nb.ui.files()['سطل/فقط اینجا.md'].isNew && !nb.ui.files()['سطل/فقط اینجا.md'].remote);
   nb.ui.section('trash');
   ok('the trash has a section of its own', !!doc.querySelector('#nbBody .nb-tab[data-nb-sec="trash"]') || nb.ui.trash().length === 0);
+
+  console.log('\n— sharing through a gist: open, key in the link, password —');
+  nb.ui.provider('github');
+  nb.ui.write('شیر/باز.md', '# متن باز\nسلام\n');
+  const recOpen = await nb.ui.shareCreate('شیر/باز.md', 'open', '', 0);
+  const gOpen = recOpen && repo.gists.get(recOpen.id);
+  ok('«باز» makes an unlisted gist with the Markdown as it is', !!gOpen && gOpen.public === false && Object.keys(gOpen.files)[0].endsWith('.md') && gOpen.files[Object.keys(gOpen.files)[0]].content === '# متن باز\nسلام\n');
+  ok('and its description names it for the app', gOpen && gOpen.description === 'mizkar-share: باز');
+  nb.ui.write('شیر/کلید.md', '# راز کوچک\nفقط با لینک\n');
+  const recKey = await nb.ui.shareCreate('شیر/کلید.md', 'key', '', 7);
+  const gKey = recKey && repo.gists.get(recKey.id);
+  const keyContent = gKey ? gKey.files[Object.keys(gKey.files)[0]].content : '';
+  ok('«کلید در لینک»: GitHub sees only ciphertext, not even the title', !!gKey && keyContent.indexOf('راز کوچک') === -1 && keyContent.indexOf('فقط با لینک') === -1 && gKey.description.indexOf('راز') === -1);
+  ok('the expiry is in the description', gKey && / \| exp \d{4}-\d\d-\d\d$/.test(gKey.description));
+  nb.ui.write('شیر/رمز.md', '# پشت گذرواژه\n');
+  const recPass = await nb.ui.shareCreate('شیر/رمز.md', 'pass', 'pass-9876', 0);
+  ok('«رمزدار» stores no key', !!recPass && !recPass.key);
+
+  // opening the three links, as a stranger would
+  doc.getElementById('input').value = '';
+  const authBefore = repo.gistAuth.length;
+  ok('an open link opens the text', await nb.ui.readGist('#g=' + recOpen.id) && doc.getElementById('input').value === '# متن باز\nسلام\n');
+  ok('without a token', repo.gistAuth.slice(authBefore).every((x) => x === 'GET false'));
+  ok('a key link opens the text', await nb.ui.readGist('#g=' + recKey.id + '.' + recKey.key) && doc.getElementById('input').value === '# راز کوچک\nفقط با لینک\n');
+  ok('a wrong key opens nothing', !(await nb.ui.readGist('#g=' + recKey.id + '.AAAAAAAAAAAAAAAAAAAAAAAA')));
+  const passOpen = nb.ui.readGist('#g=' + recPass.id);
+  await until(() => !doc.getElementById('nbMini').hidden && doc.getElementById('nbMiniInput'), 3000);
+  doc.getElementById('nbMiniInput').value = 'wrong';
+  doc.getElementById('nbMiniOk').click();
+  await until(() => !doc.getElementById('nbMini').hidden && /دوباره/.test(doc.getElementById('nbMini').textContent), 4000);
+  ok('a wrong password asks again', /دوباره/.test(doc.getElementById('nbMini').textContent));
+  doc.getElementById('nbMiniInput').value = 'pass-9876';
+  doc.getElementById('nbMiniOk').click();
+  ok('the right one opens it', await passOpen && doc.getElementById('input').value === '# پشت گذرواژه\n');
+
+  // «اشتراک‌ها»
+  const listed = await nb.ui.shareList();
+  ok('«اشتراک‌ها» lists all three, with their titles', listed.length >= 3 && ['باز', 'کلید', 'رمز'].every((t) => listed.some((r) => r.title === t)), listed.map((r) => r.title));
+  nb.ui.write('شیر/باز.md', '# متن باز\nویرایش شد\n');
+  await nb.ui.shareUpdate(listed.find((r) => r.title === 'باز'));
+  ok('«به‌روزرسانی» puts the new text behind the same link', gOpen.files[Object.keys(gOpen.files)[0]].content === '# متن باز\nویرایش شد\n');
+  await nb.ui.shareRemove(listed.find((r) => r.title === 'باز'));
+  ok('«برداشتن» deletes the gist', !repo.gists.has(recOpen.id));
+  ok('and the link then says so', !(await nb.ui.readGist('#g=' + recOpen.id)));
+  nb.ui.settings('shares');
+  await sleep(60);
+  ok('the settings page has «اشتراک‌ها» with the rows', doc.querySelectorAll('#nbShareList .nb-share-row').length === 2, doc.querySelectorAll('#nbShareList .nb-share-row').length);
+  doc.querySelector('[data-action="nb-close"]').click();
+  const reg = await nb.ui.shareList();
+  reg.find((r) => r.title === 'کلید').exp = '2000-01-01';
+  ok('a share past its date is removed when the app runs', (await nb.ui.shareExpire()) === 1 && !repo.gists.has(recKey.id));
 
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);

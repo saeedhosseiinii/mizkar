@@ -250,3 +250,13 @@ body.nb-dragging #nbBody,body.nb-dragging #zoomWrap{user-select:none;}
 
 /* the app's «drop a file» cover is only a picture: drops land on what is under it (drawer, editor, page) */
 #drop{ pointer-events:none; }
+
+/* --- اشتراک گذاری با گیست (share.js) --- */
+.nb-share{display:flex;flex-direction:column;gap:8px;}
+.nb-share-opt{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--border);border-radius:12px;cursor:pointer;}
+.nb-share-opt:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);}
+.nb-share-opt:has(input:disabled){opacity:.5;cursor:not-allowed;}
+.nb-share-opt input{margin-top:4px;accent-color:var(--accent);}
+.nb-share-opt b{display:block;font-size:.88rem;}
+.nb-share-opt small{display:block;color:var(--muted);font-size:.74rem;line-height:1.8;}
+.nb-share-row .nb-name small{color:var(--muted);font-size:.7rem;}
