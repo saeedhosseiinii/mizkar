@@ -482,15 +482,16 @@ async function until(fn, ms = 3000) {
   const attRow = doc.querySelector('#nbBody [data-nb-att="attachments/2026-10-23-1530.png"]');
   ok('the sidebar lists the attachment', !!attRow, doc.querySelector('#nbBody').textContent.slice(0, 200));
 
-  console.log('\n— Claude Sessions opens read-only —');
-  nb.ui.write('Claude Sessions/2026-10-23 گفتگو.md', '# گفتگو\nهرچه کلود گفت\n');
-  nb.ui.open('Claude Sessions/2026-10-23 گفتگو.md');
+  console.log('\n— a read-only folder opens read-only —');
+  nb.ui.cfg({ readonlyFolders: ['آرشیو'] });
+  nb.ui.write('آرشیو/2026-10-23 گفتگو.md', '# گفتگو\nمتن آرشیو\n');
+  nb.ui.open('آرشیو/2026-10-23 گفتگو.md');
   ok('the editor is read-only for that folder', doc.getElementById('input').readOnly === true);
   ok('the page says so', doc.body.classList.contains('nb-ro'));
   nb.ui.open('ایده ها/جستجو.md');
   ok('a normal note is editable again', doc.getElementById('input').readOnly === false);
   // switching by the tab bar (not through the notebook) has to lock and unlock the editor too
-  nb.ui.open('Claude Sessions/2026-10-23 گفتگو.md');
+  nb.ui.open('آرشیو/2026-10-23 گفتگو.md');
   doc.querySelector('[data-action="tab-new"]').click();
   await sleep(30);
   ok('a new temp tab after a read-only note is editable', doc.getElementById('input').readOnly === false);
@@ -502,6 +503,7 @@ async function until(fn, ms = 3000) {
   tempTab.click();
   await sleep(30);
   ok('and a temp tab clicked after it is editable again', doc.getElementById('input').readOnly === false);
+  nb.ui.cfg({ readonlyFolders: [] });
 
   console.log('\n— more than one notebook —');
   nb.ui.cfg({ repo: 'me/notes', token: 'fake-token', provider: 'github' });

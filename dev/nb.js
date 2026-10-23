@@ -347,7 +347,7 @@ function nbCommitMessage(list){
   var C = null;
   var NB_DEFAULTS = {
     repo: '', branch: 'main', token: '', auto: true, idleSeconds: 20, weekStart: 'saturday',
-    calendar: 'jalali', attachments: 'attachments', configPath: '.mizkar/config.json',
+    calendar: 'jalali', attachments: 'attachments', readonlyFolders: [], configPath: '.mizkar/config.json',
     provider: 'github', profiles: [], active: '', lockToken: false,
     collections: [
       { id: 'daily', name: 'روزانه', color: '#6d5efc', calendar: 'day', path: 'روزانه/{jy}/{jm}/{jy}-{jm}-{jd}.md', template: 'templates/daily.md' },
@@ -941,13 +941,19 @@ function nbCommitMessage(list){
     f.dirty = true; f.at = Date.now();
     nbCountDirty();
   }
-  var NB_READONLY = /^Claude Sessions\//;
+  /** Folders kept read-only (settings → «پوشه های فقط خواندنی»); empty by default. */
+  function nbReadOnly(path){
+    return (C.readonlyFolders || []).some(function(f){
+      var pre = String(f || '').replace(/\/+$/, '');
+      return !!pre && (path === pre || path.indexOf(pre + '/') === 0);
+    });
+  }
   function nbApplyReadOnly(){
     var t = currentTab();
-    var ro = !!(t && t.nb && NB_READONLY.test(t.nb));
+    var ro = !!(t && t.nb && nbReadOnly(t.nb));
     ta.readOnly = ro;
     body.classList.toggle('nb-ro', ro);
-    if (ro) toast('«Claude Sessions» فقط خواندنی است — برای ویرایش یک کپی ذخیره کن', 'lock');
+    if (ro) toast('این پوشه فقط خواندنی است — برای ویرایش یک کپی بساز', 'lock');
   }
   function nbWrite(path, text, opts){
     opts = opts || {};
@@ -1931,6 +1937,7 @@ function nbCommitMessage(list){
       + [['saturday', 'شنبه'], ['sunday', 'یکشنبه'], ['monday', 'دوشنبه']].map(function(o){ return '<option value="' + o[0] + '"' + (C.weekStart === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
       + '</select></div>'
       + '<div class="nb-field"><label>پوشهٔ پیوست ها</label><input class="nb-input" id="nbAttachDir" dir="ltr" value="' + escapeHtml(C.attachments || 'attachments') + '"></div>'
+      + '<div class="nb-field"><label>پوشه های فقط خواندنی</label><input class="nb-input" id="nbRoFolders" dir="auto" placeholder="مثلاً: آرشیو، خروجی ها" value="' + escapeHtml((C.readonlyFolders || []).join('، ')) + '"><small class="nb-mini-text">با کاما جدا کن؛ یادداشت های این پوشه ها فقط خوانده می شوند.</small></div>'
       + '<h5>چند دفترچه</h5>'
       + (nbProfiles().length ? '<div class="nb-field"><label>دفترچهٔ فعال</label><select id="nbProf"><option value="">—</option>'
         + nbProfiles().map(function(p){ return '<option value="' + escapeHtml(p.name) + '"' + (C.active === p.name ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + escapeHtml(p.repo) + ')</option>'; }).join('')
@@ -1949,6 +1956,7 @@ function nbCommitMessage(list){
       if (!NB.locked) C.token = $('nbToken').value.trim();
       if ($('nbProvider')) C.provider = $('nbProvider').value;
       if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
+      if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
       C.auto = $('nbAuto').checked;
       C.idleSeconds = +$('nbIdle').value || 20;
       C.weekStart = $('nbWeekStart').value;
@@ -3053,7 +3061,7 @@ function nbCommitMessage(list){
   /** A due date on a task, written as «📅 1405-08-05». */
   function nbTaskDue(id, days){
     var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || f.deleted || NB_READONLY.test(at.path) || (f.enc && f.plain == null)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
+    if (!f || f.deleted || nbReadOnly(at.path) || (f.enc && f.plain == null)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
     var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
     if (!m) return;
     var inner = m[3].replace(HOME_DUE_RE, '').replace(/[📅⏳]\s*(?![0-9۰-۹])/g, '').replace(/\s+$/, '');

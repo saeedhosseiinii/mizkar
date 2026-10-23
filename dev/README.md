@@ -50,7 +50,7 @@ brings another device's edit, a forced conflict and its resolution, deletion, th
 committing on its own, full-text search with Persian normalisation, tags and backlinks, renaming
 that rewrites `[[links]]`, the link suggestion popup, the Shamsi calendar, an encrypted note whose
 ciphertext is what reaches the repository, an image attachment riding up in the same commit, the
-read-only `Claude Sessions` folder, and switching between two notebooks.
+a read-only folder (set in the notebook settings), and switching between two notebooks.
 
 ## Beta
 

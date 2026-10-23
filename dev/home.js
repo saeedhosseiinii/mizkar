@@ -30,7 +30,7 @@
           var y = +homeDigits(dm[1]), mo = +homeDigits(dm[2]), d = +homeDigits(dm[3]);
           if (y < 1700){ var g = nbJToG(y, mo, d); due = homeStamp(g.gy, g.gm, g.gd); } else due = homeStamp(y, mo, d);
         }
-        out.push({ path: p, line: i, done: m[2] !== ' ', text: m[3].replace(HOME_DUE_RE, '').trim(), due: due, ro: NB_READONLY.test(p) });
+        out.push({ path: p, line: i, done: m[2] !== ' ', text: m[3].replace(HOME_DUE_RE, '').trim(), due: due, ro: nbReadOnly(p) });
       });
     });
     return out;
@@ -116,7 +116,7 @@
   /** Ticks or unticks a task in its note (secret notes stay secret: the plaintext copy is what changes). */
   function homeToggleTask(id, done){
     var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || NB_READONLY.test(at.path) || (f.enc && f.plain == null)) return;
+    if (!f || nbReadOnly(at.path) || (f.enc && f.plain == null)) return;
     var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
     if (!m) return;
     lines[at.line] = m[1] + '- [' + (done ? 'x' : ' ') + '] ' + m[3];

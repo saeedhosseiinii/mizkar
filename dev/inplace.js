@@ -4,7 +4,7 @@
      Ticking ☐ works while reading. Temp tabs keep the two columns. */
   var ip = { tempView: null, wasNb: false, md: null, raf: 0 };
   function ipTab(){ var t = currentTab(); return t && t.nb ? t : null; }
-  function ipReadOnly(t){ return !!(t && NB_READONLY.test(t.nb)); }
+  function ipReadOnly(t){ return !!(t && nbReadOnly(t.nb)); }
   /** Called after a tab switch or a note opening: notes read, temp tabs get back the view they had. */
   function ipSync(){
     var t = ipTab();

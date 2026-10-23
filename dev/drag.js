@@ -95,7 +95,7 @@
   /** A task dropped on a day gets that due date. */
   function nbdDropTaskOnDay(id, stamp){
     var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || f.deleted || NB_READONLY.test(at.path)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
+    if (!f || f.deleted || nbReadOnly(at.path)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
     var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
     if (!m) return;
     var shamsi = nbShamsiStamp(stamp);
