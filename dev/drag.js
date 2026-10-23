@@ -67,9 +67,10 @@
   function nbdDropFolder(from, to){
     if (!from || from === to) return;
     if (to.indexOf(from + '/') === 0){ toast('پوشه را داخل خودش نمی شود برد', 'x'); return; }
+    if (nbReadOnly(from) || (to && nbReadOnly(to))){ toast('پوشهٔ فقط خواندنی جابه جا نمی شود', 'lock'); return; }
     var pre = from.replace(/\/+$/, '') + '/';
     var target = (to ? to.replace(/\/+$/, '') + '/' : '') + from.split('/').filter(Boolean).pop();
-    var moved = 0;
+    var moved = 0, left = 0;
     NB.paths.slice().forEach(function(p){
       if (p.indexOf(pre) !== 0) return;
       var rest = p.slice(pre.length);
@@ -78,41 +79,21 @@
         NB.paths = NB.paths.map(function(x){ return x === p ? nd : x; });
         return;
       }
-      var dst = target + '/' + rest;
-      if (NB.files[dst] && !NB.files[dst].deleted) return;
-      var f = NB.files[p];
-      nbMoveNote(p, dst);
-      if (f && f.isNew) delete NB.files[p];
-      moved++;
+      var dst = target + '/' + rest, f = NB.files[p];
+      if (!f || f.deleted || (NB.files[dst] && !NB.files[dst].deleted)){ if (f && !f.deleted) left++; return; }
+      if (nbMoveNote(p, dst)) moved++;
     });
     C.collections.forEach(function(c){
       if (nbFolderOfPattern(c.path) === from || nbFolderOfPattern(c.path).indexOf(pre) === 0) c.path = target + c.path.slice(from.length);
     });
     nbCollectionsChanged();
     nbCountDirty(); nbRender(); nbSaveFiles();
-    toast('«' + from + '» با ' + faNum(moved) + ' یادداشت جابه جا شد', 'folder', { label: 'بازگشت', icon: 'undo', run: function(){ nbdDropFolder(target, nbFolder(from)); } });
+    toast('«' + from + '» با ' + faNum(moved) + ' یادداشت جابه جا شد' + (left ? ' — ' + faNum(left) + ' تا نام تکراری داشت و ماند' : ''), 'folder', { label: 'بازگشت', icon: 'undo', run: function(){ nbdDropFolder(target, nbFolder(from)); } });
   }
   /** A task dropped on a day gets that due date. */
   function nbdDropTaskOnDay(id, stamp){
-    var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || f.deleted || nbReadOnly(at.path)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
-    var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
-    if (!m) return;
     var shamsi = nbShamsiStamp(stamp);
-    var inner = m[3].replace(HOME_DUE_RE, '').replace(/[📅⏳]\s*(?![0-9۰-۹])/g, '').replace(/\s+$/, '');
-    lines[at.line] = m[1] + '- [' + m[2] + '] ' + (inner ? inner + ' ' : '') + '📅 ' + shamsi;
-    var before = nbTextOf(f), text = lines.join('\n');
-    nbStoreText(f, text);
-    var t = nbTabFor(at.path);
-    if (t){ t.text = text; if (t.id === activeTab) ta.value = text; }
-    nbCountDirty(); nbStatus(); nbSaveFiles();
-    if (C.auto) nbScheduleCommit();
-    render(); if (NB.open) nbRender();
-    toast('سررسید: ' + nbShamsiLabel(shamsi), 'clock', { label: 'بازگشت', icon: 'undo', run: function(){
-      nbStoreText(f, before);
-      if (t && t.id === activeTab) ta.value = before;
-      nbCountDirty(); nbSaveFiles(); render(); if (NB.open) nbRender();
-    } });
+    nbTaskDueToast(id, shamsi, nbSetTaskDue(id, shamsi));
   }
   /** A note dropped on the page leaves a link at the drop point. */
   function nbdDropLink(path, el){

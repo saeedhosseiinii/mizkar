@@ -1,10 +1,12 @@
   /* === HOME: «امروز», tasks, recent notes, notes in the palette — Mizkar === */
   var HOME_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
   /** A due date written in a task: 📅 1405-08-05 (Shamsi) or 📅 2026-10-27, also «due: …». */
-  var HOME_DUE_RE = /(?:📅|⏳|\bdue:)\s*([0-9۰-۹]{4})[-\/.]([0-9۰-۹]{1,2})[-\/.]([0-9۰-۹]{1,2})/;
+  var HOME_DUE_RE = /(?:📅|⏳|\bdue:)\s*([0-9۰-۹٠-٩]{4})[-\/.]([0-9۰-۹٠-٩]{1,2})[-\/.]([0-9۰-۹٠-٩]{1,2})/;
   var HOME_TASK_RE = /^(\s*)[-*+] \[( |x|X)\] (.*)$/;
 
-  function homeDigits(s){ return String(s).replace(/[۰-۹]/g, function(d){ return String(d.charCodeAt(0) - 0x06F0); }); }
+  function homeDigits(s){ return nbDg(s); }
+  /** A task's text without its due date (and without a lone 📅 left behind). The `u` flag keeps emoji whole. */
+  function homeStripDue(s){ return String(s).replace(HOME_DUE_RE, '').replace(/(?:📅|⏳)\s*(?![0-9۰-۹٠-٩])/gu, '').replace(/\s+$/, ''); }
   function homeStamp(gy, gm, gd){ return gy + '-' + nbPad2(gm) + '-' + nbPad2(gd); }
   function homeToday(){ var d = new Date(); return homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
   function homeAddDays(stamp, n){
@@ -116,17 +118,11 @@
   /** Ticks or unticks a task in its note (secret notes stay secret: the plaintext copy is what changes). */
   function homeToggleTask(id, done){
     var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || nbReadOnly(at.path) || (f.enc && f.plain == null)) return;
+    if (!nbTaskEditable(f, at.path)) return;
     var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
     if (!m) return;
     lines[at.line] = m[1] + '- [' + (done ? 'x' : ' ') + '] ' + m[3];
-    var text = lines.join('\n');
-    nbStoreText(f, text);
-    var t = nbTabFor(at.path);
-    if (t){ t.text = text; if (t.id === activeTab){ ta.value = text; } }
-    nbCountDirty(); nbStatus(); nbSaveFiles();
-    if (C.auto) nbScheduleCommit();
-    render(); if (NB.open) nbRender();
+    nbPutNoteText(at.path, lines.join('\n'));
   }
   function homeOpenTask(id){
     var at = homeTaskAt(id), f = NB.files[at.path];

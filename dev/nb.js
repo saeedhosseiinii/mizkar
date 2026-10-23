@@ -346,8 +346,8 @@ function nbCommitMessage(list){
   };
   var C = null;
   var NB_DEFAULTS = {
-    repo: '', branch: 'main', token: '', auto: true, idleSeconds: 20, weekStart: 'saturday',
-    calendar: 'jalali', attachments: 'attachments', readonlyFolders: [], configPath: '.mizkar/config.json',
+    repo: '', branch: 'main', token: '', auto: true, syncOnline: true, idleSeconds: 20, weekStart: 'saturday',
+    calendar: 'jalali', attachments: 'attachments', readonlyFolders: ['Claude Sessions'], configPath: '.mizkar/config.json',
     provider: 'github', profiles: [], active: '', lockToken: false,
     collections: [
       { id: 'daily', name: 'روزانه', color: '#6d5efc', calendar: 'day', path: 'روزانه/{jy}/{jm}/{jy}-{jm}-{jd}.md', template: 'templates/daily.md' },
@@ -592,14 +592,19 @@ function nbCommitMessage(list){
       var g = nbGL();
       return nbApi('GET', '/projects/' + g.id + '/repository/commits?per_page=30&ref_name=' + encodeURIComponent(C.branch) + '&path=' + encodeURIComponent(path))
         .then(function(list){
-          return (list || []).map(function(c){ return { sha: c.id, message: c.title || c.message, date: (c.committed_date || '').slice(0, 10) }; });
+          return (list || []).map(function(c){ return { sha: c.id, message: c.title || c.message, date: nbLocalDay(c.committed_date) }; });
         });
     }
     var sp = nbSplitRepo();
     return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/commits?path=' + encodeURIComponent(path) + '&sha=' + encodeURIComponent(C.branch) + '&per_page=30')
       .then(function(list){
-        return (list || []).map(function(c){ return { sha: c.sha, message: c.commit.message, date: String((c.commit.author && c.commit.author.date) || '').slice(0, 10) }; });
+        return (list || []).map(function(c){ return { sha: c.sha, message: c.commit.message, date: nbLocalDay(c.commit.author && c.commit.author.date) }; });
       });
+  }
+  /** The day of an ISO time where the user is (an evening commit in Tehran is not the next UTC day). */
+  function nbLocalDay(iso){
+    var d = iso ? new Date(iso) : null;
+    return d && !isNaN(d) ? homeStamp(d.getFullYear(), d.getMonth() + 1, d.getDate()) : '';
   }
   /** One commit carrying every change, on either provider. */
   function nbCommitPush(changes, message, baseSha){
@@ -901,7 +906,7 @@ function nbCommitMessage(list){
               fd.text = fd.base = fd._ct; fd.basePlain = fd.plain;
               delete fd._ct; delete fd.localCipher;
             } else fd.base = fd.text;
-            fd.dirty = false; fd.isNew = false; fd.sha = ''; fd.remote = true; fd.at = Date.now();
+            fd.dirty = false; fd.isNew = false; fd.sha = ''; fd.remote = true; fd.movedFrom = ''; fd.at = Date.now();
           });
           Object.keys(NB.attach).forEach(function(k){
             var a = NB.attach[k];
@@ -986,18 +991,29 @@ function nbCommitMessage(list){
     if (C.auto) nbScheduleCommit();
     return n;
   }
+  /**
+   * Moves a note. The repository only sees a delete of the path it has and a new file: the copy is always
+   * new, and remembers where it came from (`movedFrom`) so the pending list shows one «جابه جا» row.
+   * Moving back onto a path the repository still has brings that note back instead of adding a copy.
+   */
   function nbMoveNote(oldPath, newPath){
     if (!oldPath || !newPath || oldPath === newPath) return false;
-    if (NB.files[newPath] && !NB.files[newPath].deleted){ toast('یادداشتی با همین نام هست', 'x'); return false; }
-    if (NB.files[newPath]) delete NB.files[newPath];     // the placeholder left behind by the move that brought it here
-    var f = NB.files[oldPath];
-    if (!f) return false;
-    var wasNew = !!f.isNew;
-    var copy = Object.assign({}, f, { path: newPath, dirty: true, isNew: wasNew, deleted: false, at: Date.now(), movedFrom: wasNew ? '' : oldPath });
-    NB.files[newPath] = copy;
-    if (NB.paths.indexOf(newPath) === -1) NB.paths.push(newPath);
-    if (wasNew){ delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
-    else { f.deleted = true; f.dirty = true; }
+    var f = NB.files[oldPath], dst = NB.files[newPath];
+    if (!f || f.deleted) return false;
+    if (nbReadOnly(oldPath) || nbReadOnly(newPath)){ toast('پوشهٔ فقط خواندنی جابه جا نمی شود', 'lock'); return false; }
+    if (dst && !dst.deleted){ toast('یادداشتی با همین نام هست', 'x'); return false; }
+    if (dst && dst.remote){
+      Object.assign(dst, { text: f.text, enc: f.enc, plain: f.plain, deleted: false, movedFrom: '', at: Date.now() });
+      if (f.localCipher) dst.localCipher = f.localCipher; else delete dst.localCipher;
+      dst.dirty = dst.enc ? (dst.plain == null ? !!f.dirty : dst.plain !== dst.basePlain) : dst.text !== dst.base;
+    } else {
+      if (dst){ delete NB.files[dst.path]; NB.paths = NB.paths.filter(function(p){ return p !== newPath; }); }
+      NB.files[newPath] = Object.assign({}, f, { path: newPath, dirty: true, isNew: true, remote: false, deleted: false, at: Date.now(),
+        movedFrom: f.remote ? oldPath : (f.movedFrom || '') });
+      NB.paths.push(newPath);
+    }
+    if (f.remote){ f.deleted = true; f.dirty = true; }
+    else { delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
     nbRetargetTab(oldPath, newPath);
     nbCountDirty(); nbRender(); nbStatus(); nbSaveFiles();
     if (C.auto) nbScheduleCommit();
@@ -1934,7 +1950,8 @@ function nbCommitMessage(list){
       + '<p class="nb-hint">توکن fine-grained فقط برای همین مخزن، با دسترسی Contents (خواندن و نوشتن).</p>'
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="test">آزمایش اتصال</button></div>'
       + '<p class="nb-hint" id="nbTestOut"></p>'
-      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند</small></span></label></div>'
+      + '<label class="sw"><input type="checkbox" id="nbAuto"' + (C.auto ? ' checked' : '') + '><span class="sw-ui"></span><span><b>ارسال خودکار</b><small>چند ثانیه بعد از آخرین تغییر، همه با یک commit می روند</small></span></label>'
+      + '<label class="sw"><input type="checkbox" id="nbSyncOnline"' + (C.syncOnline !== false ? ' checked' : '') + '><span class="sw-ui"></span><span><b>همگام سازی وقتی اینترنت برگشت</b><small>اول تغییرهای مخزن گرفته می شود، بعد آنچه منتظر مانده بود می رود</small></span></label></div>'
       + '<div class="nb-sec"><h4>مجموعه ها <small>پوشه + تقویم + قالب</small></h4><div class="nb-collist">'
       + C.collections.map(function(c, i){
         var kind = (NB_CAL_KINDS.filter(function(k){ return k[0] === (c.calendar || ''); })[0] || ['', ''])[1];
@@ -1977,6 +1994,7 @@ function nbCommitMessage(list){
       if ($('nbAttachDir')) C.attachments = $('nbAttachDir').value.trim() || 'attachments';
       if ($('nbRoFolders')) C.readonlyFolders = $('nbRoFolders').value.split(/[،,]/).map(function(s){ return s.trim(); }).filter(Boolean);
       C.auto = $('nbAuto').checked;
+      if ($('nbSyncOnline')) C.syncOnline = $('nbSyncOnline').checked;
       C.idleSeconds = +$('nbIdle').value || 20;
       C.weekStart = $('nbWeekStart').value;
       C.showGregorian = $('nbGreg').checked;
@@ -2132,9 +2150,15 @@ function nbCommitMessage(list){
       if (m) m.hidden = true;
     }
   });
+  /** Back online (or the phone woke up with the network): take what came in, then send what waited. */
   addEventListener('online', function(){
     nbSay();
-    nbPull({ quiet: true }).then(function(){ if (nbCountDirty()) nbPush({}); });
+    if (C.syncOnline === false || !C.repo || NB.locked) return;
+    nbPull({ quiet: true }).then(function(){
+      var n = nbCountDirty();
+      if (!n) return;
+      nbPush({}).then(function(ok){ if (ok) toast('اینترنت برگشت — ' + faNum(n) + ' تغییر ارسال شد', 'cloud'); });
+    });
   });
   addEventListener('offline', function(){ nbSay('offline'); });
   setInterval(nbAutoTick, 60000);
@@ -2201,7 +2225,7 @@ function nbCommitMessage(list){
 
   /* ================= جستجو، برچسب و ارجاع ها ================= */
   var nbIdxCache = null, nbSearchCache = null, nbSearchKey = '';
-  function nbIdxInvalidate(){ nbIdxCache = null; nbSearchCache = null; }
+  function nbIdxInvalidate(){ nbIdxCache = null; nbSearchCache = null; nbDayIdx = null; }
   /** Which collection a path was made by (so the calendar and the filters can colour it). */
   var nbColRe = {};
   function nbCollectionOf(path){
@@ -2434,30 +2458,45 @@ function nbCommitMessage(list){
     return n.getFullYear() === g.gy && n.getMonth() + 1 === g.gm && n.getDate() === g.gd;
   }
   /** Notes that a day already has: one path per collection whose pattern lands on that date. */
+  /**
+   * The notes of «many per day» collections (pattern with {title}), by Gregorian day: the date comes from the
+   * front matter (date:/created:), else from a date in the path. Built once per change of the notebook.
+   */
+  var nbDayIdx = null;
+  function nbDayIndex(){
+    if (nbDayIdx) return nbDayIdx;
+    nbDayIdx = {};
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (!f || f.deleted || p.slice(-1) === '/' || !nbIsNote(p)) return;
+      var col = nbCollectionOf(p);
+      if (!col || !col.calendar || String(col.path).indexOf('{title}') === -1) return;
+      var fm = (f.enc && f.plain == null) ? {} : nbParseFm(nbTextOf(f)).data;
+      var stamp = nbShamsiStamp(fm.date || fm.created) || nbShamsiStamp(nbStampOfPath(p));
+      if (!stamp) return;
+      var g = nbStampToDate(stamp), key = homeStamp(g.getFullYear(), g.getMonth() + 1, g.getDate());
+      (nbDayIdx[key] = nbDayIdx[key] || []).push({ path: p, col: col });
+    });
+    return nbDayIdx;
+  }
   function nbDayNotes(d){
     var date = new Date(d.gy, d.gm - 1, d.gd, 12, 0);
-    var out = [];
-    nbCalFiltered().forEach(function(col){
-      if (!col.path) return;
-      var pattern = String(col.path);
-      if (pattern.indexOf('{title}') !== -1) return;              // «many per day»: only a dot when a note matches
-      var p = nbFillPath(pattern, nbCtx(date, '', C.weekStart));
+    var shown = nbCalFiltered(), out = [];
+    shown.forEach(function(col){
+      if (!col.path || String(col.path).indexOf('{title}') !== -1) return;
+      var p = nbFillPath(String(col.path), nbCtx(date, '', C.weekStart));
       if (NB.files[p] && !NB.files[p].deleted) out.push({ path: p, col: col });
-      else if (pattern.indexOf('{title}') !== -1) out.push(null);
     });
-    if (!out.length){
-      // a day may still hold notes whose title carries the date (جلسه ها/…)
-      var stamp = nbCtx(date, '', C.weekStart).jdate.replace(/\//g, '/');
-      NB.paths.forEach(function(p){
-        var f = NB.files[p];
-        if (!f || f.deleted || p.slice(-1) === '/') return;
-        if (p.indexOf(String(d.gy) + '-') !== -1 && p.indexOf(nbPad2(d.gm) + '-' + nbPad2(d.gd)) !== -1) out.push({ path: p, col: nbCollectionOf(p) });
-      });
-    }
-    return out.filter(Boolean);
+    (nbDayIndex()[homeStamp(d.gy, d.gm, d.gd)] || []).forEach(function(x){
+      if (shown.indexOf(x.col) !== -1) out.push(x);
+    });
+    return out;
   }
   function nbCalFiltered(){
-    return C.collections.filter(function(c){ return c.calendar && (!NB.calFilter || NB.calFilter === c.id); });
+    var cals = C.collections.filter(function(c){ return c.calendar; });
+    // a filter left over from a collection that is gone (or lost its calendar) shows everything again
+    if (NB.calFilter && !cals.some(function(c){ return c.id === NB.calFilter; })) NB.calFilter = '';
+    return cals.filter(function(c){ return !NB.calFilter || NB.calFilter === c.id; });
   }
   function nbCalHtml(){
     if (!nbCalFiltered().length) return '<div class="nb-cal-sec">' + nbEmptyBox('هنوز مجموعه ای با تقویم نداری.', 'مجموعهٔ تازه…', 'new-collection', 'folder') + '</div>';
@@ -2846,8 +2885,12 @@ function nbCommitMessage(list){
   }
 
   /* ================= تاریخ شمسی: انتخابگر و برچسب ها ================= */
-  /** Persian/Latin digits to Latin digits. */
-  function nbDg(s){ return String(s == null ? '' : s).replace(/[۰-۹]/g, function(c){ return String(c.charCodeAt(0) - 0x06F0); }); }
+  /** Persian, Arabic and Latin digits to Latin digits. */
+  function nbDg(s){
+    return String(s == null ? '' : s).replace(/[۰-۹٠-٩]/g, function(c){ var k = c.charCodeAt(0); return String(k - (k >= 0x06F0 ? 0x06F0 : 0x0660)); });
+  }
+  /** Days in a Shamsi month: 31 for the first six, 30 for the next five, Esfand 30 only in a leap year. */
+  function nbJMonthLen(jy, jm){ return jm <= 6 ? 31 : jm <= 11 ? 30 : (nbJalCal(jy).leap === 0 ? 30 : 29); }
   /** Any date (Date, «1405-08-05», «۱۴۰۵/۰۸/۰۵», «2026-10-27») as a Shamsi «1405-08-05» stamp. */
   function nbShamsiStamp(v){
     if (Object.prototype.toString.call(v) === '[object Date]') return nbCtx(v, '', C.weekStart).jdateDash;
@@ -2855,7 +2898,8 @@ function nbCommitMessage(list){
     if (!m) return '';
     var y = +m[1], mo = +m[2], d = +m[3];
     if (!y || !mo || !d || mo > 12 || d > 31) return '';
-    if (y < 1700) return m[1] + '-' + nbPad2(mo) + '-' + nbPad2(d);      // already Shamsi
+    if (y < 1700) return d > nbJMonthLen(y, mo) ? '' : m[1] + '-' + nbPad2(mo) + '-' + nbPad2(d);      // already Shamsi
+    if (new Date(y, mo - 1, d).getDate() !== d) return '';                                              // 2026-02-30
     var j = nbGToJ(y, mo, d);
     return j.jy + '-' + nbPad2(j.jm) + '-' + nbPad2(j.jd);
   }
@@ -2878,7 +2922,7 @@ function nbCommitMessage(list){
   }
   /** The days of a Shamsi month laid out from the week start (null = padding). */
   function nbJMonthGrid(jy, jm){
-    var len = jm <= 6 ? 31 : jm <= 11 ? 30 : (nbJalCal(jy).leap === 0 ? 30 : 29);
+    var len = nbJMonthLen(jy, jm);
     var g = nbJToG(jy, jm, 1);
     var dow = new Date(g.gy, g.gm - 1, g.gd).getDay();                  // 0 = Sunday
     var start = { saturday: 0, sunday: 1, monday: 2 }[C.weekStart || 'saturday'] || 0;
@@ -2927,7 +2971,7 @@ function nbCommitMessage(list){
       var s = nbShamsiStamp($('nbDpIn').value);
       if (s){ chosen = s; view = { jy: +s.split('-')[0], jm: +s.split('-')[1] }; draw(); }
     });
-    $('nbMini2').addEventListener('click', function(e){
+    $('nbMini2').onclick = function(e){          // one handler: each picker replaces the last one's
       var b = e.target.closest('[data-nb-dp]');
       if (!b) return;
       e.stopPropagation();
@@ -2942,7 +2986,7 @@ function nbCommitMessage(list){
       if (w === 'clear'){ if (opts.onOk) opts.onOk(''); nbCloseMini('nbMini2'); return; }
       if (w === 'ok'){ if (opts.onOk) opts.onOk(chosen); nbCloseMini('nbMini2'); return; }
       if (/^\d{4}-\d{2}-\d{2}$/.test(w)) pick(w);
-    });
+    };
   }
   /** A date field for a dialog: shows the Shamsi date and opens the picker (id carries the stamp). */
   function nbDateField(id, value, o){
@@ -3014,11 +3058,34 @@ function nbCommitMessage(list){
   function nbMoveNoteToCollection(path, ci){
     var col = C.collections[ci], f = NB.files[path];
     if (!col || !f) return;
-    var fm = nbParseFm(nbTextOf(f)) || {};
-    var date = nbStampToDate(nbShamsiStamp(fm.date || fm.created) || new Date());
-    var to = nbFillPath(col.path, nbCtx(date, nbTitle(path), C.weekStart));
+    if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
+    if (f.enc && f.plain == null){ toast('اول یادداشت رمزدار را باز کن — تاریخش داخل متن است', 'lock'); return; }
+    var fm = nbParseFm(nbTextOf(f)).data;
+    var stamp = nbShamsiStamp(fm.date || fm.created) || nbShamsiStamp(nbStampOfPath(path));
+    var date = stamp ? nbStampToDate(stamp) : new Date();
+    // «1405-08-05 جلسه» keeps only «جلسه»: the pattern adds its own date
+    var title = nbTitle(path).replace(/^[0-9۰-۹]{4}[-_.][0-9۰-۹]{1,2}[-_.][0-9۰-۹]{1,2}[\s_-]*/, '') || nbTitle(path);
+    var to = nbFillPath(col.path, nbCtx(date, title, C.weekStart));
     if (to === path){ toast('همین حالا در این مجموعه است', 'check'); return; }
-    if (NB.files[to] && !NB.files[to].deleted){ toast('در آن مجموعه یادداشتی با همین نام هست', 'x'); return; }
+    if (NB.files[to] && !NB.files[to].deleted){
+      var free = nbFreePath(to);
+      nbConfirm('نام تکراری', 'در «' + col.name + '» یادداشتی با همین نام هست. با نام «' + nbTitle(free) + '» منتقل شود؟', function(){ nbMoveNoteTo(path, free, col); });
+      return;
+    }
+    return nbMoveNoteTo(path, to, col);
+  }
+  /** The first free «name 2.md», «name 3.md», … next to a taken path. */
+  function nbFreePath(path){
+    var dot = path.lastIndexOf('.'), stem = path.slice(0, dot), ext = path.slice(dot);
+    for (var i = 2; i < 500; i++){ var p = stem + ' ' + i + ext; if (!NB.files[p] || NB.files[p].deleted) return p; }
+    return stem + ' ' + Date.now() + ext;
+  }
+  /** A date in a note's path (…/1405/08/1405-08-05.md, 2026-10-27 …), as a stamp; '' when there is none. */
+  function nbStampOfPath(path){
+    var m = nbDg(path).match(/(\d{4})[-_.\/](\d{1,2})[-_.\/](\d{1,2})(?!\d)/);
+    return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+  }
+  function nbMoveNoteTo(path, to, col){
     var was = path;
     if (!nbMoveNote(path, to)) return '';
     var dir = nbFolder(to);                          // the folder may be new: show it in the tree
@@ -3077,53 +3144,52 @@ function nbCommitMessage(list){
   /** The month header: filter the dots, or jump to today. */
   function nbCalMonthMenu(){
     var items = [{ label: (NB.calFilter ? '' : '✓ ') + 'همهٔ مجموعه ها', act: function(){ NB.calFilter = ''; nbRender(); } }];
-    C.collections.forEach(function(c){
+    C.collections.filter(function(c){ return c.calendar; }).forEach(function(c){
       items.push({ label: (NB.calFilter === c.id ? '✓ ' : '') + 'فقط ' + c.name, act: function(){ NB.calFilter = c.id; nbRender(); } });
     });
     items.push(null, { label: 'برو به امروز', act: function(){ var t = nbCtx(new Date(), '', C.weekStart); NB.calMonth = { jy: +t.jy, jm: +t.jm }; nbRender(); } });
     return items;
   }
-  /** A due date on a task, written as «📅 1405-08-05». */
-  function nbTaskDue(id, days){
-    var at = homeTaskAt(id), f = NB.files[at.path];
-    if (!f || f.deleted || nbReadOnly(at.path) || (f.enc && f.plain == null)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
-    var lines = nbTextOf(f).split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
-    if (!m) return;
-    var inner = m[3].replace(HOME_DUE_RE, '').replace(/[📅⏳]\s*(?![0-9۰-۹])/g, '').replace(/\s+$/, '');
-    if (days !== null){
-      var stamp = nbShamsiStamp(homeAddDays(homeToday(), days));
-      inner = (inner ? inner + ' ' : '') + '📅 ' + stamp;
-    }
-    lines[at.line] = m[1] + '- [' + m[2] + '] ' + inner;
-    var text = lines.join('\n');
+  function nbTaskEditable(f, path){ return !!f && !f.deleted && !nbReadOnly(path) && !(f.enc && f.plain == null); }
+  /** New text for a note from outside its editor: the working copy, its tab (open or not), the lists, the send queue. */
+  function nbPutNoteText(path, text){
+    var f = NB.files[path];
     nbStoreText(f, text);
-    var t = nbTabFor(at.path);
+    var t = nbTabFor(path);
     if (t){ t.text = text; if (t.id === activeTab) ta.value = text; }
     nbCountDirty(); nbStatus(); nbSaveFiles();
     if (C.auto) nbScheduleCommit();
     render(); if (NB.open) nbRender();
-    toast(days === null ? 'تاریخ سررسید برداشته شد' : 'سررسید: ' + nbShamsiLabel(stamp), 'clock');
+  }
+  /** Writes (or, with no stamp, removes) a task's «📅 1405-08-05». Returns the note's text before, or null. */
+  function nbSetTaskDue(id, stamp){
+    var at = homeTaskAt(id), f = NB.files[at.path];
+    if (!nbTaskEditable(f, at.path)){ toast('این یادداشت ویرایش نمی شود', 'x'); return null; }
+    var before = nbTextOf(f), lines = before.split('\n'), m = HOME_TASK_RE.exec(lines[at.line] || '');
+    if (!m) return null;
+    var inner = homeStripDue(m[3]);
+    if (stamp) inner = (inner ? inner + ' ' : '') + '📅 ' + stamp;
+    lines[at.line] = m[1] + '- [' + m[2] + '] ' + inner;
+    nbPutNoteText(at.path, lines.join('\n'));
+    return before;
+  }
+  /** A due date some days from today (null removes it), with «بازگشت». */
+  function nbTaskDue(id, days){
+    var stamp = days === null ? '' : nbShamsiStamp(homeAddDays(homeToday(), days));
+    nbTaskDueToast(id, stamp, nbSetTaskDue(id, stamp));
+  }
+  function nbTaskDueToast(id, stamp, before){
+    if (before == null) return;
+    var path = homeTaskAt(id).path;
+    toast(stamp ? 'سررسید: ' + nbShamsiLabel(stamp) : 'تاریخ سررسید برداشته شد', 'clock',
+      { label: 'بازگشت', icon: 'undo', run: function(){ if (NB.files[path]) nbPutNoteText(path, before); } });
   }
   function nbTaskDuePick(id){
     var at = homeTaskAt(id), f = NB.files[at.path];
-    var cur = f ? (HOME_DUE_RE.exec((nbTextOf(f).split('\n')[at.line] || '')) || [])[0] : '';
-    nbDateDialog({ title: 'تاریخ سررسید', allowEmpty: true, value: cur ? nbShamsiStamp(cur.replace(/^[^0-9۰-۹]*/, '')) : '',
-      onOk: function(stamp){
-        var at2 = homeTaskAt(id), f2 = NB.files[at2.path];
-        if (!f2) return;
-        var lines = nbTextOf(f2).split('\n'), m = HOME_TASK_RE.exec(lines[at2.line] || '');
-        if (!m) return;
-        var inner = m[3].replace(HOME_DUE_RE, '').replace(/[📅⏳]\s*(?![0-9۰-۹])/g, '').replace(/\s+$/, '');
-        if (stamp) inner = (inner ? inner + ' ' : '') + '📅 ' + stamp;
-        lines[at2.line] = m[1] + '- [' + m[2] + '] ' + inner;
-        var text = lines.join('\n');
-        nbStoreText(f2, text);
-        var t = nbTabFor(at2.path);
-        if (t){ t.text = text; if (t.id === activeTab) ta.value = text; }
-        nbCountDirty(); nbStatus(); nbSaveFiles();
-        render(); if (NB.open) nbRender();
-        toast(stamp ? 'سررسید: ' + nbShamsiLabel(stamp) : 'تاریخ سررسید برداشته شد', 'clock');
-      } });
+    if (!nbTaskEditable(f, at.path)){ toast('این یادداشت ویرایش نمی شود', 'x'); return; }
+    var cur = (HOME_DUE_RE.exec((nbTextOf(f).split('\n')[at.line] || '')) || [])[0];
+    nbDateDialog({ title: 'تاریخ سررسید', allowEmpty: true, value: cur ? nbShamsiStamp(cur.replace(/^[^0-9۰-۹٠-٩]*/, '')) : '',
+      onOk: function(stamp){ nbTaskDueToast(id, stamp, nbSetTaskDue(id, stamp)); } });
   }
   function nbTaskMenu(id){
     var at = homeTaskAt(id), f = NB.files[at.path];
@@ -3242,14 +3308,18 @@ function nbCommitMessage(list){
     return true;
   }
   /** Writes the editor and lets the app sync the tab, the working copy and the preview. */
+  /** Puts new text in the editor as if typed (undo, save, send). A read-only note refuses. */
   function nbEditApply(text, from, to){
+    if (ta.readOnly){ toast('این یادداشت فقط خواندنی است', 'lock'); return false; }
     ta.value = text;
     var a = from == null ? text.length : from, b = to == null ? a : to;
     ta.focus();
     ta.setSelectionRange(a, b);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
   }
   function nbWrapSelection(t, sel){
+    if (ta.readOnly){ toast('این یادداشت فقط خواندنی است', 'lock'); return; }
     var from = ta.selectionStart, to = ta.selectionEnd, inner = sel.trim();
     var text = ta.value.slice(0, from) + '[[' + inner + ']]' + ta.value.slice(to);
     var at = from + 2 + inner.length;
@@ -3257,6 +3327,7 @@ function nbCommitMessage(list){
     nbMaybeSuggest();                                              // the same list that shows while typing
   }
   function nbNoteFromSelection(t, sel){
+    if (ta.readOnly){ toast('این یادداشت فقط خواندنی است', 'lock'); return; }
     var text = sel.trim();
     var title = text.split('\n')[0].replace(/^#+\s*/, '').replace(/\[\[|\]\]/g, '').trim().slice(0, 60) || 'یادداشت تازه';
     var safe = title.replace(/[\\/:*?"<>|]/g, '');
@@ -3266,12 +3337,21 @@ function nbCommitMessage(list){
     var from = ta.selectionStart, to = ta.selectionEnd;
     var fm = nbCtx(new Date(), '', C.weekStart);
     var body = text.split('\n').slice(1).join('\n');
-    nbWrite(path, '---\ndate: ' + fm.jdateDash + '\ncreated: ' + fm.gdate + '\n---\n# ' + title + '\n\n' + body + '\n');
+    var note = '---\ndate: ' + fm.jdateDash + '\ncreated: ' + fm.gdate + '\n---\n# ' + title + '\n\n' + body + '\n';
+    var src = t.nb && NB.files[t.nb];
+    if (src && src.enc){
+      // taken out of a secret note: the new note is secret too, and its plaintext never reaches storage
+      if (NB.files[path]){ delete NB.files[path]; NB.paths = NB.paths.filter(function(p){ return p !== path; }); }
+      nbPutFile(path, '', '', { base: '', enc: true, plain: note, dirty: true, isNew: true, remote: false, deleted: false });
+      nbCountDirty(); nbStatus(); nbRender(); nbSaveFiles();
+      if (C.auto) nbScheduleCommit();
+    } else nbWrite(path, note);
     var text2 = ta.value.slice(0, from) + '[[' + title + ']]' + ta.value.slice(to);
     nbEditApply(text2, from + 2 + title.length);
     toast('یادداشت تازه: ' + title, 'plus');
   }
   function nbMakeTasks(t, sel){
+    if (ta.readOnly){ toast('این یادداشت فقط خواندنی است', 'lock'); return; }
     var from = ta.selectionStart, to = ta.selectionEnd;
     var lines = sel.split('\n').map(function(l){
       if (HOME_TASK_RE.test(l)) return l;
@@ -3344,7 +3424,7 @@ function nbCommitMessage(list){
     files.filter(function(x){ return x.deleted; }).forEach(function(x){ deleted[x.path] = x; });
     var out = [];
     files.filter(function(x){ return !x.deleted; }).forEach(function(x){
-      var from = x.movedFrom && deleted[x.movedFrom] ? x.movedFrom : Object.keys(deleted).filter(function(p){ return deleted[p].sha && deleted[p].sha === x.sha; })[0];
+      var from = x.movedFrom && deleted[x.movedFrom] ? x.movedFrom : '';     // only a real move pairs: equal content is not a move
       if (from){
         delete deleted[from];
         out.push({ kind: 'move', path: x.path, from: from, label: nbTitle(x.path), folder: nbFolder(x.path) });
@@ -3396,6 +3476,7 @@ function nbCommitMessage(list){
     return null;
   }
   function nbPendRefresh(){
+    nbCountDirty(); nbSay();
     var pop = $('nbSyncPop');
     if (pop && !pop.hidden){ pop.innerHTML = nbSyncPopHtml(); nbSyncPopWire(); }
     if (NB.open) nbRender();
@@ -3404,7 +3485,8 @@ function nbCommitMessage(list){
     var row = nbPendingRows()[i];
     if (!row) return;
     var f = NB.files[row.path];
-    var base = (row.from && NB.files[row.from] ? nbTextOf(NB.files[row.from]) : '') || (f && f.base) || '';
+    var src = row.from && NB.files[row.from] ? NB.files[row.from] : f;
+    var base = src ? (src.enc ? (src.basePlain || '') : (src.base || '')) : '';
     var now = f ? (f.deleted ? '' : nbTextOf(f)) : '';
     var label = nbPendLabel(row).label;
     if (!base && row.kind === 'new'){ base = ''; }
@@ -3428,8 +3510,9 @@ function nbCommitMessage(list){
       var f = NB.files[row.path];
       if (row.att){
         var a = NB.attach[row.path];
-        if (a){ a.dirty = false; a.deleted = false; }
-        nbSaveFiles(); nbPendRefresh(); toast('پیوست دور انداخته شد', 'undo');
+        if (a && !(NB.attachMeta[row.path] && NB.attachMeta[row.path].remote)) delete NB.attach[row.path];   // never sent: it just goes
+        else if (a){ a.dirty = false; a.deleted = false; }
+        nbSaveAttach(); nbPendRefresh(); toast('پیوست دور انداخته شد', 'undo');
         return;
       }
       if (row.kind === 'new'){
@@ -3447,8 +3530,8 @@ function nbCommitMessage(list){
         return;
       }
       if (row.kind === 'del'){
-        if (f){ f.deleted = false; f.dirty = false; }
-        nbCountDirty(); nbSaveFiles(); nbPendRefresh();
+        if (f){ f.deleted = false; nbRevertFile(f); }
+        nbSaveFiles(); nbPendRefresh();
         toast('یادداشت برگشت', 'undo');
         return;
       }
@@ -3460,30 +3543,28 @@ function nbCommitMessage(list){
         return;
       }
       var restore = function(){
-        if (f && f.base){ nbStoreText(f, f.base); f.dirty = false; f.enc = false; f.plain = null; }
-        if (f && nbIsEncrypted && nbIsEncrypted(f.base)) f.enc = true;
-        nbRetargetText(row.path);
-        nbCountDirty(); nbSaveFiles(); nbPendRefresh();
+        if (f) nbRevertFile(f);
+        nbRefreshOpenTab(row.path, true);
+        if (row.path === C.configPath){ NB.cfgSeen = ''; nbApplyRepoConfig(); }
+        nbSaveFiles(); nbPendRefresh();
         toast('به نسخهٔ مخزن برگشت', 'undo');
       };
-      if (f && f.base) restore();
+      if (!f || f.base) restore();
       else {
         nbFileText(row.path).then(function(old){
-          if (f){ nbStoreText(f, old); f.dirty = false; }
-          nbRetargetText(row.path);
-          nbCountDirty(); nbSaveFiles(); nbPendRefresh();
-          toast('به نسخهٔ مخزن برگشت', 'undo');
+          f.base = old;
+          restore();
         }, function(){ toast('نسخهٔ مخزن خوانده نشد', 'x'); });
       }
     });
   }
-  /** The editor shows the file, so it has to follow what just happened to it. */
-  function nbRetargetText(path){
-    var t = nbTabFor(path), f = NB.files[path];
-    if (!t || !f) return;
-    t.text = f.deleted ? '' : nbTextOf(f);
-    if (t.id === activeTab){ ta.value = t.text; render(); }
-    else drawTabs();
+  /** Puts a note back to the version last pulled; a secret note gets its pulled ciphertext and plaintext back. */
+  function nbRevertFile(f){
+    f.text = f.base || '';
+    f.enc = nbIsEncrypted(f.text);
+    f.plain = f.enc ? (f.basePlain != null ? f.basePlain : null) : null;
+    delete f.localCipher;
+    f.dirty = false; f.at = Date.now();
   }
   function nbMoveTabOutOf(path){
     var t = nbTabFor(path);
@@ -3853,7 +3934,7 @@ function nbCommitMessage(list){
     newDialog: nbNewDialog, dateDialog: nbDateDialog, shamsi: nbShamsiLabel, stampToDate: nbStampToDate,
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
-    pending: nbPendingRows, syncPop: function(){ return $('nbSyncPop'); },
+    pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
     closeTopLayer: nbCloseTopLayer, layers: function(){ return nbHistoryDepth; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
@@ -3871,4 +3952,5 @@ function nbCommitMessage(list){
   window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); };
   window.nbHomeHtml = nbHomeHtml;
   window.nbPaletteItems = nbPaletteItems;
+  window.nbShamsiLabel = nbShamsiLabel;          // the front matter strip shows date:/created: in Shamsi
 })();

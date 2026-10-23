@@ -73,7 +73,7 @@ PATCHES = [
         "    if (!v) return;\n"
         "    if (/^\\[.*\\]$/.test(v)) v = v.slice(1, -1).split(',').map(function(s){ return s.trim().replace(/^[\"']|[\"']$/g, ''); }).filter(Boolean).join('، ');\n"
         "    if (/^(tags?|tag)$/i.test(k)) tags.push(v);\n"
-        "    else props.push([k, v]);\n"
+        "    else props.push([k, /^(date|created|updated|due)$/i.test(k) && typeof window !== \"undefined\" && window.nbShamsiLabel ? window.nbShamsiLabel(v) || v : v]);\n"
         "  });\n"
         "  if (!props.length && !tags.length) return '';\n"
         "  return '<div class=\"fmprops\" data-ui>'\n"
