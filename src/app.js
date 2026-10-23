@@ -7477,9 +7477,9 @@ var NB_CSS = [
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
   'body.ip-tint textarea#input{color:transparent;-webkit-text-fill-color:transparent;}',
   'body.ip-tint textarea#input::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);}',
-  /* transparent fill hid the selected glyphs; restore ink only for the selection highlight */
-  'body.ip-tint textarea#input::selection{color:var(--ink);-webkit-text-fill-color:var(--ink);background:color-mix(in srgb,var(--accent) 32%,transparent);}',
-  'body.ip-tint textarea#input::-moz-selection{color:var(--ink);background:color-mix(in srgb,var(--accent) 32%,transparent);}',
+  /* transparent fill breaks native word-select in WebKit; ::selection must force visible ink */
+  'body.ip-tint textarea#input::selection{color:var(--ink)!important;-webkit-text-fill-color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
+  'body.ip-tint textarea#input::-moz-selection{color:var(--ink)!important;background:color-mix(in srgb,var(--accent) 40%,transparent);}',
   '.ta-md{position:absolute;z-index:0;overflow:hidden;pointer-events:none;box-sizing:border-box;margin:0;border:0;color:var(--ink);unicode-bidi:isolate;text-align:start;white-space:pre-wrap;overflow-wrap:anywhere;}',
   '.ta-md[dir="ltr"]{unicode-bidi:plaintext;}',
   '.ta-md[hidden]{display:none;}',
@@ -13724,19 +13724,59 @@ function nbCommitMessage(list){
       if (i === 0 && line === '---'){ st.fm = true; return '<span class="mk-fm" dir="ltr">---</span>'; }
       if (st.fm && line === '---'){ st.fm = false; return '<span class="mk-fm" dir="ltr">---</span>'; }
       var html = ipTintLine(line, st);
-      // per-line dir: fences / Latin-only → LTR; Persian (even "## ۳. box …") → RTL via textDir
+      /* only fences get an LTR wrap — per-line dir on prose desyncs wrap from the textarea and breaks click/select */
       if (st.fence || /^\s*(```|~~~)/.test(line)) return '<span dir="ltr">' + html + '</span>';
-      var bare = line.replace(/^\s{0,3}#{1,6}\s+/, '').replace(/^\s*[-*+]\s+(\[[ xX]\]\s+)?/, '').replace(/^\s*\d+[.)]\s+/, '');
-      var d = typeof textDir === 'function' ? textDir(bare) : '';
-      if (d === 'rtl') return '<span dir="rtl">' + html + '</span>';
-      if (d === 'ltr' || (/[A-Za-z]/.test(line) && typeof hasRTL === 'function' && !hasRTL(line))){
-        return '<span dir="ltr">' + html + '</span>';
-      }
       return html;
     }).join('\n') + '\n ';
     ip.md.hidden = false;
     ip.md.scrollTop = ta.scrollTop;
   }
+  /** Word under offset: Latin / digits / Persian (incl. ZWNJ). */
+  function taWordAt(text, i){
+    var n = text.length;
+    if (!n) return [0, 0];
+    i = Math.max(0, Math.min(i | 0, n - 1));
+    function isW(ch){
+      return !!ch && /[A-Za-z0-9_\u00C0-\u024F\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u200c\u200d\uFB50-\uFDFF\uFE70-\uFEFF]/.test(ch);
+    }
+    if (!isW(text.charAt(i))){
+      if (i > 0 && isW(text.charAt(i - 1))) i--;
+      else return [i, i];
+    }
+    var a = i, b = i + 1;
+    while (a > 0 && isW(text.charAt(a - 1))) a--;
+    while (b < n && isW(text.charAt(b))) b++;
+    return [a, b];
+  }
+  function taSelectWordAt(at){
+    var w = taWordAt(ta.value, at);
+    if (w[1] <= w[0]) return false;
+    try {
+      ta.focus();
+      ta.setSelectionRange(w[0], w[1]);
+    } catch(e){ return false; }
+    return true;
+  }
+  /* native dblclick word-select is unreliable with transparent RTL text — do it ourselves */
+  ta.addEventListener('dblclick', function(){
+    if (state.view === 'preview') return;
+    var from = ta.selectionStart, to = ta.selectionEnd;
+    var at = from === to ? from : (from + ((to - from) >> 1));
+    setTimeout(function(){ taSelectWordAt(at); }, 0);
+  });
+  (function(){
+    var t0 = 0, p0 = -1;
+    ta.addEventListener('touchend', function(){
+      if (state.view === 'preview') return;
+      var now = Date.now(), pos = ta.selectionStart;
+      if (now - t0 < 420 && Math.abs(pos - p0) <= 2){
+        t0 = 0;
+        setTimeout(function(){ taSelectWordAt(pos); }, 0);
+        return;
+      }
+      t0 = now; p0 = pos;
+    }, { passive: true });
+  })();
   ta.addEventListener('input', function(){ if (body.classList.contains('ip-tint')){ cancelAnimationFrame(ip.raf); ip.raf = requestAnimationFrame(ipTint); } });
   ta.addEventListener('scroll', function(){ if (ip.md && !ip.md.hidden) ip.md.scrollTop = ta.scrollTop; });
   if (window.ResizeObserver) new ResizeObserver(function(){ if (body.classList.contains('ip-tint')) ipTint(); }).observe(ta);
