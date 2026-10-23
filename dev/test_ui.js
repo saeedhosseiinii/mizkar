@@ -2109,6 +2109,7 @@ async function until(fn, ms = 3000) {
   console.log('\n— the phone bars never sit on top of a dialog —');
   const shellCss = doc.getElementById('appStyle').textContent;
   ok('an app dialog is raised over the phone bars', /body\.nb-nav-on \.modal\{ z-index:280; \}/.test(shellCss));
+  ok('the table-size picker is a sheet, not pinned off the screen', /\.mdbar \.tblpick\{[\s\S]{0,200}top:118px !important/.test(shellCss));
   ok('the format bar is a 7-column grid with no separator columns', /\.pane\.editor \.mdbar\{ display:grid; grid-template-columns:repeat\(7, 1fr\)/.test(shellCss) && /> \.mdsep\{ display:none; \}/.test(shellCss));
   const built = fs.readFileSync(HTML, 'utf8');
   ok('the finger that opened a menu does not close it', /sourceCapabilities && e\.sourceCapabilities\.firesTouchEvents/.test(built) && /nbTouchSeq === nbMenuOpenedTouch/.test(built));
