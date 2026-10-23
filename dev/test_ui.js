@@ -81,6 +81,9 @@ function handleApi(method, url, body) {
     const entries = [...repo.files.values()].map((f) => ({ path: f.path, type: 'blob', sha: f.sha, size: f.text.length }));
     return apiResponse({ sha: p.split('/').pop(), tree: entries });
   }
+  if (/^\/commits$/.test(p) && method === 'GET') {
+    return apiResponse([{ sha: 'c0ffee1', commit: { message: 'یادداشت: test', author: { date: '2026-10-23T10:00:00Z' } } }]);
+  }
   if (p.startsWith('/contents/') && method === 'GET') {
     const path = p.slice('/contents/'.length);
     const f = repo.files.get(path);
@@ -719,6 +722,54 @@ async function until(fn, ms = 3000) {
   eq('a new file asks for create', actionFor(1, 'تازه در گیت لب.md'), 'create');
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
+
+  console.log('\n— §3: every date in the notebook is Shamsi —');
+  eq('no Gregorian date input is left anywhere', doc.querySelectorAll('input[type="date"]').length, 0);
+  nb.ui.sidebar(false);
+  const c0 = nb.ui.cfg().collections[0];
+  nb.ui.newDialog(c0.id, '');
+  await sleep(60);
+  const dateBtn = doc.getElementById('nbPanelDate');
+  ok('the new-note dialog asks with a Shamsi date', !!dateBtn && /[۰-۹]/.test(dateBtn.textContent), dateBtn && dateBtn.textContent);
+  ok('and carries a Shamsi stamp', /^\d{4}-\d{2}-\d{2}$/.test(dateBtn.dataset.nbDate), dateBtn.dataset.nbDate);
+  dateBtn.click();
+  await sleep(60);
+  const dpGrid = doc.querySelectorAll('#nbDpGrid .nb-dp-day');
+  ok('a Shamsi month grid opens', dpGrid.length >= 29 && dpGrid.length <= 31, dpGrid.length);
+  eq('with seven weekday columns', doc.querySelectorAll('#nbDpWd .nb-cal-wd').length, 7);
+  ok('the month is named in Persian', /[فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر|دی|بهمن|اسفند]/.test(doc.getElementById('nbDpTitle').textContent), doc.getElementById('nbDpTitle').textContent);
+  ok('today is marked', !!doc.querySelector('#nbDpGrid .nb-dp-day.today'));
+  const inBox = doc.getElementById('nbDpIn');
+  inBox.value = '۱۴۰۵/۰۸/۰۵';
+  inBox.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await sleep(40);
+  ok('typing Persian digits is understood', !!doc.querySelector('#nbDpGrid .nb-dp-day.sel'), doc.getElementById('nbDpOut').textContent);
+  doc.querySelector('#nbDpGrid .nb-dp-day.sel').click();
+  await sleep(30);
+  doc.querySelector('#nbMini2 [data-nb-dp="ok"]').click();
+  await sleep(40);
+  eq('the field takes the picked date', dateBtn.dataset.nbDate, '1405-08-05');
+  ok('and shows it in Persian', /۱۴۰۵\/۰۸\/۰۵/.test(dateBtn.textContent), dateBtn.textContent);
+  ok('the path preview follows the picked date', /1405-08-05/.test(doc.getElementById('nbPanelPath').textContent), doc.getElementById('nbPanelPath').textContent);
+  doc.getElementById('nbMiniOk').click();
+  await sleep(80);
+  const dated = Object.keys(nb.ui.files()).filter((p) => p.includes('1405-08-05'))[0];
+  ok('that note keeps a Shamsi date and an ISO created', !!dated && /date: 1405-08-05/.test(nb.ui.files()[dated].text) && /created: 2026-10-\d\d/.test(nb.ui.files()[dated].text), dated && nb.ui.files()[dated].text.split('\n').slice(0, 6));
+  nb.ui.wikiOpen('یادداشت تازه از پیوند');
+  await sleep(60);
+  const fresh = Object.keys(nb.ui.files()).filter((p) => p.includes('یادداشت تازه از پیوند'))[0];
+  ok('a note made from a link carries both dates too', !!fresh && /date: 14\d\d-\d\d-\d\d/.test(nb.ui.files()[fresh].text) && /created: \d{4}-\d\d-\d\d/.test(nb.ui.files()[fresh].text), fresh && nb.ui.files()[fresh].text.split('\n').slice(0, 5));
+  const histList = await nb.ui.history(dated);
+  ok('a commit date reads as Shamsi with Persian digits', Array.isArray(histList) && histList.length === 1 && nb.ui.shamsi(histList[0].date) === '۱۴۰۵/۰۸/۰۱', histList);
+  ok('the calendar can show the Gregorian day number', (() => {
+    nb.ui.cfg({ showGregorian: true });
+    nb.ui.section('cal');
+    const on = !!doc.querySelector('#nbBody .nb-cal-cell .nb-cal-g');
+    nb.ui.cfg({ showGregorian: false });
+    nb.ui.section('cal');
+    const off = !!doc.querySelector('#nbBody .nb-cal-cell .nb-cal-g');
+    return on && !off;
+  })());
 
   console.log('\n— the top bar gathers its controls, «خروجی» stays alone —');
   const bar = doc.querySelector('header.bar');

@@ -75,7 +75,9 @@ const empty = ctx.nbFillTemplate('متن\n\n← [[{{prev}}]] · [[{{next}}]]\n',
 eq('a link line disappears when both neighbours are empty', empty.text, 'متن\n');
 const half = ctx.nbFillTemplate('← [[{{prev}}]] · [[{{next}}]]\n', ctx.nbCtx(D, '', 'saturday'), { prev: 'روز قبل' });
 eq('a half-filled link line keeps its one link', half.text, '← [[روز قبل]]\n');
-eq('{{date}} is the Gregorian date', ctx.nbFillTemplate('{{date}}', ctx.nbCtx(D, '', 'saturday')).text, '2026-10-23');
+eq('{{date}} is the Shamsi date', ctx.nbFillTemplate('{{date}}', ctx.nbCtx(D, '', 'saturday')).text, '1405-08-01');
+eq('{{gdate}} stays Gregorian for the tools that need it', ctx.nbFillTemplate('{{gdate}}', ctx.nbCtx(D, '', 'saturday')).text, '2026-10-23');
+eq('{{jdate}} keeps the slash form for titles', ctx.nbFillTemplate('{{jdate}}', ctx.nbCtx(D, '', 'saturday')).text, '1405/08/01');
 
 console.log('\n— front matter, tags, slugs, normalisation —');
 const fm = ctx.nbParseFm('---\ntype: meeting\ndate: 2026-10-23\ntags: [جلسه, شبکه]\n---\n# عنوان\nمتن #برچسب و #شبکه\n');

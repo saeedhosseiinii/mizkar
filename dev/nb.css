@@ -188,3 +188,16 @@ img.nb-img-missing{ border:1px dashed #dc2626; min-height:40px; min-width:80px; 
 details.nb-adv > summary{cursor:pointer;font-weight:700;color:var(--ink-2);padding:6px 0;}
 details.nb-adv h5{margin:12px 0 6px;font-size:.78rem;color:var(--muted);}
 #nbColColor{width:52px;height:32px;border:1px solid var(--border);border-radius:8px;background:none;padding:2px;}
+
+/* --- انتخابگر تاریخ شمسی (nbDateDialog) --- */
+.nb-dp{display:flex;flex-direction:column;gap:10px;}
+.nb-dp .nb-dp-in{text-align:center;font-weight:700;letter-spacing:1px;}
+.nb-dp .nb-cal-head{display:flex;align-items:center;gap:6px;justify-content:center;}
+.nb-dp .nb-cal-head b{flex:1;text-align:center;}
+.nb-dp-day{cursor:pointer;}
+.nb-dp-day:hover{background:var(--soft);}
+.nb-dp-day.sel{background:var(--accent);color:#fff;font-weight:800;}
+.nb-datebtn{text-align:start;cursor:pointer;display:block;width:100%;background:var(--soft);}
+.nb-datebtn:hover{border-color:var(--border-strong);}
+.nb-cal-g{position:absolute;top:2px;inset-inline-start:4px;font-size:.6rem;font-style:normal;color:var(--muted);opacity:.8;}
+.nb-cal-cell{position:relative;}
