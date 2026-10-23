@@ -720,6 +720,47 @@ async function until(fn, ms = 3000) {
   ok('the file went up', repo.files.has('تازه در گیت لب.md'), [...repo.files.keys()]);
   nb.ui.provider('github');
 
+  console.log('\n— the top bar gathers its controls, «خروجی» stays alone —');
+  const bar = doc.querySelector('header.bar');
+  const near = doc.querySelector('header.bar .ui-near');
+  ok('a group next to the brand holds the controls', !!near);
+  const at = (el) => (!el ? '?' : el.id === 'btnNotebook' ? 'sidebar' : el.id === 'uiEdit' ? 'edit' : el.id === 'uiTools' ? 'tools'
+    : el.querySelector('#btnHistory') ? 'history' : (el.dataset.action === 'palette' || el.querySelector('[data-action="palette"]')) ? 'palette'
+    : el.querySelector('#btnSettings') ? 'settings' : '?');
+  eq('in this order from the right: نوار کناری · ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات',
+    [...near.children].map(at), ['sidebar', 'edit', 'history', 'tools', 'palette', 'settings']);
+  const expBox = doc.querySelector('header.bar .ui-export');
+  ok('«خروجی» stands alone at the far end', !!expBox && !!expBox.querySelector('#btnExport') && bar.lastElementChild === expBox);
+  ok('nothing is left in the old group', !doc.querySelector('header.bar .bar-end #btnSettings'));
+
+  console.log('\n— the drawer opens from its own edge, and stays where it is left —');
+  const edge = doc.getElementById('nbEdge');
+  ok('the drawer has an edge handle', !!edge);
+  nb.ui.sidebar(false);
+  eq('closed: the body says so', doc.body.classList.contains('nb-open'), false);
+  eq('and the handle says so', edge.getAttribute('aria-expanded'), 'false');
+  edge.click();
+  eq('clicking the handle opens the drawer', doc.body.classList.contains('nb-open'), true);
+  eq('the handle follows', edge.getAttribute('aria-expanded'), 'true');
+  eq('the state is remembered', win.localStorage.getItem('fs2-nbopen'), '1');
+  nb.ui.sidebar(false);
+  eq('closing remembers that too', win.localStorage.getItem('fs2-nbopen'), '0');
+
+  console.log('\n— the rail: one icon per section —');
+  const rail = doc.getElementById('nbRail');
+  ok('a rail sits on the edge', !!rail && rail.querySelectorAll('[data-nb-rail]').length === 6, rail && rail.querySelectorAll('[data-nb-rail]').length);
+  eq('with the sections in order', [...rail.querySelectorAll('[data-nb-rail]')].map((b) => b.dataset.nbRail),
+    ['notes', 'home', 'search', 'cal', 'tasks', 'temps']);
+  ok('the rail is on and the drawer is closed', doc.body.classList.contains('nb-rail-on') && !doc.body.classList.contains('nb-open'));
+  rail.querySelector('[data-nb-rail="search"]').click();
+  eq('a rail icon opens its section', nb.ui.state().section, 'search');
+  eq('and the drawer comes with it', doc.body.classList.contains('nb-open'), true);
+  nb.ui.sidebar(false);
+  const tabsBefore = doc.querySelectorAll('#tabsList .tab').length;
+  rail.querySelector('[data-nb-rail="home"]').click();
+  await sleep(80);
+  eq('«امروز» opens its page', doc.querySelectorAll('#tabsList .tab').length, tabsBefore + 1);
+
   console.log(`\n${fail === 0 ? 'ALL GOOD' : 'FAILURES'}: ${pass} passed, ${fail} failed\n`);
   process.exit(fail === 0 ? 0 : 1);
 })();

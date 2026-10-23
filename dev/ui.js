@@ -106,5 +106,72 @@
       fmt.addEventListener('click', openFmt);
       fmt.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openFmt(e); } });
     }
+
+    // §1a: every control but «خروجی» gathers next to the brand, in this order from the right:
+    // sidebar · ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات. «خروجی» stays alone at the far end.
+    var header = document.querySelector('header.bar');
+    if (header){
+      var near = document.createElement('div');
+      near.className = 'ui-near';
+      header.insertBefore(near, bar);
+      [ $('btnNotebook'), edit,
+        $('btnHistory') && $('btnHistory').closest('.pop-wrap'),
+        tools, pal,
+        $('btnSettings') && $('btnSettings').closest('.pop-wrap')
+      ].forEach(function(el){ if (el) near.appendChild(el); });
+      var expWrap = $('btnExport') && $('btnExport').closest('.pop-wrap');
+      var expBox = document.createElement('div');
+      expBox.className = 'ui-export';
+      header.appendChild(expBox);
+      if (expWrap) expBox.appendChild(expWrap);
+    }
+  })();
+
+  /* === §1b: the drawer's own edge handle, the rail, and keeping them in step === */
+  var nbShellSync = (function(){
+    var edge = document.createElement('button');
+    edge.type = 'button';
+    edge.id = 'nbEdge';
+    edge.setAttribute('aria-label', 'نوار کناری دفترچه');
+    edge.setAttribute('data-tip', 'دفترچه: یادداشت ها · Ctrl+\\');
+    edge.setAttribute('aria-expanded', 'false');
+    edge.innerHTML = icon('chev') + '<span class="nb-edge-t">دفترچه</span>';
+    document.body.appendChild(edge);
+
+    var RAIL = [
+      ['notes', 'tree', 'دفترچه'], ['home', 'file', 'امروز'], ['search', 'search', 'جستجو'],
+      ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'text', 'موقت']
+    ];
+    var rail = document.createElement('nav');
+    rail.id = 'nbRail';
+    rail.setAttribute('aria-label', 'دفترچه');
+    rail.innerHTML = RAIL.map(function(r){
+      return '<button type="button" class="nb-rail-b" data-nb-rail="' + r[0] + '" aria-label="' + r[2] + '" data-tip="' + r[2] + '">' + icon(r[1]) + '</button>';
+    }).join('');
+    document.body.appendChild(rail);
+    body.classList.add('nb-rail-on');
+
+    edge.addEventListener('click', function(e){ e.stopPropagation(); nbSidebar(); });
+    rail.addEventListener('click', function(e){
+      var b = e.target.closest('[data-nb-rail]');
+      if (!b) return;
+      e.stopPropagation();
+      var what = b.dataset.nbRail;
+      if (what === 'home'){ openTab(''); return; }        // an empty page shows «امروز»
+      NB.section = what;
+      nbSidebar(true);
+    });
+
+    return function(){
+      var open = body.classList.contains('nb-open');
+      edge.setAttribute('aria-expanded', String(open));
+      edge.title = open ? 'بستن نوار کناری' : 'باز کردن نوار کناری';
+      var ch = edge.querySelector('.i');
+      if (ch) ch.style.transform = open ? 'rotate(90deg)' : 'rotate(-90deg)';
+      var sec = NB.section;
+      Array.prototype.forEach.call(rail.querySelectorAll('[data-nb-rail]'), function(b){
+        b.setAttribute('aria-pressed', String(!open && b.dataset.nbRail === sec));
+      });
+    };
   })();
   /* === /UI === */

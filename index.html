@@ -11253,8 +11253,43 @@ var NB_CSS = [
   'body.ui-calm .bar-end > [data-action="net-calc"],',
   'body.ui-calm .bar-end > [data-action="compare"],',
   'body.ui-calm .bar-end > #btnInstall{display:none !important;}',
-  'body.ui-calm .bar{justify-content:space-between;}',
-  'body.ui-calm .bar-end{margin-inline-start:auto;}',
+  'body.ui-calm .bar{justify-content:flex-start;gap:8px;}',
+  'body.ui-calm .bar-end{display:none;}          /* its buttons moved into .ui-near (ui.js §1a) */',
+  '.ui-near{display:flex;align-items:center;gap:2px;margin-inline-start:6px;min-width:0;}',
+  '.ui-export{display:flex;align-items:center;margin-inline-start:auto;}',
+  '/* the drawer\'s edge handle: a slim tab on the right edge, and on the drawer itself when it is open */',
+  '#nbEdge{',
+  '  position:fixed;z-index:212;top:50%;right:0;transform:translateY(-50%);width:26px;height:92px;',
+  '  display:none;align-items:center;justify-content:center;gap:0;padding:0;cursor:pointer;',
+  '  border:1px solid var(--border);border-inline-end:0;border-radius:12px 0 0 12px;',
+  '  background:var(--surface);color:var(--muted);box-shadow:-10px 0 24px -14px rgba(15,23,42,.4);',
+  '  transition:right .22s ease,color .15s;',
+  '}',
+  '#nbEdge:hover{color:var(--accent);border-color:var(--border-strong);}',
+  '#nbEdge .i{width:16px;height:16px;transform:rotate(-90deg);}',
+  '#nbEdge .nb-edge-t{',
+  '  position:absolute;right:calc(100% + 6px);top:50%;transform:translateY(-50%);white-space:nowrap;',
+  '  background:var(--ink);color:var(--bg);font-size:.72rem;font-weight:700;padding:3px 8px;border-radius:8px;',
+  '  opacity:0;pointer-events:none;transition:opacity .15s;',
+  '}',
+  '#nbEdge:hover .nb-edge-t{opacity:1;}',
+  'body.nb-open #nbEdge{right:var(--nb-w,328px);}',
+  '@media (min-width:760px){ #nbEdge{display:flex;} }',
+  '/* the collapsed rail: the sections, one icon each */',
+  '#nbRail{',
+  '  position:fixed;z-index:200;top:var(--nb-top,96px);bottom:var(--nb-bottom,28px);right:0;width:46px;',
+  '  display:none;flex-direction:column;align-items:center;gap:4px;padding:8px 0;',
+  '  background:var(--surface-2);border-inline-start:1px solid var(--border);',
+  '}',
+  'body.nb-rail-on:not(.nb-open) #nbRail{display:flex;}',
+  '.nb-rail-b{',
+  '  width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;',
+  '  background:transparent;color:var(--muted);cursor:pointer;padding:0;',
+  '}',
+  '.nb-rail-b:hover{background:var(--soft);color:var(--ink);}',
+  '.nb-rail-b[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);}',
+  '@media (min-width:1100px){ body.nb-rail-on:not(.nb-open) .work{margin-inline-end:46px;} }',
+  '@media (max-width:1099px){ #nbRail{display:none !important;} }',
   '.ui-edit,.ui-tools{width:auto;padding:0 12px;gap:6px;display:inline-flex;align-items:center;font-size:.8rem;font-weight:600;}',
   '.ui-edit[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);}',
   '.ui-tools .chev{width:14px;height:14px;opacity:.7;}',
@@ -12489,20 +12524,25 @@ function nbCommitMessage(list){
   }
 
   /* --- sidebar: a drawer from the right, opening right under the tab strip --- */
+  /** The drawer and the rail share the slot between the tab strip and the status bar. */
   function nbSlot(){
-    var el = $('nb');
-    if (!el) return;
     var tabsBar = $('tabs'), foot = document.querySelector('footer.status');
     var top = tabsBar ? Math.max(0, tabsBar.getBoundingClientRect().bottom) : 96;
     var bot = foot ? Math.max(0, innerHeight - foot.getBoundingClientRect().top) : 28;
-    el.style.setProperty('--nb-top', Math.round(top) + 'px');
-    el.style.setProperty('--nb-bottom', Math.round(bot) + 'px');
+    ['nb', 'nbRail'].forEach(function(id){
+      var el = $(id);
+      if (!el) return;
+      el.style.setProperty('--nb-top', Math.round(top) + 'px');
+      el.style.setProperty('--nb-bottom', Math.round(bot) + 'px');
+    });
   }
-  function nbSidebar(force){
+  function nbSidebar(force, remember){
     NB.open = force === undefined ? !NB.open : !!force;
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
     if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
+    if (remember !== false) storeSet('fs2-nbopen', NB.open ? '1' : '0');
+    if (typeof nbShellSync === 'function') nbShellSync();
     if (NB.open) nbRender();
   }
   function nbRenderKeep(){
@@ -14344,6 +14384,73 @@ function nbCommitMessage(list){
       fmt.addEventListener('click', openFmt);
       fmt.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openFmt(e); } });
     }
+
+    // §1a: every control but «خروجی» gathers next to the brand, in this order from the right:
+    // sidebar · ویرایش · اخیر · ابزارها · فرمان‌ها · تنظیمات. «خروجی» stays alone at the far end.
+    var header = document.querySelector('header.bar');
+    if (header){
+      var near = document.createElement('div');
+      near.className = 'ui-near';
+      header.insertBefore(near, bar);
+      [ $('btnNotebook'), edit,
+        $('btnHistory') && $('btnHistory').closest('.pop-wrap'),
+        tools, pal,
+        $('btnSettings') && $('btnSettings').closest('.pop-wrap')
+      ].forEach(function(el){ if (el) near.appendChild(el); });
+      var expWrap = $('btnExport') && $('btnExport').closest('.pop-wrap');
+      var expBox = document.createElement('div');
+      expBox.className = 'ui-export';
+      header.appendChild(expBox);
+      if (expWrap) expBox.appendChild(expWrap);
+    }
+  })();
+
+  /* === §1b: the drawer's own edge handle, the rail, and keeping them in step === */
+  var nbShellSync = (function(){
+    var edge = document.createElement('button');
+    edge.type = 'button';
+    edge.id = 'nbEdge';
+    edge.setAttribute('aria-label', 'نوار کناری دفترچه');
+    edge.setAttribute('data-tip', 'دفترچه: یادداشت ها · Ctrl+\\');
+    edge.setAttribute('aria-expanded', 'false');
+    edge.innerHTML = icon('chev') + '<span class="nb-edge-t">دفترچه</span>';
+    document.body.appendChild(edge);
+
+    var RAIL = [
+      ['notes', 'tree', 'دفترچه'], ['home', 'file', 'امروز'], ['search', 'search', 'جستجو'],
+      ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'text', 'موقت']
+    ];
+    var rail = document.createElement('nav');
+    rail.id = 'nbRail';
+    rail.setAttribute('aria-label', 'دفترچه');
+    rail.innerHTML = RAIL.map(function(r){
+      return '<button type="button" class="nb-rail-b" data-nb-rail="' + r[0] + '" aria-label="' + r[2] + '" data-tip="' + r[2] + '">' + icon(r[1]) + '</button>';
+    }).join('');
+    document.body.appendChild(rail);
+    body.classList.add('nb-rail-on');
+
+    edge.addEventListener('click', function(e){ e.stopPropagation(); nbSidebar(); });
+    rail.addEventListener('click', function(e){
+      var b = e.target.closest('[data-nb-rail]');
+      if (!b) return;
+      e.stopPropagation();
+      var what = b.dataset.nbRail;
+      if (what === 'home'){ openTab(''); return; }        // an empty page shows «امروز»
+      NB.section = what;
+      nbSidebar(true);
+    });
+
+    return function(){
+      var open = body.classList.contains('nb-open');
+      edge.setAttribute('aria-expanded', String(open));
+      edge.title = open ? 'بستن نوار کناری' : 'باز کردن نوار کناری';
+      var ch = edge.querySelector('.i');
+      if (ch) ch.style.transform = open ? 'rotate(90deg)' : 'rotate(-90deg)';
+      var sec = NB.section;
+      Array.prototype.forEach.call(rail.querySelectorAll('[data-nb-rail]'), function(b){
+        b.setAttribute('aria-pressed', String(!open && b.dataset.nbRail === sec));
+      });
+    };
   })();
   /* === /UI === */
 
@@ -14545,7 +14652,13 @@ function nbCommitMessage(list){
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
-  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); ipSync(); if (!ta.value.trim()) render(); });
+  nbSlot();
+  if (typeof nbShellSync === 'function') nbShellSync();
+  nbLoad().then(function(){
+    nbStatus(); nbAfterSwitch(); ipSync(); if (!ta.value.trim()) render();
+    if (storeGet('fs2-nbopen') === '1') nbSidebar(true, false);   // the drawer stays where it was left
+    if (typeof nbShellSync === 'function') nbShellSync();
+  });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
     open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,

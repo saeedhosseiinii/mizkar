@@ -1162,20 +1162,25 @@ function nbCommitMessage(list){
   }
 
   /* --- sidebar: a drawer from the right, opening right under the tab strip --- */
+  /** The drawer and the rail share the slot between the tab strip and the status bar. */
   function nbSlot(){
-    var el = $('nb');
-    if (!el) return;
     var tabsBar = $('tabs'), foot = document.querySelector('footer.status');
     var top = tabsBar ? Math.max(0, tabsBar.getBoundingClientRect().bottom) : 96;
     var bot = foot ? Math.max(0, innerHeight - foot.getBoundingClientRect().top) : 28;
-    el.style.setProperty('--nb-top', Math.round(top) + 'px');
-    el.style.setProperty('--nb-bottom', Math.round(bot) + 'px');
+    ['nb', 'nbRail'].forEach(function(id){
+      var el = $(id);
+      if (!el) return;
+      el.style.setProperty('--nb-top', Math.round(top) + 'px');
+      el.style.setProperty('--nb-bottom', Math.round(bot) + 'px');
+    });
   }
-  function nbSidebar(force){
+  function nbSidebar(force, remember){
     NB.open = force === undefined ? !NB.open : !!force;
     if (NB.open) nbSlot();
     body.classList.toggle('nb-open', NB.open);
     if ($('btnNotebook')) $('btnNotebook').setAttribute('aria-pressed', String(NB.open));
+    if (remember !== false) storeSet('fs2-nbopen', NB.open ? '1' : '0');
+    if (typeof nbShellSync === 'function') nbShellSync();
     if (NB.open) nbRender();
   }
   function nbRenderKeep(){
@@ -2752,7 +2757,13 @@ function nbCommitMessage(list){
 
   /* --- init --- */
   document.getElementById('appStyle').textContent += '\n' + NB_CSS;
-  nbLoad().then(function(){ nbStatus(); nbAfterSwitch(); ipSync(); if (!ta.value.trim()) render(); });
+  nbSlot();
+  if (typeof nbShellSync === 'function') nbShellSync();
+  nbLoad().then(function(){
+    nbStatus(); nbAfterSwitch(); ipSync(); if (!ta.value.trim()) render();
+    if (storeGet('fs2-nbopen') === '1') nbSidebar(true, false);   // the drawer stays where it was left
+    if (typeof nbShellSync === 'function') nbShellSync();
+  });
   NB.pure = { nbCtx: nbCtx, nbFillPath: nbFillPath, nbFillTemplate: nbFillTemplate, nbZip: nbZip, nbUnzip: nbUnzip, nbMerge3: nbMerge3, nbDiffLines: nbDiffLines, nbParseFm: nbParseFm, nbTags: nbTags, nbGToJ: nbGToJ, nbJToG: nbJToG, nbNorm: nbNorm, nbSlug: nbSlug, nbTemplates: NB_TEMPLATES, nbDefaults: NB_DEFAULTS, nbCommitMessage: nbCommitMessage };
   NB.ui = {
     open: nbOpen, newNote: nbNewNote, settings: nbOpenSettings, sidebar: nbSidebar, render: nbRender,
