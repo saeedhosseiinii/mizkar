@@ -4,7 +4,7 @@
  * background; when it differs, open tabs are told so they can offer a reload. Icons and the manifest are cache-first.
  * The one POST it answers is Android's «share» sheet: the text is parked in IndexedDB for the page to pick up.
  */
-var CACHE = 'mzbeta2-20261023T2320Z';
+var CACHE = 'mzbeta2-20261023T2325Z';
 var ASSETS = ['./', 'index.html', 'app.js', 'vendor/mermaid.min.js', 'vendor/katex.min.js', 'vendor/katex.min.css', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 var SHARE_DB = 'mizkar-beta2', SHARE_STORE = 'meta', SHARE_KEY = 'inbox-share';
 
