@@ -596,7 +596,10 @@ var APP_CSS = [
   '.with-outline:has(#findRep:not([hidden])) .outline{top:146px;}',
   '.find-row{display:flex;align-items:center;gap:6px;width:100%;min-width:0;direction:rtl;}',
   '.findbar .ib.sm{width:32px;height:32px;}',
-  '.findbar input{flex:1 1 160px;width:auto;min-width:0;max-width:none;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.82rem;outline:none;text-align:start;}',
+  '.findbar input{flex:1 1 160px;width:auto;min-width:0;max-width:none;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.82rem;outline:none;direction:rtl;text-align:right;}',
+  '.findbar input:dir(ltr){direction:ltr;text-align:left;}',
+  '.findbar input::-webkit-search-cancel-button,.findbar input::-webkit-search-decoration,.findbar input::-webkit-search-results-button,.findbar input::-webkit-search-results-decoration{-webkit-appearance:none;appearance:none;display:none;}',
+  '.find-row>[data-action="find-close"],.find-row>[data-action="find-close"] .i{transform:none;}',
   '.findbar input:focus{border-color:var(--accent);}',
   '.find-count{min-width:4.5em;text-align:center;font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;}',
   '.find-count:empty{display:none;}',
@@ -609,7 +612,7 @@ var APP_CSS = [
   '.find-scope{flex:none;}',
   '.find-scope button{height:26px;padding:0 9px;font-size:.72rem;}',
   '.findbar .elbtn{flex:none;height:32px;}',
-  '@media(max-width:760px){.find-row{flex-wrap:wrap;}.findbar input{flex-basis:100%;}}',
+  '@media(max-width:760px){.find-row{flex-wrap:wrap;}.findbar input{flex:1 1 12em;}}',
   '#inCard{position:relative;}',
   'textarea#input{position:relative;z-index:1;}',
   '.ta-hl{position:absolute;z-index:0;overflow:hidden;pointer-events:none;color:transparent;box-sizing:border-box;margin:0;border:0;}',
@@ -5884,6 +5887,7 @@ if (typeof document !== 'undefined'){
     findScope = scope;
     Array.prototype.forEach.call(document.querySelectorAll('#findScope button'), function(b){ b.setAttribute('aria-pressed', String(b.dataset.fs === scope)); });
     $('findQ').placeholder = scope === 'source' ? 'جست‌وجو در متن خام…' : 'جست‌وجو در پیش‌نمایش…';
+    syncFindDir($('findQ'));
     if (scope === 'source'){
       clearFindHits();
       if (state.view === 'preview'){ setView('split'); findOpenedEditor = true; }
@@ -5996,6 +6000,10 @@ if (typeof document !== 'undefined'){
     find.idx = (find.idx + dir + find.hits.length) % find.hits.length;
     showFindHit(true);
   }
+  function syncFindDir(el){
+    if (!el) return;
+    el.setAttribute('dir', el.value ? 'auto' : 'rtl');
+  }
   function openFind(){
     // Ctrl+F inside the input text searches the raw text
     var fromSource = document.activeElement === ta;
@@ -6004,6 +6012,7 @@ if (typeof document !== 'undefined'){
     bar.hidden = false;
     setFindScope(fromSource ? 'source' : findScope);
     if (sel && sel.length < 80 && sel.indexOf('\n') === -1) $('findQ').value = sel;
+    syncFindDir($('findQ'));
     $('findQ').focus();
     $('findQ').select();
     runFind(false);
@@ -6034,11 +6043,12 @@ if (typeof document !== 'undefined'){
     replaceText(next, faNum(n) + ' مورد جایگزین شد');
     if (findScope === 'source') runFind(false);
   }
-  $('findQ').addEventListener('input', function(){ runFind(false); });
+  $('findQ').addEventListener('input', function(){ syncFindDir($('findQ')); runFind(false); });
   $('findQ').addEventListener('keydown', function(e){
     if (e.key === 'Enter'){ e.preventDefault(); stepFind(e.shiftKey ? -1 : 1); }
     else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeFind(); }
   });
+  $('findR').addEventListener('input', function(){ syncFindDir($('findR')); });
   $('findR').addEventListener('keydown', function(e){
     if (e.key === 'Enter'){ e.preventDefault(); replaceAllInSource(); }
     else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeFind(); }
