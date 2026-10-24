@@ -5111,6 +5111,7 @@ if (typeof document !== 'undefined'){
     histInIdb = true;
     historySave(merged);
     try { localStorage.removeItem(HISTORY_KEY); } catch(e){}
+    refreshRecentLists();
   }).catch(function(){});
   function textTitle(t){
     var m = t.match(/^\s{0,3}#{1,3}\s+(.+)$/m);
@@ -5125,9 +5126,20 @@ if (typeof document !== 'undefined'){
     if ((tab && tab.secret) || (curTab && curTab.secret && text === ta.value) || tabs.some(function(x){ return x.secret && x.text === text; })) return;
     var list = historyLoad().filter(function(h){ return h.t !== text; });
     var item = { t: text, title: textTitle(text), fmt: fmt || 'auto', kind: kind || detectFormat(text), at: Date.now() };
-    if (tab){ item.closed = true; if (tab.name) item.name = tab.name; }
+    if (tab){ item.closed = true; if (tab.name) item.name = tab.name; if (tab.nb) item.nb = tab.nb; }
     list.unshift(item);
     historySave(list);
+    refreshRecentLists();
+  }
+  /** The temps list and the home page both read this history; refresh whichever is on screen. */
+  function refreshRecentLists(){
+    try {
+      if (typeof nbRender === 'function' && typeof NB !== 'undefined' && NB && NB.section === 'temps') nbRender();
+      if (zoomWrap && zoomWrap.querySelector('.hm') && typeof nbHomeHtml === 'function'){
+        var home = nbHomeHtml();
+        if (home) zoomWrap.innerHTML = home;
+      }
+    } catch (e) {}
   }
   function drawHistory(){
     var list = historyLoad();
@@ -12408,7 +12420,7 @@ function nbCommitMessage(list){
     var hist = (typeof historyLoad === 'function' ? historyLoad() : []);
     var match = function(text, title){ return !q || nbNorm(String(title || '') + ' ' + String(text || '')).indexOf(q) !== -1; };
     var openRows = openTabs.filter(function(x){ return match(x.text, tabLabel(x)); });
-    var histRows = hist.filter(function(h){ return match(h.t, h.title); });
+    var histRows = hist.filter(function(h){ return !h.nb && match(h.t, (h.name || '') + ' ' + (h.title || '')); });
     var html = '<div class="nb-search"><input class="nb-input" id="nbTempQ" type="search" dir="auto" placeholder="جستجو در تب ها و متن های اخیر…" value="' + escapeHtml(NB.tempQuery || '') + '"></div>';
     html += '<div class="nb-temp-part"><h5>باز <b>' + faNum(openRows.length) + '</b></h5>';
     html += openRows.length ? openRows.map(function(x){
@@ -12419,7 +12431,7 @@ function nbCommitMessage(list){
     }).join('') : '<div class="nb-empty">تب موقتی باز نیست.</div>';
     html += '</div>';
     html += '<div class="nb-temp-part"><h5>اخیر <b>' + faNum(histRows.length) + '</b></h5>';
-    if (!histRows.length) html += '<div class="nb-empty">' + (q ? 'چیزی پیدا نشد.' : 'متن اخیری نیست.') + '</div>';
+    if (!histRows.length) html += '<div class="nb-empty">' + (q ? 'چیزی پیدا نشد.' : 'متن اخیری نیست. اگر تبی را ببندی، متنش این‌جا می‌ماند.') + '</div>';
     else {
       for (var g = 0; g < 4; g++){
         var inGroup = histRows.filter(function(h){ return nbHistGroup(h.at) === g; });
@@ -12429,7 +12441,7 @@ function nbCommitMessage(list){
           var idx = hist.indexOf(h);
           return '<div class="nb-row nb-hist-row" data-nb-hist-item="' + idx + '" tabindex="0" title="' + escapeHtml(nbHistFirstLines(h)) + '">'
             + icon(h.closed ? 'x' : 'clock')
-            + '<span class="nb-name" dir="auto">' + escapeHtml(h.title || 'بدون عنوان') + '</span>'
+            + '<span class="nb-name" dir="auto">' + escapeHtml(h.name || h.title || 'بدون عنوان') + '</span>'
             + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span>'
             + '<span class="nb-hist-btns">'
             + '<button type="button" class="elbtn xs" data-nb-hist-open="' + idx + '">باز کردن</button>'
@@ -12843,7 +12855,19 @@ function nbCommitMessage(list){
         return '<button type="button" class="hm-note" data-home="open" data-path="' + escapeHtml(f.path) + '"><b dir="auto">' + escapeHtml(nbTitle(f.path)) + '</b>'
           + '<small dir="auto">' + escapeHtml(nbFolder(f.path) || '—') + (f.at ? ' · ' + escapeHtml(relTime((f.at - Date.now()) / 1000)) : '') + '</small></button>';
       }).join('') : '<p class="hm-empty">هنوز یادداشتی نیست.</p>')
-      + '</section></div>'
+      + '</section>'
+      + '<section><h3>' + icon('text') + 'موقت های اخیر</h3>'
+      + (function(){
+        var temps = [];
+        if (typeof historyLoad === 'function') historyLoad().forEach(function(h, i){ if (h && h.t && !h.nb) temps.push({ h: h, i: i }); });
+        temps = temps.slice(0, 8);
+        if (!temps.length) return '<p class="hm-empty">اگر یک تب موقت را ببندی، متنش این‌جا می‌ماند.</p>';
+        return temps.map(function(x){
+          return '<button type="button" class="hm-note" data-home="hist" data-idx="' + x.i + '"><b dir="auto">' + escapeHtml(x.h.name || x.h.title || 'بدون عنوان') + '</b>'
+            + '<small>' + (x.h.closed ? 'بسته‌شده · ' : '') + escapeHtml(relTime((x.h.at - Date.now()) / 1000)) + '</small></button>';
+        }).join('');
+      })()
+      + '<button type="button" class="hm-link" data-home="temps">همه در بخش موقت</button></section></div>'
       + '<p class="hm-hint">برای دیدن سریع یک متن، همین‌جا بچسبان (Ctrl+V) — در یک تب موقت باز می شود و به دفترچه نمی رود.</p>'
       + '</div>';
   }
@@ -12883,6 +12907,8 @@ function nbCommitMessage(list){
     if (!h) return false;
     var what = h.dataset.home;
     if (what === 'open') nbOpen(h.dataset.path);
+    else if (what === 'hist') nbHistOpen(+h.dataset.idx);
+    else if (what === 'temps'){ NB.section = 'temps'; nbSidebar(true); nbRender(); }
     else if (what === 'new') nbNewDialog(C.collections[0] && C.collections[0].id, null, new Date());
     else if (what === 'quick') nbQuickInbox();
     else if (what === 'tasks'){ NB.section = 'tasks'; nbSidebar(true); nbRender(); }
