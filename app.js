@@ -9834,7 +9834,7 @@ function nbCommitMessage(list){
     var box = $('nbSecs');
     if (!box) return;
     var counts = { notes: noteCount, temps: tabs.filter(function(x){ return !x.nb; }).length,
-      tasks: typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done; }).length : 0, trash: (NB.trash || []).length };
+      tasks: typeof homeTasks === 'function' ? homeTasks().filter(function(x){ return !x.done && x.due; }).length : 0, trash: (NB.trash || []).length };
     var list = NB_SECS_MAIN.slice();
     NB_SECS_MORE.forEach(function(x){ if (x[0] === NB.section) list.push(x); });    // the section open from ⋯ shows where you are
     box.innerHTML = list.map(function(x){ return nbTabBtn(x[0], x[1], x[2], x[0] === 'notes' || x[0] === 'temps' ? 0 : counts[x[0]]); }).join('')
@@ -13123,10 +13123,9 @@ function nbCommitMessage(list){
     return out;
   }
   function homeGroups(tasks){
-    var today = homeToday(), week = homeAddDays(today, 7), g = { late: [], today: [], week: [], later: [], none: [] };
-    tasks.filter(function(t){ return !t.done; }).forEach(function(t){
-      if (!t.due) g.none.push(t);
-      else if (t.due < today) g.late.push(t);
+    var today = homeToday(), week = homeAddDays(today, 7), g = { late: [], today: [], week: [], later: [] };
+    tasks.filter(function(t){ return !t.done && t.due; }).forEach(function(t){
+      if (t.due < today) g.late.push(t);
       else if (t.due === today) g.today.push(t);
       else if (t.due <= week) g.week.push(t);
       else g.later.push(t);
@@ -13152,7 +13151,7 @@ function nbCommitMessage(list){
   function nbTasksHtml(){
     var tasks = homeTasks(), g = homeGroups(tasks), done = tasks.filter(function(t){ return t.done; }).length;
     var html = homeTaskSection('عقب افتاده', g.late, 50) + homeTaskSection('امروز', g.today, 50) + homeTaskSection('هفت روز آینده', g.week, 50)
-      + homeTaskSection('بعدا', g.later, 50) + homeTaskSection('بدون تاریخ', g.none, 80);
+      + homeTaskSection('بعدا', g.later, 50);
     return (html || nbEmptyBox('کار بازی نیست. هر خط «- [ ] …» در یادداشت ها یک کار است؛ تاریخ سررسید را با «📅 1405-08-05» کنارش بنویس.', 'یادداشت امروز', 'today', 'clock'))
       + (done ? '<div class="nb-hint">' + faNum(done) + ' کار انجام شده</div>' : '');
   }
@@ -13178,7 +13177,7 @@ function nbCommitMessage(list){
       + '</div><div class="hm-grid">'
       + '<section><h3>' + icon('check') + 'کارها</h3>'
       + (due.length ? homeTaskSection('عقب افتاده', g.late, 6) + homeTaskSection('امروز', g.today, 8) + homeTaskSection('هفت روز آینده', g.week, 6)
-        : '<p class="hm-empty">برای امروز و این هفته کاری با تاریخ نیست' + (g.none.length ? ' — ' + faNum(g.none.length) + ' کار بدون تاریخ هست' : '') + '.</p>')
+        : '<p class="hm-empty">برای امروز و این هفته کاری با تاریخ نیست.</p>')
       + '<button type="button" class="hm-link" data-home="tasks">همهٔ کارها ←</button></section>'
       + '<section><h3>' + icon('clock') + 'یادداشت های اخیر</h3>'
       + (recent.length ? recent.map(function(f){
