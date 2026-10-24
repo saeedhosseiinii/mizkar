@@ -7289,6 +7289,9 @@ var NB_CSS = [
   '#nb .nb-dir-row.open > .nb-caret{ transform:rotate(0deg); }',
   '#nb .nb-kids{ margin-inline-start:18px; padding-inline-start:6px; border-inline-start:1px solid color-mix(in srgb, var(--muted) 55%, transparent); }',
   '#nb .nb-count{ color:var(--muted); font-size:11px; }',
+  '.nb-order-list{ max-height:52vh; overflow:auto; }',
+  '.nb-order-row{ display:flex; align-items:center; gap:6px; padding:4px 0; }',
+  '.nb-order-row .nb-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }',
   '#nb .nb-mark{ width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none; }',
   '#nb .nb-saved{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:0 6px; }',
   '#nb .nb-empty, #nb .nb-hint{ color:var(--muted); font-size:12px; line-height:1.9; padding:10px 8px; }',
@@ -8491,7 +8494,7 @@ function nbCommitMessage(list){
     dirtyCount: 0, state: 'off', error: '', conflicts: [], busy: false, timer: 0,
     localSalt: crypto.getRandomValues(new Uint8Array(16)),
     lastPull: 0, open: false, section: 'notes', expanded: {}, pullTimer: 0,
-    query: '', colFilter: '', tagFilter: '', calMonth: null, focusSearch: false,
+    query: '', colFilter: '', tagFilter: '', calMonth: null, focusSearch: false, order: {},
     key: null, unlock: {}, attach: {}, pass: null, attachMeta: {}
   };
   var C = null;
@@ -8609,10 +8612,11 @@ function nbCommitMessage(list){
       var month = Date.now() - 30 * 86400000;
       NB.trash = (Array.isArray(t) ? t : []).filter(function(x){ return x && x.at > month; });   // a month, then it goes for good
     }, function(){});
-    return Promise.all([idbGet('all' + nbStoreSuffix(), 'notes'), idbGet('nb-last' + nbStoreSuffix(), 'meta'), idbGet('attach' + nbStoreSuffix(), 'queue')]).then(function(r){
+    return Promise.all([idbGet('all' + nbStoreSuffix(), 'notes'), idbGet('nb-last' + nbStoreSuffix(), 'meta'), idbGet('attach' + nbStoreSuffix(), 'queue'), idbGet('nb-order' + nbStoreSuffix(), 'meta')]).then(function(r){
       if (r[0] && Array.isArray(r[0].files)) r[0].files.forEach(function(f){ if (f && f.path){ nbRepairUnlockedCipher(f); NB.files[f.path] = f; if (NB.paths.indexOf(f.path) === -1) NB.paths.push(f.path); } });
       if (r[1] && typeof r[1] === 'object'){ NB.lastCommit = r[1].commit || ''; NB.lastSync = r[1].at || 0; }
       if (r[2] && Array.isArray(r[2].files)) r[2].files.forEach(function(a){ if (a && a.path) NB.attach[a.path] = a; });
+      NB.order = (r[3] && typeof r[3] === 'object' && !Array.isArray(r[3])) ? r[3] : {};
       nbIdxInvalidate();
       return true;
     });
@@ -9472,6 +9476,7 @@ function nbCommitMessage(list){
     if (f.remote){ f.deleted = true; f.dirty = true; }
     else { delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
     nbRetargetTab(oldPath, newPath);
+    nbOrderSwapKey(oldPath, newPath);
     nbPaint(false);
     return true;
   }
@@ -9729,18 +9734,140 @@ function nbCommitMessage(list){
     Object.keys(node.folders).forEach(function(k){ n += nbCountUnder(node.folders[k]); });
     return n;
   }
+  /** Manual sibling order for one parent ('' is the root). Missing keys stay alphabetical, folders before files. */
+  function nbSaveOrder(){ return idbSet('nb-order' + nbStoreSuffix(), NB.order || {}, 'meta'); }
+  function nbOrderSwapKey(oldPath, newPath){
+    if (!NB.order || !oldPath || oldPath === newPath) return;
+    var changed = false;
+    Object.keys(NB.order).forEach(function(parent){
+      NB.order[parent] = (NB.order[parent] || []).map(function(k){
+        if (k !== oldPath) return k;
+        changed = true;
+        return newPath;
+      });
+    });
+    if (changed) nbSaveOrder();
+  }
+  /** A renamed or moved folder keeps its place, and the order of everything inside it. */
+  function nbOrderRewrite(from, to){
+    if (!NB.order || !from || from === to) return;
+    var next = {};
+    Object.keys(NB.order).forEach(function(parent){
+      var np = parent === from ? to : (parent.indexOf(from + '/') === 0 ? to + parent.slice(from.length) : parent);
+      next[np] = (NB.order[parent] || []).map(function(k){
+        if (k === from) return to;
+        if (k.indexOf(from + '/') === 0) return to + k.slice(from.length);
+        return k;
+      });
+    });
+    NB.order = next;
+    nbSaveOrder();
+  }
+  function nbSortKids(parent, items){
+    var order = (NB.order && NB.order[parent]) || [];
+    return items.slice().sort(function(a, b){
+      var ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+      var aa = ia < 0 ? 1e9 : ia, bb = ib < 0 ? 1e9 : ib;
+      if (aa !== bb) return aa - bb;
+      if ((a.kind === 'dir') !== (b.kind === 'dir')) return a.kind === 'dir' ? -1 : 1;
+      return nbNorm(a.label).localeCompare(nbNorm(b.label));
+    });
+  }
+  /** Folders and files that sit directly in `parent`, in the order the tree shows. */
+  function nbDirectKids(parent){
+    parent = parent || '';
+    var pre = parent ? parent + '/' : '';
+    var dirs = {}, notes = [];
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (p.slice(-1) === '/'){
+        var folder = p.replace(/\/+$/, '');
+        if (folder && nbFolder(folder) === parent) dirs[folder] = folder.split('/').pop();
+        return;
+      }
+      if (!f || f.deleted) return;
+      if (nbFolder(p) === parent) notes.push({ key: p, kind: 'file', label: nbTitle(p) });
+      else if (!pre || p.indexOf(pre) === 0){
+        var rest = pre ? p.slice(pre.length) : p;
+        var seg = rest.split('/')[0];
+        if (seg && rest.indexOf('/') !== -1) dirs[pre + seg] = seg;
+      }
+    });
+    nbFolders().forEach(function(d){ if (nbFolder(d) === parent) dirs[d] = d.split('/').pop(); });
+    function addAtt(k){
+      if (notes.some(function(n){ return n.key === k; })) return;
+      var a = (NB.attach && NB.attach[k]) || (NB.attachMeta && NB.attachMeta[k]);
+      if (!a || a.deleted || nbFolder(k) !== parent) return;
+      notes.push({ key: k, kind: 'att', label: k.split('/').pop() });
+    }
+    Object.keys(NB.attach || {}).forEach(addAtt);
+    Object.keys(NB.attachMeta || {}).forEach(addAtt);
+    return nbSortKids(parent, Object.keys(dirs).map(function(k){ return { key: k, kind: 'dir', label: dirs[k] }; }).concat(notes));
+  }
+  function nbOrderMove(parent, key, delta){
+    parent = parent || '';
+    var list = nbDirectKids(parent).map(function(it){ return it.key; });
+    var i = list.indexOf(key), j = i + delta;
+    if (i < 0 || j < 0 || j >= list.length){ toast(delta < 0 ? 'بالاتر از این نیست' : 'پایین‌تر از این نیست', 'x'); return; }
+    var swap = list[i]; list[i] = list[j]; list[j] = swap;
+    if (!NB.order) NB.order = {};
+    NB.order[parent] = list;
+    nbSaveOrder();
+    nbRender();
+    nbOrderPaint(parent);
+  }
+  function nbOrderPaint(parent){
+    var box = $('nbOrderList');
+    if (!box || box.dataset.nbParent !== (parent || '')) return;
+    var items = nbDirectKids(parent);
+    box.innerHTML = items.length ? items.map(function(it, i){
+      return '<div class="nb-order-row">' + icon(it.kind === 'dir' ? 'folder' : (it.kind === 'att' ? 'image' : 'file'))
+        + '<span class="nb-name" dir="auto">' + escapeHtml(it.label) + '</span>'
+        + '<button type="button" class="elbtn xs" data-nb-ord="' + i + '" data-nb-delta="-1">بالا</button>'
+        + '<button type="button" class="elbtn xs" data-nb-ord="' + i + '" data-nb-delta="1">پایین</button></div>';
+    }).join('') : '<p class="nb-mini-text">چیزی برای چیدن نیست.</p>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-nb-ord]'), function(btn){
+      btn.onclick = function(){
+        var row = nbDirectKids(parent)[+btn.dataset.nbOrd];
+        if (row) nbOrderMove(parent, row.key, +btn.dataset.nbDelta);
+      };
+    });
+  }
+  function nbOrderDialog(parent){
+    parent = parent || '';
+    var title = parent ? ('ترتیب «' + parent.split('/').pop() + '»') : 'ترتیب ریشه';
+    nbModalBox(title, '<div class="nb-order-list" id="nbOrderList" data-nb-parent="' + escapeHtml(parent) + '"></div>'
+      + '<p class="nb-mini-text">پوشه و فایل همین سطح. ترتیب روی همین دستگاه می‌ماند و به مخزن نمی‌رود.</p>',
+      '<button class="btn-soft" type="button" id="nbOrderAlpha">ترتیب الفبا</button><button class="btn-primary" type="button" data-nb-mini-close>بستن</button>', 'tree');
+    $('nbOrderAlpha').onclick = function(){
+      if (NB.order) delete NB.order[parent];
+      nbSaveOrder();
+      nbRender();
+      nbOrderPaint(parent);
+    };
+    nbOrderPaint(parent);
+  }
   function nbTreeHtml(node, depth, prefix, activePath){
     var out = '';
-    Object.keys(node.folders).sort(function(a, b){ return nbNorm(a).localeCompare(nbNorm(b)); }).forEach(function(k){
-      var child = node.folders[k], full = prefix ? prefix + '/' + k : k;
+    var items = [];
+    Object.keys(node.folders).forEach(function(k){
+      items.push({ key: prefix ? prefix + '/' + k : k, kind: 'dir', label: node.folders[k].name, k: k });
+    });
+    node.notes.forEach(function(n){
+      items.push({ key: n.path, kind: n.att ? 'att' : 'file', label: n.att ? n.path.split('/').pop() : nbTitle(n.path), n: n });
+    });
+    nbSortKids(prefix || '', items).forEach(function(it){
+      if (it.kind === 'dir'){
+      var child = node.folders[it.k], full = it.key;
       var open = !!NB.treeQuery || NB.expanded[full] !== false, count = nbCountUnder(child);
       out += '<div class="nb-row nb-dir-row' + (open ? ' open' : '') + '" data-nb-dir="' + escapeHtml(full) + '" tabindex="0" role="button">'
         + '<span class="nb-caret">' + icon('chev') + '</span>' + icon('folder')
         + '<span class="nb-name" dir="auto">' + escapeHtml(child.name) + '</span>'
         + '<span class="nb-count">' + (count ? faNum(count) : '') + '</span></div>';
       if (open) out += '<div class="nb-kids">' + nbTreeHtml(child, depth + 1, full, activePath) + '</div>';
-    });
-    node.notes.sort(function(a, b){ return nbNorm(a.path).localeCompare(nbNorm(b.path)); }).forEach(function(n){
+      return;
+      }
+      var n = it.n;
       if (n.att){
         out += '<div class="nb-row nb-note-row nb-att-row" data-nb-att="' + escapeHtml(n.path) + '" tabindex="0" title="' + escapeHtml(n.path) + '">'
           + '<span class="nb-caret"></span>' + icon('image') + '<span class="nb-name" dir="ltr">' + escapeHtml(n.path.split('/').pop()) + '</span>'
@@ -10013,6 +10140,7 @@ function nbCommitMessage(list){
         nbMenu(e.clientX, e.clientY, [
           { label: 'یادداشت جدید', act: function(){ nbNewDialog(null, ''); } },
           { label: 'پوشهٔ جدید', act: function(){ nbNewFolder(''); } },
+          { label: 'چیدن ترتیب…', act: function(){ nbOrderDialog(''); } },
           { label: 'مجموعهٔ جدید (پوشه + تقویم + قالب)…', act: function(){ nbCollectionDialog(-1, ''); } },
           { label: 'ثبت سریع', act: function(){ nbQuickInbox(); } },
           { label: 'گرفتن از مخزن', act: function(){ nbPull({ loud: true }); } },
@@ -10029,6 +10157,9 @@ function nbCommitMessage(list){
         var ap = att.dataset.nbAtt;
         nbMenu(e.clientX, e.clientY, [
           { label: 'دانلود', act: function(){ nbDownloadAttachment(ap); } },
+          { label: 'یک پله بالاتر', act: function(){ nbOrderMove(nbFolder(ap), ap, -1); } },
+          { label: 'یک پله پایین‌تر', act: function(){ nbOrderMove(nbFolder(ap), ap, 1); } },
+          { label: 'چیدن ترتیب این پوشه…', act: function(){ nbOrderDialog(nbFolder(ap)); } },
           { label: 'حذف از مخزن', danger: true, act: function(){ nbDropAttachment(ap); toast('برای حذف صف شد', 'trash'); } },
           { label: 'رونوشت مسیر', act: function(){ copyToClipboard('مسیر', ap).then(function(ok){ toast(ok ? 'کپی شد: ' + ap : 'کپی نشد', ok ? 'copy' : 'x'); }); } }
         ]);
@@ -10046,6 +10177,9 @@ function nbCommitMessage(list){
               : { label: 'مجموعه کردن این پوشه (تقویم و قالب)…', act: function(){ nbCollectionDialog(-1, folder); } };
           })(),
           { label: 'تغییر نام پوشه', act: function(){ nbRenameFolder(folder); } },
+          { label: 'یک پله بالاتر', act: function(){ nbOrderMove(nbFolder(folder), folder, -1); } },
+          { label: 'یک پله پایین‌تر', act: function(){ nbOrderMove(nbFolder(folder), folder, 1); } },
+          { label: 'چیدن ترتیب داخل این پوشه…', act: function(){ nbOrderDialog(folder); } },
           { label: 'دانلود zip این پوشه', act: function(){ nbDownloadZip(folder); } },
           { label: 'رمزگذاری این پوشه', act: function(){ nbEncryptFolder(folder); } },
           { label: 'حذف پوشه', danger: true, act: function(){
@@ -10141,6 +10275,9 @@ function nbCommitMessage(list){
       { label: 'باز کردن', act: function(){ nbOpen(path); } },
       { label: 'تغییر نام', act: function(){ nbPrompt('نام تازه', nbTitle(path), function(v){ if (v) nbRenameDialog(path, v); }); } },
       { label: 'جابه جایی', act: function(){ nbMoveDialog(path); } },
+      { label: 'یک پله بالاتر', act: function(){ nbOrderMove(nbFolder(path), path, -1); } },
+      { label: 'یک پله پایین‌تر', act: function(){ nbOrderMove(nbFolder(path), path, 1); } },
+      { label: 'چیدن ترتیب این پوشه…', act: function(){ nbOrderDialog(nbFolder(path)); } },
       { label: 'تکثیر', act: function(){ nbDuplicate(path); } },
       { label: 'باز کردن در تب تازه', act: function(){ nbOpenInNewTab(path); } },
       { label: 'سنجاق در تب', act: function(){ nbPinNoteTab(path); } },
@@ -10540,6 +10677,7 @@ function nbCommitMessage(list){
       });
       C.collections.forEach(function(c){ if (nbFolderOfPattern(c.path) === folder) c.path = target + c.path.slice(folder.length); });
       nbCollectionsChanged();
+      nbOrderRewrite(folder, target);
       toast('پوشه تغییر نام داد — ' + faNum(moved) + ' یادداشت', 'folder');
     });
   }
@@ -14789,6 +14927,7 @@ function nbCommitMessage(list){
       if (nbFolderOfPattern(c.path) === from || nbFolderOfPattern(c.path).indexOf(pre) === 0) c.path = target + c.path.slice(from.length);
     });
     nbCollectionsChanged();
+    nbOrderRewrite(from, target);
     nbCountDirty(); nbRender(); nbSaveFiles();
     toast('«' + from + '» با ' + faNum(moved) + ' یادداشت جابه جا شد' + (left ? ' — ' + faNum(left) + ' تا نام تکراری داشت و ماند' : ''), 'folder', { label: 'بازگشت', icon: 'undo', run: function(){ nbdDropFolder(target, nbFolder(from)); } });
   }
