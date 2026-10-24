@@ -4996,6 +4996,48 @@ if (typeof document !== 'undefined'){
   /* --- recent texts --- */
   /* --- IndexedDB: room for many recent texts and for every tab (browser storage holds only ~5 MB) --- */
   var idbOpen = null;
+  /** One-shot: copy beta2's notebook DB into root `mizkar` when this install is still empty. */
+  function idbAdoptBeta2(db){
+    try { if (localStorage.getItem('mz2-idb-from-beta2') === '1') return Promise.resolve(); } catch(e){}
+    return new Promise(function(resolve){
+      var check;
+      try { check = db.transaction('meta', 'readonly').objectStore('meta').get('nb-cfg'); }
+      catch(err){ resolve(); return; }
+      check.onerror = function(){ resolve(); };
+      check.onsuccess = function(){
+        if (check.result){ try { localStorage.setItem('mz2-idb-from-beta2', '1'); } catch(e){} resolve(); return; }
+        var open = indexedDB.open('mizkar-beta2');
+        open.onerror = function(){ resolve(); };
+        open.onupgradeneeded = function(){ try { open.transaction.abort(); } catch(e){} resolve(); };
+        open.onsuccess = function(){
+          var src = open.result;
+          var names = ['kv', 'notes', 'queue', 'search', 'meta'].filter(function(n){ return src.objectStoreNames.contains(n); });
+          if (!names.length){ src.close(); try { localStorage.setItem('mz2-idb-from-beta2', '1'); } catch(e){} resolve(); return; }
+          var left = names.length;
+          var done = function(){
+            if (--left > 0) return;
+            src.close();
+            try { localStorage.setItem('mz2-idb-from-beta2', '1'); } catch(e){}
+            resolve();
+          };
+          names.forEach(function(store){
+            var rows = [], cur = src.transaction(store).objectStore(store).openCursor();
+            cur.onerror = done;
+            cur.onsuccess = function(){
+              var c = cur.result;
+              if (c){ rows.push({ k: c.key, v: c.value }); c.continue(); return; }
+              if (!rows.length){ done(); return; }
+              try {
+                var tx = db.transaction(store, 'readwrite'), os = tx.objectStore(store);
+                rows.forEach(function(r){ os.put(r.v, r.k); });
+                tx.oncomplete = done; tx.onerror = done;
+              } catch(err){ done(); }
+            };
+          });
+        };
+      };
+    });
+  }
   function idb(){
     if (!idbOpen) idbOpen = new Promise(function(resolve, reject){
       if (!window.indexedDB){ reject(new Error('no IndexedDB')); return; }
@@ -5004,7 +5046,10 @@ if (typeof document !== 'undefined'){
         var db = rq.result;
         ['kv', 'notes', 'queue', 'search', 'meta'].forEach(function(n){ if (!db.objectStoreNames.contains(n)) db.createObjectStore(n); });
       };
-      rq.onsuccess = function(){ resolve(rq.result); };
+      rq.onsuccess = function(){
+        var db = rq.result;
+        idbAdoptBeta2(db).then(function(){ resolve(db); }, function(){ resolve(db); });
+      };
       rq.onerror = function(){ reject(rq.error); };
     });
     return idbOpen;
@@ -7085,7 +7130,9 @@ if (typeof document !== 'undefined'){
     Promise.all([get('index.html'), get('app.js'), get('sw.js'), get('version.json')]).then(function(rs){
       if (rs.some(function(r){ return !r.ok; })) throw new Error('bad');
       var wipe = window.caches
-        ? caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+        ? caches.keys().then(function(keys){
+          return Promise.all(keys.filter(function(k){ return /^mizkar-/.test(k) || /^mzbeta2?-/.test(k); }).map(function(k){ return caches.delete(k); }));
+        })
         : Promise.resolve();
       var dropSw = (navigator.serviceWorker && navigator.serviceWorker.getRegistration)
         ? navigator.serviceWorker.getRegistration().then(function(reg){ return reg ? reg.unregister() : null; })
@@ -9608,7 +9655,13 @@ function nbCommitMessage(list){
       if (e.target.id === 'nbFindCol'){ NB.colFilter = e.target.value; nbRefreshSearch(); }
     });
     box.addEventListener('click', function(e){
-      var anchorMenu = function(el, items){ var r = el.getBoundingClientRect(); nbMenu(r.left, r.bottom + 4, items); };
+      var anchorMenu = function(el, items){
+        var m = $('nbMenu');
+        if (m && !m.hidden && nbMenu.anchor === el){ nbMenuClose(); return; }
+        var r = el.getBoundingClientRect();
+        nbMenu(r.left, r.bottom + 4, items);
+        nbMenu.anchor = el;
+      };
       if (e.target.closest('[data-nb-secs-more]')){ e.stopPropagation(); anchorMenu(e.target.closest('[data-nb-secs-more]'), nbSecsMoreItems()); return; }
       if (e.target.closest('#nbPlus')){ e.stopPropagation(); anchorMenu($('nbPlus'), nbPlusItems()); return; }
       if (e.target.closest('#nbHeadSync')){ e.stopPropagation(); nbToggleSyncPop($('nbHeadSync')); return; }
@@ -10343,14 +10396,14 @@ function nbCommitMessage(list){
        long press looked dead on a phone). A deliberate tap outside is a NEW touch and closes it at once. */
     var compat = e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents;
     if (compat && nbTouchSeq === nbMenuOpenedTouch) return;
-    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"]')) nbMenuClose();
+    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"], [data-nb-secs-more], #nbPlus')) nbMenuClose();
   }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    /* FAB / «تازه» / «بیشتر» toggle their own menu — they are not «outside» */
-    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"]')) nbMenuClose();
+    /* FAB / «تازه» / «بیشتر» / پنل ⋯ toggle their own menu — they are not «outside» */
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"], [data-nb-secs-more], #nbPlus')) nbMenuClose();
   });
 
   /* --- settings --- */
@@ -12922,7 +12975,9 @@ function nbCommitMessage(list){
   /** «بیشتر» on a phone: the sections without a place on the bottom bar, the new-note actions, settings. */
   /** Everything a phone needs when it keeps opening an old copy: drop the workers and the caches, then reload. */
   function nbHardRefresh(){
-    var cachesGone = (window.caches ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }) : Promise.resolve());
+    var cachesGone = (window.caches ? caches.keys().then(function(ks){
+      return Promise.all(ks.filter(function(k){ return /^mizkar-/.test(k) || /^mzbeta2?-/.test(k); }).map(function(k){ return caches.delete(k); }));
+    }) : Promise.resolve());
     var workersGone = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }) : Promise.resolve());
     var again = function(){ try{ location.reload(); }catch(e){} };
     Promise.all([workersGone, cachesGone]).then(again, again);

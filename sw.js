@@ -4,7 +4,7 @@
  * background; when it differs, open tabs are told so they can offer a reload. Icons and the manifest are cache-first.
  * The one POST it answers is Android's «share» sheet: the text is parked in IndexedDB for the page to pick up.
  */
-var CACHE = 'mizkar-1.1';
+var CACHE = 'mizkar-1.2';
 var ASSETS = ['./', 'index.html', 'app.js', 'vendor/mermaid.min.js', 'vendor/katex.min.js', 'vendor/katex.min.css', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 var SHARE_DB = 'mizkar', SHARE_STORE = 'meta', SHARE_KEY = 'inbox-share';
 
@@ -74,6 +74,13 @@ self.addEventListener('fetch', function(event){
   }));
 });
 
+/** Tell open tabs a newer shell arrived (the page listens for `fs-update`). */
+function notifyFsUpdate(){
+  return self.clients.matchAll({ type: 'window' }).then(function(list){
+    list.forEach(function(c){ try { c.postMessage({ type: 'fs-update' }); } catch(e){} });
+  });
+}
+
 /** The newest index.html, or the saved one when the network is slow/offline. */
 function navigationPage(){
   return caches.open(CACHE).then(function(cache){
@@ -84,8 +91,12 @@ function navigationPage(){
       var inTime = Promise.race([net, new Promise(function(r){ setTimeout(function(){ r(null); }, 3000); })]);
       return inTime.then(function(fresh){
         if (!fresh) return cached || net.then(function(late){ return late || Response.error(); });
-        cache.put('index.html', fresh.clone());
-        return fresh;
+        if (!cached){ cache.put('index.html', fresh.clone()); return fresh; }
+        return Promise.all([cached.clone().text(), fresh.clone().text()]).then(function(pair){
+          cache.put('index.html', fresh.clone());
+          if (pair[0] !== pair[1]) notifyFsUpdate();
+          return fresh;
+        }).catch(function(){ cache.put('index.html', fresh.clone()); return fresh; });
       });
     });
   });
