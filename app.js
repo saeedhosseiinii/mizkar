@@ -695,6 +695,8 @@ var APP_CSS = [
   '.modal-box{width:min(720px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:0 40px 100px -20px rgba(0,0,0,.5);animation:pop .18s cubic-bezier(.2,.9,.3,1.2);}',
   '.modal-head{display:flex;align-items:center;gap:8px;padding:12px 14px 12px 10px;border-bottom:1px solid var(--border);}',
   '.modal-head .ph-title{font-size:.95rem;}',
+  /* close marks on the physical right (first in an RTL row), not pushed to the left */
+  '.modal-head > [aria-label="بستن"],.find-row > [data-action="find-close"],.deck-bar > [data-deck="close"],.hist-row > [data-tab-close]{order:-1;margin-inline-start:0 !important;}',
   '.modal-body{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:18px;padding:12px 14px 4px;}',
   '.pdf-opts .pop-row{padding:6px 8px;}',
   '.pdf-side{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border);}',
