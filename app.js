@@ -13700,6 +13700,109 @@ function nbCommitMessage(list){
       + ((C.provider || 'github') === 'github' ? 'خالی = همان توکن مخزن' : 'github_pat_…') + '" value="' + escapeHtml(C.gistToken || '') + '">'
       + '<small class="nb-mini-text">در <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">گیت هاب</a>، Account permissions › Gists › Read and write.</small></div>';
   }
+  /** Plain text behind a share: the open note when it is still here, otherwise the gist itself. */
+  function nbSharePlain(rec, pass){
+    var live = nbShareLive(rec);
+    if (live && live.needPlain) return nbEnsurePlain(live.needPlain).then(function(ok){ return ok ? nbSharePlain(rec, pass) : null; });
+    if (live && !live.needPlain) return Promise.resolve({ title: live.title || rec.title || '', text: live.text });
+    return nbGistApi('GET', '/gists/' + rec.id).then(function(g){
+      var name = rec.file && g.files && g.files[rec.file] ? rec.file : Object.keys(g.files || {})[0];
+      var file = name && g.files[name];
+      if (!file) throw nbError(404, 'فایل اشتراک پیدا نشد');
+      var textP = file.truncated && file.raw_url
+        ? fetch(file.raw_url).then(function(r){ if (!r.ok) throw nbError(r.status, 'این اشتراک خوانده نشد'); return r.text(); })
+        : Promise.resolve(file.content || '');
+      return textP.then(function(text){
+        if ((rec.mode || 'open') === 'open' || /\.md$/i.test(name)) return { title: rec.title || '', text: text };
+        var key = rec.mode === 'key' ? rec.key : pass;
+        if (!key) return { needPass: true };
+        return nbDecrypt(text, key).then(function(plain){
+          var d = JSON.parse(plain);
+          return { title: d.t || rec.title || '', text: String(d.x || '') };
+        }, function(){ throw nbError(0, 'گذرواژه یا کلید این اشتراک درست نیست'); });
+      });
+    });
+  }
+  /** New title and/or display mode on the same gist. The link stays until the mode (or its key) changes. */
+  function nbShareRewrite(rec, title, mode, pass){
+    title = String(title || '').trim() || rec.title || 'بدون عنوان';
+    mode = mode || rec.mode || 'open';
+    var exp = rec.exp || '';
+    var desc = NB_SHARE_PREFIX + (mode === 'open' ? ': ' + title : '') + (exp ? ' | exp ' + exp : '');
+    var same = mode === (rec.mode || 'open');
+    var oldKey = rec.key || '';
+    var file = (nbSlug(title) || 'note') + (mode === 'open' ? '.md' : '.mizkar');
+    var finish = function(linkChanged){
+      rec.title = title;
+      rec.mode = mode;
+      rec.file = file;
+      rec.at = Date.now();
+      nbShareSaveReg();
+      nbSharesPaint(nbShareReg || [], NB.shareFilter || '');
+      if (linkChanged) nbShareGive(nbShareUrl(rec), title);
+      else toast('اشتراک ذخیره شد — همان لینک', 'check');
+    };
+    toast('در حال ذخیره…', 'link');
+    return nbSharePlain(rec, pass).then(function(plain){
+      if (!plain) return false;
+      if (plain.needPass){ toast('برای این تغییر گذرواژه لازم است', 'x'); return false; }
+      var key = mode === 'key' ? (same && rec.key ? rec.key : nbShareKey()) : '';
+      var body = mode === 'open' ? Promise.resolve(plain.text) : nbEncrypt(JSON.stringify({ t: title, x: plain.text }), mode === 'key' ? key : pass);
+      return body.then(function(content){
+        var files = {};
+        var old = rec.file || file;
+        if (old !== file) files[old] = { filename: file, content: content };
+        else files[old] = { content: content };
+        return nbGistApi('PATCH', '/gists/' + rec.id, { description: desc, files: files }).then(function(){
+          rec.key = key;
+          finish(!same || (mode === 'key' && key !== oldKey));
+          return true;
+        });
+      });
+    }).catch(function(e){ toast(e.message || 'ذخیرهٔ اشتراک ممکن نشد', 'x'); return false; });
+  }
+  function nbShareEditDialog(rec){
+    if (!rec) return;
+    var mode = rec.mode || 'open';
+    var secret = !!(rec.path && NB.files[rec.path] && NB.files[rec.path].enc);
+    var opt = function(m, label, sub){
+      return '<label class="nb-share-opt"><input type="radio" name="nbShareMode" value="' + m + '"' + (m === mode ? ' checked' : '') + (secret && m === 'open' ? ' disabled' : '') + '>'
+        + '<span><b>' + label + '</b><small>' + sub + '</small></span></label>';
+    };
+    nbModalBox('ویرایش اشتراک',
+      '<div class="nb-share">'
+      + '<div class="nb-field"><label>عنوان</label><input class="nb-input" id="nbShareTitle" dir="auto" value="' + escapeHtml(rec.title || '') + '"></div>'
+      + '<div class="nb-field"><label>نمایش</label></div>'
+      + opt('open', 'باز', 'هر کس لینک را داشته باشد می خواند؛ متن روی گیست ساده است.')
+      + opt('key', 'کلید در لینک', 'روی گیت هاب فقط متن رمزشده است؛ کلید داخل خود لینک است.')
+      + opt('pass', 'رمزدار', 'خواننده باید گذرواژه را هم بداند.')
+      + '<input class="nb-input" id="nbSharePass" type="password" autocomplete="new-password" placeholder="گذرواژه" hidden>'
+      + '<p class="nb-mini-text">با عوض شدن نمایش، لینک تازه ساخته می‌شود. عوض شدن عنوان به‌تنهایی همان لینک را نگه می‌دارد.</p>'
+      + '</div>',
+      '<button class="btn-soft" type="button" data-nb-mini-close>انصراف</button><button class="btn-primary" type="button" id="nbMiniOk">ذخیره</button>', 'link');
+    var box = $('nbMini');
+    var pick = function(){ var r = box.querySelector('input[name="nbShareMode"]:checked'); return r ? r.value : mode; };
+    var passNeeded = function(m){
+      if (m === 'pass' || (rec.mode || 'open') === 'pass') return true;
+      if ((rec.mode || 'open') === 'key' && !rec.key && !(nbShareLive(rec) && !nbShareLive(rec).needPlain)) return true;
+      return false;
+    };
+    var syncPass = function(){
+      var m = pick(), show = passNeeded(m);
+      $('nbSharePass').hidden = !show;
+      $('nbSharePass').placeholder = m === 'pass' && (rec.mode || 'open') !== 'pass' ? 'گذرواژهٔ تازه' : 'گذرواژهٔ همین اشتراک';
+    };
+    box.onchange = syncPass;
+    syncPass();
+    $('nbMiniOk').onclick = function(){
+      var m = pick(), pass = $('nbSharePass').value, title = $('nbShareTitle').value.trim();
+      if (!title){ toast('عنوان را بنویس', 'x'); $('nbShareTitle').focus(); return; }
+      if (passNeeded(m) && m === 'pass' && pass.length < 4){ toast('گذرواژه دست کم ۴ نویسه باشد', 'x'); $('nbSharePass').focus(); return; }
+      if (passNeeded(m) && (rec.mode || 'open') === 'pass' && pass.length < 4){ toast('گذرواژهٔ فعلی را بنویس', 'x'); $('nbSharePass').focus(); return; }
+      nbCloseMini();
+      nbShareRewrite(rec, title, m, pass);
+    };
+  }
   function nbSharesPaint(list, filterPath){
     var box = $('nbShareList');
     if (!box) return;
@@ -13713,6 +13816,7 @@ function nbCommitMessage(list){
         + '<span class="nb-name" dir="auto">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + (NB_SHARE_MODES[r.mode] || '')
         + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
         + '<span class="nb-hist-btns">'
+        + '<button type="button" class="elbtn xs" data-nb-share-edit="' + i + '">ویرایش</button>'
         + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
         + (nbShareCanUpdate(r) ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
         + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
@@ -13729,11 +13833,12 @@ function nbCommitMessage(list){
     });
   }
   function nbSharesClick(e){
-    var c = e.target.closest('[data-nb-share-copy]'), u = e.target.closest('[data-nb-share-up]'), d = e.target.closest('[data-nb-share-del]');
-    if (!c && !u && !d) return false;
-    var rec = nbShareReg[+(c || u || d).getAttribute(c ? 'data-nb-share-copy' : u ? 'data-nb-share-up' : 'data-nb-share-del')];
+    var c = e.target.closest('[data-nb-share-copy]'), u = e.target.closest('[data-nb-share-up]'), d = e.target.closest('[data-nb-share-del]'), ed = e.target.closest('[data-nb-share-edit]');
+    if (!c && !u && !d && !ed) return false;
+    var rec = nbShareReg[+(c || u || d || ed).getAttribute(c ? 'data-nb-share-copy' : u ? 'data-nb-share-up' : d ? 'data-nb-share-del' : 'data-nb-share-edit')];
     if (!rec) return true;
-    if (c){
+    if (ed){ nbShareEditDialog(rec); }
+    else if (c){
       if (rec.mode === 'key' && !rec.key) toast('کلید این لینک روی این دستگاه نیست — لینک بدون کلید کپی شد', 'x');
       copyToClipboard('', nbShareUrl(rec)).then(function(ok){ if (ok) toast('لینک کپی شد', 'link'); });
     } else if (u) nbShareUpdate(rec);
