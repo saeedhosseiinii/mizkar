@@ -699,6 +699,9 @@ var APP_CSS = [
   '.pal-in input:focus-visible{outline:0;}',
   '.pal-list{max-height:min(420px,55vh);overflow:auto;padding:6px;}',
   '.pal-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;cursor:pointer;font-size:.88rem;}',
+  '.pal-file{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px;}',
+  '.pal-file b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+  '.pal-file small{color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left;}',
   '.pal-item .i{color:var(--muted);}',
   '.pal-item .pal-group{margin-inline-start:auto;font-size:.68rem;color:var(--muted);}',
   '.pal-item.active{background:color-mix(in srgb,var(--accent) 12%,transparent);}',
@@ -6403,7 +6406,7 @@ if (typeof document !== 'undefined'){
       toast('پاک شد — Ctrl+Z برمی‌گرداند', 'trash');
     } },
     'pdf': { label: 'خروجی PDF…', icon: 'printer', kw: 'pdf print export', run: function(){ openPdf(); } },
-    'pdf-go': { label: 'ساخت مستقیم PDF با تنظیمات فعلی', icon: 'printer', kbd: 'Ctrl P', kw: 'pdf print', run: function(){ var scope = state.pdf.scope; closePdf(); state.pdf.scope = scope; printDoc(); state.pdf.scope = 'tab'; } },
+    'pdf-go': { label: 'ساخت مستقیم PDF با تنظیمات فعلی', icon: 'printer', kw: 'pdf print', run: function(){ var scope = state.pdf.scope; closePdf(); state.pdf.scope = scope; printDoc(); state.pdf.scope = 'tab'; } },
     'pdf-close': { label: 'بستن', icon: 'x', hidden: true, run: closePdf },
     'html': { label: 'دانلود فایل HTML', icon: 'download', kbd: 'Ctrl S', kw: 'html export save', run: function(){ exportHtml(); } },
     'html-all': { label: 'همهٔ تب‌ها در یک فایل HTML', icon: 'download', kw: 'html export all tabs batch', run: function(){ syncActiveTab(); if (!tabs.some(function(t){ return t.text.trim(); })){ toast('خروجی‌ای وجود ندارد — اول متنی وارد کنید', 'x'); return; } exportAllHtml(); } },
@@ -6518,8 +6521,8 @@ if (typeof document !== 'undefined'){
     a.run();
   }
 
-  /* --- command palette --- */
-  var palItems = [], palIdx = 0;
+  /* --- command palette and quick open (Ctrl+P) --- */
+  var palItems = [], palIdx = 0, palMode = 'cmd';
   function palNorm(s){ return normalizeFa(String(s).toLowerCase()).replace(/[‌ً-ٟ]/g, ''); }
   function paletteEntries(){
     var list = Object.keys(ACTIONS).filter(function(id){ return !ACTIONS[id].hidden; }).map(function(id){
@@ -6553,16 +6556,29 @@ if (typeof document !== 'undefined'){
     return list;
   }
   function drawPalette(){
-    if (!palItems.length){ palList.innerHTML = '<div class="pal-empty">چیزی پیدا نشد</div>'; return; }
+    if (!palItems.length){
+      var empty = palMode !== 'files' ? 'چیزی پیدا نشد' : (palInput.value.trim() ? 'فایلی با این مسیر نیست' : 'یادداشتی در دفترچه نیست');
+      palList.innerHTML = '<div class="pal-empty">' + empty + '</div>';
+      return;
+    }
     palList.innerHTML = palItems.map(function(e, i){
+      var text = e.path
+        ? '<span class="pal-file"><b dir="auto">' + escapeHtml(e.label) + '</b><small dir="ltr">' + escapeHtml(e.path) + '</small></span>'
+        : '<span>' + escapeHtml(e.label) + '</span>';
       return '<div class="pal-item' + (i === palIdx ? ' active' : '') + '" role="option" data-i="' + i + '" aria-selected="' + (i === palIdx) + '">'
-        + icon(e.icon) + '<span>' + escapeHtml(e.label) + '</span>'
+        + icon(e.icon) + text
         + (e.kbd ? '<kbd style="margin-inline-start:auto">' + e.kbd + '</kbd>' : e.group ? '<span class="pal-group">' + e.group.toUpperCase() + '</span>' : '') + '</div>';
     }).join('');
     var act = palList.querySelector('.active');
     if (act) act.scrollIntoView({ block: 'nearest' });
   }
   function filterPalette(){
+    if (palMode === 'files' && typeof nbQuickFiles === 'function'){
+      palItems = nbQuickFiles(palInput.value);
+      palIdx = 0;
+      drawPalette();
+      return;
+    }
     var words = palNorm(palInput.value).trim().split(/\s+/).filter(Boolean);
     palItems = paletteEntries().filter(function(e){
       var hay = palNorm(e.label + ' ' + e.kw);
@@ -6572,9 +6588,22 @@ if (typeof document !== 'undefined'){
     drawPalette();
   }
   function openPalette(prefill){
+    palMode = 'cmd';
+    palInput.placeholder = 'جستجوی فرمان یا سرفصل…';
     closePops();
     palette.hidden = false;
     palInput.value = typeof prefill === 'string' ? prefill : '';
+    syncFindDir(palInput);
+    filterPalette();
+    palInput.focus();
+  }
+  /** Ctrl+P: jump to a notebook file by name or path, the way an editor quick-open does. */
+  function openQuickOpen(){
+    palMode = 'files';
+    palInput.placeholder = 'نام یا مسیر فایل…';
+    closePops();
+    palette.hidden = false;
+    palInput.value = '';
     syncFindDir(palInput);
     filterPalette();
     palInput.focus();
@@ -7058,9 +7087,9 @@ if (typeof document !== 'undefined'){
     if (free && !mod && !e.altKey && !e.shiftKey && e.code === 'KeyE'){ e.preventDefault(); openDrawer(); return; }
     if (free && mod && !e.altKey && ((e.shiftKey && e.code === 'KeyZ') || (!e.shiftKey && e.code === 'KeyY')) && redoStack.length){ e.preventDefault(); redoReplace(); return; }
     if (free && mod && !e.altKey && !e.shiftKey && e.code === 'KeyZ' && undoStack.length){ e.preventDefault(); undoReplace(); return; }
-    if (mod && !e.altKey && (e.code === 'KeyK' || (e.shiftKey && e.code === 'KeyP'))){ e.preventDefault(); palette.hidden ? openPalette() : closePalette(); return; }
+    if (mod && !e.altKey && (e.code === 'KeyK' || (e.shiftKey && e.code === 'KeyP'))){ e.preventDefault(); (!palette.hidden && palMode === 'cmd') ? closePalette() : openPalette(); return; }
     if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyS'){ e.preventDefault(); runAction('html'); return; }
-    if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyP'){ e.preventDefault(); runAction('pdf-go'); return; }
+    if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyP'){ e.preventDefault(); (!palette.hidden && palMode === 'files') ? closePalette() : openQuickOpen(); return; }
     if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyO'){ e.preventDefault(); runAction('open'); return; }
     if (e.altKey && !mod && /^Digit[123]$/.test(e.code)){ e.preventDefault(); setView(['editor', 'split', 'preview'][+e.code.slice(5) - 1]); saveState(); }
   });
@@ -13252,6 +13281,7 @@ function nbCommitMessage(list){
     { label: 'ثبت سریع (متن از هر جا)', kbd: 'Alt Shift I', run: function(){ nbQuickInbox(); } },
     { label: 'یادداشت امروز', kbd: 'Alt Shift D', run: function(){ if (ACTIONS['nb-today']) ACTIONS['nb-today'].run(); } },
     { label: 'جستجو در یادداشت ها', kbd: 'Alt Shift F', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } },
+    { label: 'پرش به فایل', kbd: 'Ctrl P', run: function(){ if (typeof openQuickOpen === 'function') openQuickOpen(); } },
     { label: 'تقویم', kbd: 'Alt Shift C', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } },
     { label: 'کارها', kbd: 'Alt Shift T', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } },
     { label: 'نوار کناری', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
@@ -13421,6 +13451,51 @@ function nbCommitMessage(list){
       + '<button type="button" class="hm-link" data-home="temps">همه در بخش موقت</button></section></div>'
       + '<p class="hm-hint">برای دیدن سریع یک متن، همین‌جا بچسبان (Ctrl+V) — در یک تب موقت باز می شود و به دفترچه نمی رود.</p>'
       + '</div>';
+  }
+  /**
+   * Lower is a better match. A slash in the query starts the next piece after a folder boundary,
+   * so «Parspack/08-01» hits `Parspack/…/1405-08-01.md`. -1 means no match.
+   */
+  function nbQuickScore(path, query){
+    var hay = nbNorm(path), q = nbNorm(query).trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!q) return 0;
+    var segs = q.split('/').filter(Boolean), pos = 0, score = 0, i, at, slash;
+    for (i = 0; i < segs.length; i++){
+      if (i > 0){
+        slash = hay.indexOf('/', pos);
+        if (slash < 0) return -1;
+        pos = slash + 1;
+      }
+      at = hay.indexOf(segs[i], pos);
+      if (at < 0) return -1;
+      score += at - pos;
+      if (at === 0 || hay.charAt(at - 1) === '/') score -= 4;
+      pos = at + segs[i].length;
+    }
+    var file = hay.split('/').pop().replace(/\.(md|markdown|txt)$/i, ''), last = segs[segs.length - 1];
+    if (file === last) score -= 80;
+    else if (file.indexOf(last) === 0) score -= 60;
+    else if (file.indexOf(last) !== -1) score -= 40;
+    return score;
+  }
+  /** Ctrl+P list: recent files when the box is empty, path matches otherwise. */
+  function nbQuickFiles(query){
+    if (!NB.loaded) return [];
+    var notes = homeOpenNotes(), q = String(query || '').trim(), ranked = [];
+    if (!q){
+      return notes.sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 30).map(function(f){
+        return { label: nbTitle(f.path), path: f.path, icon: f.enc ? 'lock' : 'file', run: function(){ nbOpen(f.path); } };
+      });
+    }
+    notes.forEach(function(f){
+      var s = nbQuickScore(f.path, q);
+      if (s < 0) return;
+      ranked.push({ f: f, s: s });
+    });
+    ranked.sort(function(a, b){ return a.s - b.s || (b.f.at || 0) - (a.f.at || 0); });
+    return ranked.slice(0, 40).map(function(x){
+      return { label: nbTitle(x.f.path), path: x.f.path, icon: x.f.enc ? 'lock' : 'file', run: function(){ nbOpen(x.f.path); } };
+    });
   }
   /** Notes in the command palette, most recent first: a quick way to jump to any of them. */
   function nbPaletteItems(){
@@ -15250,6 +15325,7 @@ function nbCommitMessage(list){
   window.nbAfterSwitch = function(){ nbAfterSwitch(); ipSync(); nbShellSync(); };
   window.nbHomeHtml = nbHomeHtml;
   window.nbPaletteItems = nbPaletteItems;
+  window.nbQuickFiles = nbQuickFiles;
   window.nbShamsiLabel = nbShamsiLabel;          // the front matter strip shows date:/created: in Shamsi
 })();
 
