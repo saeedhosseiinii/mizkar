@@ -8776,9 +8776,9 @@ function nbCommitMessage(list){
     });
   }
   /**
-   * One commit carrying every change, on either provider.
-   * A deletion is not sent as sha:null: GitHub answers 404 for that body. The new tree lists every file
-   * that stays (its existing blob) and the files just written, and simply leaves the deleted paths out.
+   * One commit for every write, then one Contents-API delete per removed file.
+   * GitHub rejects both forms of a tree delete: sha:null is 404, and a tree with nothing left in it is
+   * «Invalid tree info». Deleting through the file API updates the branch itself.
    */
   function nbCommitPush(changes, message, baseSha, have){
     if (nbIsGL()){
@@ -8793,16 +8793,42 @@ function nbCommitMessage(list){
         .then(function(c){ return { sha: c.id }; });
     }
     var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
-    if (!baseSha) return nbFirstCommit(base, changes, message).then(function(first){
+    var writes = [], deletes = [];
+    changes.forEach(function(c){ if (c.deleted) deletes.push(c); else writes.push(c); });
+    function dropFiles(){
+      var last = '';
+      var chain = Promise.resolve();
+      deletes.forEach(function(c){
+        chain = chain.then(function(){
+          var sha = have && have[c.path];
+          if (!sha) return;
+          return nbApi('DELETE', base + '/contents/' + nbEncodePath(c.path), { message: message, sha: sha, branch: C.branch }).then(function(res){
+            if (res && res.commit && res.commit.sha) last = res.commit.sha;
+          }, function(e){
+            if (e && e.status === 404) return;
+            if (e && c.path && String(e.message || '').indexOf(c.path) === -1) e.message += ' — ' + c.path;
+            throw e;
+          });
+        });
+      });
+      return chain.then(function(){ return last; });
+    }
+    if (!baseSha) return nbFirstCommit(base, writes, message).then(function(first){
       // the rest of the batch goes on top of that first commit, the usual way
-      return first.rest.length ? nbCommitPush(first.rest, message, first.sha, have) : { sha: first.sha };
+      var rest = first.rest || [];
+      return (rest.length ? nbCommitPush(rest, message, first.sha, have) : Promise.resolve({ sha: first.sha })).then(function(done){
+        return dropFiles().then(function(sha){ return { sha: sha || (done && done.sha) || first.sha }; });
+      });
     });
-    // blobs go up four at a time; deletions are applied by omitting the path from the new tree
-    var tree = new Array(changes.length), next = 0, deleted = Object.create(null);
+    if (!writes.length) return dropFiles().then(function(sha){
+      if (!sha) throw nbError(0, 'این فایل ها روی مخزن پیدا نشدند');
+      return { sha: sha };
+    });
+    // blobs go up four at a time; the tree keeps the order of the writes
+    var tree = new Array(writes.length), next = 0;
     function worker(){
-      if (next >= changes.length) return Promise.resolve(true);
-      var i = next++, c = changes[i];
-      if (c.deleted){ deleted[c.path] = 1; return worker(); }
+      if (next >= writes.length) return Promise.resolve(true);
+      var i = next++, c = writes[i];
       var content;
       try { content = c.b64 || nbB64(c.text == null ? '' : String(c.text)); }
       catch (err) { return Promise.reject(nbError(0, '«' + c.path + '» برای ارسال مناسب نیست')); }
@@ -8816,7 +8842,7 @@ function nbCommitMessage(list){
       });
     }
     var workers = [];
-    for (var w = 0; w < Math.min(4, changes.length); w++) workers.push(worker());
+    for (var w = 0; w < Math.min(4, writes.length); w++) workers.push(worker());
     // base_tree must name a tree: the base commit's own tree, so every untouched file stays
     var baseTree = baseSha ? nbApi('GET', base + '/git/commits/' + baseSha).then(function(c){
       if (!c || !c.tree || !c.tree.sha) throw nbError(0, 'درخت commit پایه خوانده نشد');
@@ -8824,27 +8850,9 @@ function nbCommitMessage(list){
     }) : Promise.resolve('');
     return Promise.all([baseTree].concat(workers))
       .then(function(r){
-        var drop = Object.keys(deleted).length;
-        if (!drop){
-          var body = { tree: tree.filter(function(ent){ return ent && ent.sha; }) };
-          if (r[0]) body.base_tree = r[0];
-          return nbApi('POST', base + '/git/trees', body);
-        }
-        if (!have) throw nbError(0, 'فهرست مخزن برای حذف خوانده نشد');
-        var replaced = Object.create(null), entries = [], added = 0;
-        tree.forEach(function(ent){
-          if (!ent || !ent.sha) return;
-          replaced[ent.path] = 1;
-          if (!Object.prototype.hasOwnProperty.call(have, ent.path)) added++;
-          entries.push(ent);
-        });
-        Object.keys(have).forEach(function(p){
-          if (deleted[p] || replaced[p]) return;
-          entries.push({ path: p, mode: '100644', type: 'blob', sha: have[p] });
-        });
-        var expect = Object.keys(have).length - Object.keys(deleted).filter(function(p){ return Object.prototype.hasOwnProperty.call(have, p); }).length + added;
-        if (entries.length !== expect) throw nbError(0, 'حذف لغو شد تا فایلی از مخزن جا نماند');
-        return nbApi('POST', base + '/git/trees', { tree: entries });
+        var body = { tree: tree.filter(function(ent){ return ent && ent.sha; }) };
+        if (r[0]) body.base_tree = r[0];
+        return nbApi('POST', base + '/git/trees', body);
       })
       .then(function(treeRes){
         return nbApi('POST', base + '/git/commits', { message: message, tree: treeRes.sha, parents: baseSha ? [baseSha] : [] });
@@ -8852,6 +8860,9 @@ function nbCommitMessage(list){
       .then(function(commit){
         if (baseSha) return nbApi('PATCH', base + '/git/refs/heads/' + encodeURIComponent(C.branch), { sha: commit.sha }).then(function(){ return commit; });
         return nbApi('POST', base + '/git/refs', { ref: 'refs/heads/' + C.branch, sha: commit.sha }).then(function(){ return commit; });
+      })
+      .then(function(commit){
+        return dropFiles().then(function(sha){ return sha ? { sha: sha } : commit; });
       });
   }
 
