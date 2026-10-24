@@ -7437,8 +7437,9 @@ var NB_CSS = [
   '.nb-temp-part h5{margin:10px 2px 4px;font-size:.74rem;font-weight:800;color:var(--muted);}',
   '.nb-temp-part h5 b{color:var(--accent);margin-inline-start:4px;}',
   '.nb-temp-g{margin:8px 2px 2px;font-size:.7rem;font-weight:700;color:var(--muted);opacity:.9;}',
-  '.nb-hist-row{display:flex;align-items:center;gap:8px;padding:6px;border-radius:9px;cursor:pointer;}',
+  '#nb .nb-hist-row{flex-direction:column;align-items:stretch;gap:4px;padding:8px 8px 6px;border-radius:9px;cursor:pointer;}',
   '.nb-hist-row:hover{background:var(--surface-2);}',
+  '.nb-hist-body{display:flex;align-items:flex-start;gap:8px;min-width:0;width:100%;}',
   '.nb-hist-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}',
   '#nb .nb-hist-row .nb-name{flex:none;display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.84rem;font-weight:700;color:var(--ink);}',
   '.nb-hist-meta{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:.68rem;}',
@@ -7447,7 +7448,7 @@ var NB_CSS = [
   'body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]{display:none;}',
   '',
   '/* the row actions show on hover or focus; on a phone they are always there (no hover) */',
-  '.nb-hist-btns{display:flex;gap:2px;flex:none;align-items:center;}',
+  '#nb .nb-hist-btns{display:flex;gap:2px;flex:none;align-items:center;align-self:flex-start;width:max-content;margin-right:auto;margin-left:0;}',
   '.nb-hist-btns .ib.sm{width:28px;height:28px;}',
   '',
   '/* ================= §4 موبایل: حس اپ ================= */',
@@ -12440,14 +12441,14 @@ function nbCommitMessage(list){
         html += inGroup.slice(0, 40).map(function(h){
           var idx = hist.indexOf(h), label = h.name || h.title || 'بدون عنوان';
           return '<div class="nb-row nb-hist-row" data-nb-hist-item="' + idx + '" tabindex="0">'
-            + icon(h.closed ? 'x' : 'clock')
-            + '<span class="nb-hist-main"><span class="nb-name" dir="auto" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
-            + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span></span>'
             + '<span class="nb-hist-btns">'
             + '<button type="button" class="ib sm" data-nb-hist-open="' + idx + '" title="باز کردن" aria-label="باز کردن">' + icon('eye') + '</button>'
             + '<button type="button" class="ib sm" data-nb-hist-save="' + idx + '" title="ذخیره در دفترچه" aria-label="ذخیره در دفترچه">' + icon('book') + '</button>'
             + '<button type="button" class="ib sm" data-nb-hist-del="' + idx + '" title="حذف" aria-label="حذف">' + icon('trash') + '</button>'
-            + '</span></div>';
+            + '</span>'
+            + '<span class="nb-hist-body">' + icon(h.closed ? 'x' : 'clock')
+            + '<span class="nb-hist-main"><span class="nb-name" dir="auto" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
+            + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span></span></span></div>';
         }).join('');
       }
       html += '<div class="nb-actions"><button type="button" class="btn-soft sm" data-nb-hist-clear="1">پاک کردن همه</button></div>';
