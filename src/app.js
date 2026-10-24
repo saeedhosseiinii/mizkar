@@ -11427,7 +11427,7 @@ function nbCommitMessage(list){
         var col = n.col ? n.col.color : '#6d5efc';
         return '<i class="nb-cal-dot" style="background:' + escapeHtml(col || '#6d5efc') + '"></i>';
       }).join('');
-      html += '<span class="nb-cal-cell' + (c.today ? ' today' : '') + (notes.length ? ' has' : '') + '" data-nb-day="' + c.gy + '-' + nbPad2(c.gm) + '-' + nbPad2(c.gd) + '" title="' + (notes.length ? notes.map(function(n){ return nbTitle(n.path); }).join(' · ') : 'خالی') + '">'
+      html += '<span class="nb-cal-cell' + (c.today ? ' today' : '') + (notes.length ? ' has' : '') + '" data-nb-day="' + c.gy + '-' + nbPad2(c.gm) + '-' + nbPad2(c.gd) + '" title="' + (notes.length ? notes.map(function(n){ return nbDayChoiceLabel(n, notes); }).join(' · ') : 'خالی') + '">'
         + (C.showGregorian ? '<i class="nb-cal-g">' + faNum(c.gd) + '</i>' : '')
         + faNum(c.jd) + '<span class="nb-cal-dots">' + dots + '</span></span>';
     });
@@ -11438,13 +11438,23 @@ function nbCommitMessage(list){
       + '<div class="nb-hint">روی هر روز بزن: یادداشت همان روز باز می شود، یا با انتخاب مجموعه ساخته می شود. نقطه ها رنگ مجموعه را دارند.</div>';
     return html;
   }
+  function nbDayChoiceLabel(n, notes){
+    var title = nbTitle(n.path);
+    var twins = notes.filter(function(x){ return nbTitle(x.path) === title; });
+    if (twins.length < 2) return title;
+    var colName = n.col && n.col.name;
+    var sameCol = twins.filter(function(x){ return n.col && x.col && x.col.id === n.col.id; });
+    if (colName && sameCol.length < 2) return title + ' — ' + colName;
+    var folder = nbFolder(n.path);
+    return title + (folder ? ' — ' + folder : '');
+  }
   function nbDayClick(stamp){
     var p = String(stamp).split('-');
     var date = new Date(+p[0], +p[1] - 1, +p[2], 12, 0);
     var day = { gy: +p[0], gm: +p[1], gd: +p[2], jy: 0 };
     var notes = nbDayNotes({ gy: +p[0], gm: +p[1], gd: +p[2] });
     if (notes.length === 1){ nbOpen(notes[0].path); return; }
-    if (notes.length > 1){ nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, notes.map(function(n){ return { label: nbTitle(n.path), act: function(){ nbOpen(n.path); } }; })); return; }
+    if (notes.length > 1){ nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, notes.map(function(n){ return { label: nbDayChoiceLabel(n, notes), act: function(){ nbOpen(n.path); } }; })); return; }
     var candidates = C.collections.filter(function(c){ return c.calendar && c.calendar !== 'week'; });
     if (!candidates.length){ toast('مجموعه ای با تقویم روزانه نداری — در تنظیمات دفترچه بساز', 'x'); return; }
     if (candidates.length === 1){ nbMakeOnDate(candidates[0], date); return; }
