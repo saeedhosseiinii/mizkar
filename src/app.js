@@ -9136,7 +9136,7 @@ function nbCommitMessage(list){
       }
       NB.busy = false;
       NB.error = (e && e.message) || 'خطا';
-      nbSay(navigator.onLine === false ? 'offline' : 'error');
+      nbPendRefresh(navigator.onLine === false ? 'offline' : 'error');
       toast(NB.error, 'x');
       return false;
     });
@@ -9161,7 +9161,7 @@ function nbCommitMessage(list){
       if (!list.length && !atts.length){
         NB.busy = false;
         return Promise.all([nbSaveFiles(), nbSaveAttach()]).then(function(){
-          nbCountDirty(); nbRender(); nbSay();
+          nbPendRefresh();
           if (opts.loud) toast('تغییری برای ارسال نماند — حذف ها از قبل روی مخزن نبودند', 'check');
           return true;
         });
@@ -9223,7 +9223,8 @@ function nbCommitMessage(list){
           return Promise.all([nbSaveFiles(), nbSaveAttach()]);
         })
         .then(function(){
-          nbCountDirty(); nbRender(); NB.busy = false; nbSay();
+          NB.busy = false;
+          nbPendRefresh();
           if (opts.loud) toast('ارسال شد — ' + message, 'cloud');
           return true;
         });
@@ -12309,8 +12310,8 @@ function nbCommitMessage(list){
     if (NB.conflicts.length) return { text: faNum(NB.conflicts.length) + ' تعارض حل نشده', btn: 'حل تعارض', act: function(){ NB.section = 'conflicts'; nbSidebar(true); nbRender(); } };
     return null;
   }
-  function nbPendRefresh(){
-    nbCountDirty(); nbSay();
+  function nbPendRefresh(state){
+    nbCountDirty(); nbSay(state);
     var pop = $('nbSyncPop');
     if (pop && !pop.hidden){ pop.innerHTML = nbSyncPopHtml(); nbSyncPopWire(); }
     if (NB.open) nbRender();
