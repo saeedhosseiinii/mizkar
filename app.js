@@ -7260,6 +7260,7 @@ var NB_CSS = [
   '#nb .nb-tabs{ display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--border); overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; flex:none; }',
   '#nb .nb-tabs::-webkit-scrollbar{ height:3px; }',
   '#nb .nb-tab:not(.on) .nb-tab-l{ display:none; }',
+  '#nb .nb-tab[data-nb-sec="notes"] .nb-tab-l, #nb .nb-tab[data-nb-sec="cal"] .nb-tab-l{ display:inline; }',
   '#nb .nb-tab{ flex:none; white-space:nowrap;',
   '  display:flex; align-items:center; gap:5px; border:0; background:transparent; cursor:pointer; color:var(--muted);',
   '  font:inherit; font-size:12.5px; padding:6px 8px; border-radius:8px 8px 0 0; border-bottom:2px solid transparent;',
@@ -9827,7 +9828,7 @@ function nbCommitMessage(list){
     return html;
   }
   /** The section icons in the panel's head; what does not fit there is under ⋯. */
-  var NB_SECS_MAIN = [['notes', 'tree', 'یادداشت‌ها'], ['search', 'search', 'جستجو'], ['cal', 'clock', 'تقویم'], ['tasks', 'check', 'کارها'], ['temps', 'file', 'موقت']];
+  var NB_SECS_MAIN = [['notes', 'tree', 'یادداشت‌ها'], ['cal', 'clock', 'تقویم'], ['search', 'search', 'جستجو'], ['tasks', 'check', 'کارها'], ['temps', 'file', 'موقت']];
   var NB_SECS_MORE = [['tags', 'hash', 'برچسب‌ها'], ['trash', 'trash', 'سطل بازیافت']];
   function nbSecsRender(noteCount){
     var box = $('nbSecs');
@@ -13455,8 +13456,8 @@ function nbCommitMessage(list){
   function nbMoreItems(){
     var sec = function(s){ return function(){ NB.section = s; nbSidebar(true); }; };
     return [
+      { label: 'جستجو', act: function(){ NB.section = 'search'; NB.focusSearch = true; nbSidebar(true); } },
       { label: 'موقت', act: sec('temps') },
-      { label: 'تقویم', act: sec('cal') },
       { label: 'کارها', act: sec('tasks') },
       { label: 'برچسب ها', act: sec('tags') },
       { label: 'سطل بازیافت' + ((NB.trash || []).length ? ' (' + faNum(NB.trash.length) + ')' : ''), act: sec('trash') },
@@ -13479,8 +13480,8 @@ function nbCommitMessage(list){
   }
   var nbShellSync = (function(){
     /* the bottom bar (phone) */
-    /* امروز · یادداشت‌ها · ＋ · جستجو · بیشتر — floating FAB removed */
-    var NAV = [['home', 'sun', 'امروز'], ['notes', 'tree', 'یادداشت‌ها'], ['new', 'plus', 'تازه'], ['search', 'search', 'جستجو'], ['more', 'list', 'بیشتر']];
+    /* امروز · یادداشت‌ها · تقویم · ＋ · بیشتر — search lives under بیشتر */
+    var NAV = [['home', 'sun', 'امروز'], ['notes', 'tree', 'یادداشت‌ها'], ['cal', 'clock', 'تقویم'], ['new', 'plus', 'تازه'], ['more', 'list', 'بیشتر']];
     var nav = document.createElement('nav');
     nav.id = 'nbNav';
     nav.setAttribute('aria-label', 'بخش ها');
@@ -13670,7 +13671,7 @@ function nbCommitMessage(list){
           : '<svg class="i"><use href="#i-pen"/></svg>';
       }
       var on = NB.open ? ({ notes: 'notes', search: 'search', cal: 'cal', temps: 'temps' }[NB.section] || 'more') : (!path && !String(ta.value || '').trim() ? 'home' : '');
-      if (on === 'cal' || on === 'temps') on = 'more';
+      if (on === 'temps' || on === 'search') on = 'more';
       Array.prototype.forEach.call(nav.querySelectorAll('[data-nb-nav]'), function(b){
         if (b.dataset.nbNav === 'new'){ b.removeAttribute('aria-pressed'); return; }
         b.setAttribute('aria-pressed', String(b.dataset.nbNav === on));
