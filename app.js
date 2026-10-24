@@ -9410,6 +9410,23 @@ function nbCommitMessage(list){
    * new, and remembers where it came from (`movedFrom`) so the pending list shows one «جابه جا» row.
    * Moving back onto a path the repository still has brings that note back instead of adding a copy.
    */
+  var nbHold = 0, nbHeld = false, nbHeldEditor = false;
+  /** One redraw and one save. A rename used to do both three times and froze the page. */
+  function nbPaint(editor){
+    if (nbHold){ nbHeld = true; if (editor) nbHeldEditor = true; return; }
+    nbCountDirty();
+    nbStatus();
+    if (editor && typeof render === 'function') render();
+    if (NB.open) nbRender();
+    nbSaveFiles();
+    if (C.auto) nbScheduleCommit();
+  }
+  function nbPaintNow(){
+    var editor = nbHeldEditor;
+    nbHeld = false;
+    nbHeldEditor = false;
+    nbPaint(editor);
+  }
   function nbMoveNote(oldPath, newPath){
     if (!oldPath || !newPath || oldPath === newPath) return false;
     var f = NB.files[oldPath], dst = NB.files[newPath];
@@ -9429,8 +9446,7 @@ function nbCommitMessage(list){
     if (f.remote){ f.deleted = true; f.dirty = true; }
     else { delete NB.files[oldPath]; NB.paths = NB.paths.filter(function(p){ return p !== oldPath; }); }
     nbRetargetTab(oldPath, newPath);
-    nbCountDirty(); nbRender(); nbStatus(); nbSaveFiles();
-    if (C.auto) nbScheduleCommit();
+    nbPaint(false);
     return true;
   }
   function nbNewNote(collection, date, title, opts){
@@ -10162,16 +10178,24 @@ function nbCommitMessage(list){
     var target = (folder ? folder + '/' : '') + nbSlug(name) + (ext ? ext[0] : '.md');
     var oldTitle = nbTitle(path);
     if (target === path || !nbSlug(name)) return '';
-    if (!nbMoveNote(path, target)) return '';
-    var f = NB.files[target];
-    if (!opts.keepH1 && f && !(f.enc && f.plain == null) && nbSlug(nbH1(nbTextOf(f))) === oldTitle){
-      var text = nbTextOf(f);
-      nbPutNoteText(target, text.replace(/^(#[ \t]+).+$/m, function(all, hash){ return hash + name.trim(); }));
+    nbHold++;
+    var moved = false;
+    try {
+      if (!nbMoveNote(path, target)) return '';
+      moved = true;
+      var f = NB.files[target];
+      if (!opts.keepH1 && f && !(f.enc && f.plain == null) && nbSlug(nbH1(nbTextOf(f))) === oldTitle){
+        var text = nbTextOf(f);
+        nbPutNoteText(target, text.replace(/^(#[ \t]+).+$/m, function(all, hash){ return hash + name.trim(); }));
+      }
+      var fixed = nbFixLinks(oldTitle, nbTitle(target));
+      toast('نام عوض شد: ' + nbTitle(target) + (fixed ? ' — ' + faNum(fixed) + ' پیوند هم درست شد' : ''), 'pen',
+        { label: 'بازگشت', icon: 'undo', run: function(){ nbRenameDialog(target, oldTitle, { keepH1: opts.keepH1 }); } });
+      return target;
+    } finally {
+      nbHold--;
+      if (moved) nbPaintNow();
     }
-    var fixed = nbFixLinks(oldTitle, nbTitle(target));
-    toast('نام عوض شد: ' + nbTitle(target) + (fixed ? ' — ' + faNum(fixed) + ' پیوند هم درست شد' : ''), 'pen',
-      { label: 'بازگشت', icon: 'undo', run: function(){ nbRenameDialog(target, oldTitle, { keepH1: opts.keepH1 }); } });
-    return target;
   }
   /** The tab bar renamed a notebook tab: the note gets that name (or the tab goes back to the note's name). */
   function nbTabRenamed(t, name){
@@ -11102,8 +11126,8 @@ function nbCommitMessage(list){
   function nbSectionNotes(){ NB.section = 'notes'; nbRender(); }
 
   /* ================= جستجو، برچسب و ارجاع ها ================= */
-  var nbIdxCache = null, nbSearchCache = null, nbSearchKey = '';
-  function nbIdxInvalidate(){ nbIdxCache = null; nbSearchCache = null; nbDayIdx = null; }
+  var nbIdxCache = null, nbSearchCache = null, nbSearchKey = '', nbTaskCache = null;
+  function nbIdxInvalidate(){ nbIdxCache = null; nbSearchCache = null; nbDayIdx = null; nbTaskCache = null; }
   /** Which collection a path was made by (so the calendar and the filters can colour it). */
   var nbColRe = {};
   function nbCollectionOf(path){
@@ -11182,16 +11206,21 @@ function nbCommitMessage(list){
     return loose.length ? loose[0].path : '';
   }
   function nbBacklinks(path){
-    var title = nbNorm(nbTitle(path));
-    return nbIndex().filter(function(n){
-      if (n.path === path) return false;
-      return n.text.split('\n').some(function(line){
+    var title = nbNorm(nbTitle(path)), out = [];
+    NB.paths.forEach(function(p){
+      var f = NB.files[p];
+      if (!f || f.deleted || p === path || p.slice(-1) === '/') return;
+      var text = nbTextOf(f);
+      if (text.indexOf('[[') === -1) return;
+      var hit = text.split('\n').some(function(line){
         return (line.match(/\[\[([^\[\]|]{1,140})(?:\|[^\[\]]*)?\]\]/g) || []).some(function(link){
           var target = nbNorm(link.slice(2, -2).split('|')[0]);
-          return target === title || target === nbNorm(n.path);
+          return target === title || target === nbNorm(p);
         });
       });
+      if (hit) out.push({ path: p, title: nbTitle(p) });
     });
+    return out;
   }
   function nbBacklinksHtml(path){
     var back = nbBacklinks(path);
@@ -11291,10 +11320,10 @@ function nbCommitMessage(list){
   /** Renaming a note rewrites `[[links]]` that point at it. */
   function nbFixLinks(oldTitle, newTitle){
     var from = nbNorm(oldTitle), to = nbNorm(newTitle), n = 0;
+    if (from === to) return 0;
     NB.paths.forEach(function(p){
       var f = NB.files[p];
-      if (!f || f.deleted || p.slice(-1) === '/') return;
-      if (from === to) return;
+      if (!f || f.deleted || p.slice(-1) === '/' || f.text.indexOf('[[') === -1) return;
       var text = f.text.replace(/\[\[([^\[\]|]{1,140})(\|[^\[\]]*)?\]\]/g, function(m, target, label){
         if (nbNorm(target) !== from) return m;
         n++;
@@ -11302,7 +11331,7 @@ function nbCommitMessage(list){
       });
       if (text !== f.text){ f.text = text; f.dirty = true; f.at = Date.now(); nbRefreshOpenTab(p); }
     });
-    if (n){ nbCountDirty(); nbSaveFiles(); nbRender(); }
+    if (n) nbPaint(false);
     return n;
   }
 
@@ -12036,9 +12065,7 @@ function nbCommitMessage(list){
     nbStoreText(f, text);
     var t = nbTabFor(path);
     if (t){ t.text = text; if (t.id === activeTab) ta.value = text; }
-    nbCountDirty(); nbStatus(); nbSaveFiles();
-    if (C.auto) nbScheduleCommit();
-    render(); if (NB.open) nbRender();
+    nbPaint(true);
   }
   /** Writes (or, with no stamp, removes) a task's «📅 1405-08-05». Returns the note's text before, or null. */
   function nbSetTaskDue(id, stamp){
@@ -12967,11 +12994,14 @@ function nbCommitMessage(list){
   }
   /** Every checkbox line of every readable note: {path, line, done, text, due}. Locked secret notes are skipped. */
   function homeTasks(){
+    if (nbTaskCache) return nbTaskCache;
     var out = [];
     NB.paths.forEach(function(p){
       var f = NB.files[p];
       if (!f || f.deleted || p.slice(-1) === '/' || !nbIsNote(p) || (f.enc && f.plain == null)) return;
-      nbTextOf(f).split('\n').forEach(function(line, i){
+      var text = nbTextOf(f);
+      if (text.indexOf('[ ]') === -1 && text.indexOf('[x]') === -1 && text.indexOf('[X]') === -1) return;
+      text.split('\n').forEach(function(line, i){
         var m = HOME_TASK_RE.exec(line);
         if (!m) return;
         var due = null, dm = HOME_DUE_RE.exec(m[3]);
@@ -12982,6 +13012,7 @@ function nbCommitMessage(list){
         out.push({ path: p, line: i, done: m[2] !== ' ', text: m[3].replace(HOME_DUE_RE, '').trim(), due: due, ro: nbReadOnly(p) });
       });
     });
+    nbTaskCache = out;
     return out;
   }
   function homeGroups(tasks){
