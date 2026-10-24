@@ -7478,7 +7478,9 @@ var NB_CSS = [
   '.nb-share-opt small{display:block;color:var(--muted);font-size:.74rem;line-height:1.8;}',
   '.nb-share-row .nb-name small{color:var(--muted);font-size:.7rem;}',
   '.nb-share-row{align-items:flex-start;}',
-  '.nb-share-row .nb-name{cursor:pointer;}',
+  '.nb-share-row .nb-name b{font-weight:700;cursor:text;}',
+  '.nb-share-row .nb-name b:hover{color:var(--accent);}',
+  '.nb-share-row .nb-name input{width:100%;height:28px;margin:0;font:inherit;}',
   '.nb-share-row .nb-hist-btns{opacity:1;flex-wrap:wrap;justify-content:flex-end;max-width:100%;}',
   '/* --- «ویژگی‌ها»: front matter as a form --- */',
   '.nb-fm{display:flex;flex-direction:column;gap:6px;}',
@@ -10583,7 +10585,10 @@ function nbCommitMessage(list){
   /** Wired once: every redraw replaces the content, never the listeners. */
   function nbWireSettings(m){
     nbSharedBefore = C.weekStart + '|' + C.attachments;
-    m.addEventListener('input', function(e){ if (e.target.closest('#nbModalBody') && !e.target.closest('.nb-set-app')) nbSettingsApply(); });
+    m.addEventListener('input', function(e){
+      if (e.target.id === 'nbShareTitleInline') return;
+      if (e.target.closest('#nbModalBody') && !e.target.closest('.nb-set-app')) nbSettingsApply();
+    });
     m.addEventListener('change', function(e){
       if (!e.target.closest('#nbModalBody') || e.target.closest('.nb-set-app')) return;
       if (e.target.id === 'nbLock'){
@@ -13733,6 +13738,51 @@ function nbCommitMessage(list){
       });
     });
   }
+  /** List title only. The link and the ciphertext stay; the gist description carries the new title. */
+  function nbShareRetitle(rec, title){
+    title = String(title || '').trim().slice(0, 80);
+    if (!rec || !title || title === (rec.title || '')){
+      nbSharesPaint(nbShareReg || [], NB.shareFilter || '');
+      return;
+    }
+    rec.title = title;
+    rec.at = Date.now();
+    var exp = rec.exp || '';
+    var desc = NB_SHARE_PREFIX + ': ' + title + (exp ? ' | exp ' + exp : '');
+    nbShareSaveReg();
+    nbSharesPaint(nbShareReg || [], NB.shareFilter || '');
+    if (!nbShareToken()){ toast('عنوان در این دستگاه ذخیره شد', 'check'); return; }
+    nbGistApi('PATCH', '/gists/' + rec.id, { description: desc }).then(function(){
+      toast('عنوان ذخیره شد — همان لینک', 'check');
+    }, function(e){ toast(e.message || 'عنوان روی گیت هاب ذخیره نشد', 'x'); });
+  }
+  /** Click the title in the shares list and type a new one. Enter saves, Esc cancels. */
+  function nbShareTitleEdit(rec, el){
+    if (!rec || !el || el.querySelector('input')) return;
+    var input = document.createElement('input');
+    input.className = 'nb-input';
+    input.id = 'nbShareTitleInline';
+    input.dir = 'auto';
+    input.value = rec.title || '';
+    input.setAttribute('aria-label', 'عنوان اشتراک');
+    el.textContent = '';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+    var done = false;
+    var finish = function(save){
+      if (done) return;
+      done = true;
+      if (save) nbShareRetitle(rec, input.value);
+      else nbSharesPaint(nbShareReg || [], NB.shareFilter || '');
+    };
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape'){ e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', function(){ finish(true); });
+    input.addEventListener('click', function(e){ e.stopPropagation(); });
+  }
   /** New title and/or display mode on the same gist. The link stays until the mode (or its key) changes. */
   function nbShareRewrite(rec, title, mode, pass){
     title = String(title || '').trim() || rec.title || 'بدون عنوان';
@@ -13807,6 +13857,7 @@ function nbCommitMessage(list){
     $('nbMiniOk').onclick = function(){
       var m = pick(), pass = $('nbSharePass').value, title = $('nbShareTitle').value.trim();
       if (!title){ toast('عنوان را بنویس', 'x'); $('nbShareTitle').focus(); return; }
+      if (m === (rec.mode || 'open')){ nbCloseMini(); nbShareRetitle(rec, title); return; }
       if (passNeeded(m) && m === 'pass' && pass.length < 4){ toast('گذرواژه دست کم ۴ نویسه باشد', 'x'); $('nbSharePass').focus(); return; }
       if (passNeeded(m) && (rec.mode || 'open') === 'pass' && pass.length < 4){ toast('گذرواژهٔ فعلی را بنویس', 'x'); $('nbSharePass').focus(); return; }
       nbCloseMini();
@@ -13823,7 +13874,7 @@ function nbCommitMessage(list){
       if (i < 0) i = nbShareReg.findIndex ? nbShareReg.findIndex(function(x){ return x && x.id === r.id; }) : -1;
       if (i < 0) return '';
       return '<div class="nb-row nb-hist-row nb-share-row">' + icon(r.mode === 'open' ? 'link' : 'lock')
-        + '<span class="nb-name" dir="auto" data-nb-share-open="' + i + '" role="button" tabindex="0">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + (NB_SHARE_MODES[r.mode] || '')
+        + '<span class="nb-name" dir="auto"><b data-nb-share-title="' + i + '" title="تغییر عنوان">' + escapeHtml(r.title || 'بدون عنوان') + '</b><small> · ' + (NB_SHARE_MODES[r.mode] || '')
         + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
         + '<span class="nb-hist-btns">'
         + '<button type="button" class="elbtn xs" data-nb-share-open="' + i + '">باز کردن</button>'
@@ -13850,11 +13901,13 @@ function nbCommitMessage(list){
     nbReadGistHash('#g=' + rec.id + (rec.mode === 'key' && rec.key ? '.' + rec.key : ''));
   }
   function nbSharesClick(e){
-    var c = e.target.closest('[data-nb-share-copy]'), u = e.target.closest('[data-nb-share-up]'), d = e.target.closest('[data-nb-share-del]'), ed = e.target.closest('[data-nb-share-edit]'), op = e.target.closest('[data-nb-share-open]');
-    if (!c && !u && !d && !ed && !op) return false;
-    var rec = nbShareReg[+(c || u || d || ed || op).getAttribute(c ? 'data-nb-share-copy' : u ? 'data-nb-share-up' : d ? 'data-nb-share-del' : ed ? 'data-nb-share-edit' : 'data-nb-share-open')];
+    var c = e.target.closest('[data-nb-share-copy]'), u = e.target.closest('[data-nb-share-up]'), d = e.target.closest('[data-nb-share-del]'), ed = e.target.closest('[data-nb-share-edit]'), op = e.target.closest('[data-nb-share-open]'), tl = e.target.closest('[data-nb-share-title]');
+    if (!c && !u && !d && !ed && !op && !tl) return false;
+    if (tl && e.target.closest('input')) return true;
+    var rec = nbShareReg[+(c || u || d || ed || op || tl).getAttribute(c ? 'data-nb-share-copy' : u ? 'data-nb-share-up' : d ? 'data-nb-share-del' : ed ? 'data-nb-share-edit' : op ? 'data-nb-share-open' : 'data-nb-share-title')];
     if (!rec) return true;
-    if (op){ nbShareOpenRec(rec); }
+    if (tl){ nbShareTitleEdit(rec, tl); }
+    else if (op){ nbShareOpenRec(rec); }
     else if (ed){ nbShareEditDialog(rec); }
     else if (c){
       if (rec.mode === 'key' && !rec.key) toast('کلید این لینک روی این دستگاه نیست — لینک بدون کلید کپی شد', 'x');
