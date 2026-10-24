@@ -7553,7 +7553,7 @@ var NB_CSS = [
   '#nbBody .hm-group h5{padding:0 4px;}',
   '/* --- a notebook note edited in place (inplace.js): one centred column, Markdown tinted behind the text --- */',
   'body.ip-on #work[data-view="editor"] .pane.editor{background-color:transparent;background-image:radial-gradient(color-mix(in srgb,var(--ink) 8%,transparent) 1px,transparent 1.2px);background-size:20px 20px;}',
-  'body.ip-on #work[data-view="editor"] textarea#input{width:calc(100% - 52px);max-width:var(--sheet-w,860px);align-self:center;margin:28px auto 0;padding:48px 54px;font-size:var(--content-size,1rem);line-height:1.95;background:var(--paper);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-sheet);}',
+  'body.ip-on #work[data-view="editor"] textarea#input{min-width:0;flex:1 1 auto;width:calc(100% - 52px);max-width:var(--sheet-w,860px);align-self:center;margin:28px auto 0;padding:48px 54px;font-size:var(--content-size,1rem);line-height:1.95;background:var(--paper);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-sheet);}',
   '@media(max-width:900px){body.ip-on #work[data-view="editor"] textarea#input{width:calc(100% - 20px);margin-top:14px;border-radius:14px;}}',
   '@media(max-width:700px){body.ip-on #work[data-view="editor"] textarea#input{padding:26px 20px 32px;}}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
@@ -14099,16 +14099,19 @@ function nbCommitMessage(list){
       }
     }
   });
-  // a press on the navy gutters / empty chrome (not the text box) ends editing; judged where it starts
-  // so a selection dragged out of the text never counts
+  // a press on the dark page around the sheet (not the text box) ends editing; judged where it starts
+  // so a selection dragged out of the text never counts. «تمام» stays phone-only.
   var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, #ipDone, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
-    if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
+    if (state.view !== 'editor' || e.button !== 0) return;
     if (e.detail > 1) return;                                 // the second press of a double-click is still the gesture that opened the editor
     if (Date.now() < (ip.outsideUntil || 0)) return;
     if (Date.now() < (ip.touchUntil || 0)) return;            // a touch's delayed mouse event is not a click on the gutter
-    if (!e.target.closest || e.target.closest(IP_STAY)) return;
-    ipRead();
+    var el = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+    if (!el || !el.closest || el.closest(IP_STAY)) return;
+    if (!el.closest('#work')) return;                         // the dark gutters live in the page, not in the chrome
+    if (typeof ipGoRead === 'function') ipGoRead();
+    else if (ipTab()) ipRead();
   }, true);
   document.addEventListener('touchend', function(){ ip.touchUntil = Date.now() + 900; }, { passive: true });
   document.addEventListener('keydown', function(e){
