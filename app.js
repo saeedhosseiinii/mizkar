@@ -10595,7 +10595,11 @@ function nbCommitMessage(list){
     m.addEventListener('click', function(e){
       if (nbSharesClick(e)) return;
       var item = e.target.closest('[data-nb-set]');
-      if (item){ nbDrawSettings(item.dataset.nbSet); return; }
+      if (item){
+        if (item.dataset.nbSet === 'shares') NB.shareFilter = '';
+        nbDrawSettings(item.dataset.nbSet);
+        return;
+      }
       if (e.target.closest('[data-nb-set-back]')){ nbDrawSettings(''); return; }
       var prov = e.target.closest('[data-nb-prov]');
       if (prov){ $('nbProvider').value = prov.dataset.nbProv; nbSettingsApply(); nbDrawSettings(); return; }
@@ -10824,7 +10828,7 @@ function nbCommitMessage(list){
     toast('اول یک یادداشت یا تب با متن باز کن', 'x');
   } };
   ACTIONS['nb-props'] = { label: 'ویژگی‌های یادداشت (front matter)…', icon: 'list', kw: 'front matter properties tags date', run: function(){ var p = nbActivePath(); if (p) nbFmDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
-  ACTIONS['nb-shares'] = { label: 'اشتراک‌ها (لینک های گیست)', icon: 'link', kw: 'shares gists links', run: function(){ nbOpenSettings('shares'); } };
+  ACTIONS['nb-shares'] = { label: 'اشتراک‌ها (لینک های گیست)', icon: 'link', kw: 'shares gists links', run: function(){ NB.shareFilter = ''; nbOpenSettings('shares'); } };
   ACTIONS['nb-keys'] = { label: 'کلیدهای میانبر', icon: 'keyboard', kw: 'keyboard shortcuts keys map', run: function(){ nbKeysDialog(); } };
   ACTIONS['nb-today'] = { label: 'یادداشت امروز (روزانه)', icon: 'clock', kw: 'notebook today daily journal', run: function(){
     var col = C.collections.filter(function(c){ return c.calendar === 'day'; })[0] || C.collections[0];
@@ -13605,33 +13609,52 @@ function nbCommitMessage(list){
       }, function(e2){ return fail((e && e.message) || e2.message); });
     });
   }
-  /** Every share: what GitHub has (any device made it) joined with what this device remembers. */
+  /** A gist we made: description carries the prefix, or the file is `.mizkar`. */
+  function nbIsShareGist(g){
+    if (!g || !g.id) return false;
+    if (String(g.description || '').indexOf(NB_SHARE_PREFIX) !== -1) return true;
+    return Object.keys(g.files || {}).some(function(n){ return /\.mizkar$/i.test(n); });
+  }
+  function nbShareFromGist(g, known){
+    var r = known[g.id], file = Object.keys(g.files || {})[0] || '';
+    var d = String(g.description || '').trim();
+    var exp = (/\| exp (\d{4}-\d\d-\d\d)/.exec(d) || [])[1] || '';
+    if (r) return Object.assign(r, { file: r.file || file, exp: r.exp || exp, id: g.id });
+    var title = (/mizkar-share:\s*(.*?)(?:\s*\|\s*exp\b.*)?$/.exec(d) || [])[1] || '';
+    var open = /\.md$/i.test(file);
+    return {
+      id: g.id, file: file, path: '', title: title || (open ? file.replace(/\.md$/i, '') : 'رمزدار (روی دستگاه دیگری ساخته شده)'),
+      mode: open ? 'open' : 'pass', key: '', at: Date.parse(g.updated_at || g.created_at) || 0, exp: exp
+    };
+  }
+  /** Every share: GitHub's list joined with what this device remembers. A short or empty reply must not wipe the local list. */
   function nbShareList(){
     return nbShareLoadReg().then(function(){
-      if (!nbShareToken()) return nbShareReg;
+      if (!Array.isArray(nbShareReg)) nbShareReg = [];
+      if (!nbShareToken()) return nbShareReg.slice();
       var all = [];
       var page = function(n){
         return nbGistApi('GET', '/gists?per_page=100&page=' + n).then(function(list){
-          all = all.concat(list || []);
-          if ((list || []).length >= 100 && n < 10) return page(n + 1);
-          if ((list || []).length >= 100) throw nbError(0, 'partial');   // too many gists: keep what we know
+          if (!Array.isArray(list)) throw nbError(0, 'bad list');
+          all = all.concat(list);
+          if (list.length >= 100 && n < 10) return page(n + 1);
           return all;
         });
       };
       return page(1).then(function(list){
-        var mine = (list || []).filter(function(g){ return String(g.description || '').indexOf(NB_SHARE_PREFIX) === 0; });
         var known = {};
-        nbShareReg.forEach(function(r){ known[r.id] = r; });
-        nbShareReg = mine.map(function(g){
-          var r = known[g.id], file = Object.keys(g.files || {})[0] || '';
-          var d = String(g.description || ''), exp = (/\| exp (\d{4}-\d\d-\d\d)/.exec(d) || [])[1] || '';
-          if (r) return Object.assign(r, { file: r.file || file, exp: r.exp || exp });
-          var title = (/^mizkar-share: (.*?)(?: \| exp .*)?$/.exec(d) || [])[1] || '';
-          return { id: g.id, file: file, path: '', title: title || 'رمزدار (روی دستگاه دیگری ساخته شده)', mode: /\.md$/.test(file) ? 'open' : 'pass', key: '', at: Date.parse(g.created_at) || 0, exp: exp };
+        nbShareReg.forEach(function(r){ if (r && r.id) known[r.id] = r; });
+        var seen = {}, merged = [];
+        (list || []).forEach(function(g){
+          if (!nbIsShareGist(g) || seen[g.id]) return;
+          seen[g.id] = 1;
+          merged.push(nbShareFromGist(g, known));
         });
+        nbShareReg.forEach(function(r){ if (r && r.id && !seen[r.id]) merged.push(r); });
+        nbShareReg = merged;
         nbShareSaveReg();
-        return nbShareReg;
-      }, function(){ return nbShareReg; });
+        return nbShareReg.slice();
+      }, function(){ return nbShareReg.slice(); });
     });
   }
   /** Past their date: removed the next time the app runs online. */
@@ -13660,17 +13683,21 @@ function nbCommitMessage(list){
     if (!box) return;
     nbShareList().then(function(list){
       if (!$('nbShareList')) return;
+      list = Array.isArray(list) ? list : [];
       var rows = filterPath ? list.filter(function(r){ return r.path === filterPath; }) : list;
       $('nbShareList').innerHTML = rows.length ? rows.map(function(r){
         var i = nbShareReg.indexOf(r);
+        if (i < 0) return '';
         return '<div class="nb-row nb-hist-row nb-share-row">' + icon(r.mode === 'open' ? 'link' : 'lock')
-          + '<span class="nb-name" dir="auto">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + NB_SHARE_MODES[r.mode]
+          + '<span class="nb-name" dir="auto">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + (NB_SHARE_MODES[r.mode] || '')
           + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
           + '<span class="nb-hist-btns">'
           + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
           + (nbShareCanUpdate(r) ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
           + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
       }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست‌کلیک یک یادداشت یا تب موقت «اشتراک‌گذاری…» را بزن.') + '</p>';
+    }).catch(function(){
+      if ($('nbShareList')) $('nbShareList').innerHTML = '<p class="nb-mini-text">خواندن فهرست اشتراک‌ها ممکن نشد.</p>';
     });
   }
   function nbSharesClick(e){
