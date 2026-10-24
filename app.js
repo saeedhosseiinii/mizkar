@@ -733,7 +733,7 @@ var APP_CSS = [
   '.fa-ex del{color:#dc2626;text-decoration:line-through;}',
   '.fa-ex ins{color:#16a34a;text-decoration:none;font-weight:600;}',
   '.pdf-hint{margin:6px 14px 0;padding:9px 12px;border-radius:12px;font-size:.74rem;line-height:1.8;color:var(--muted);background:color-mix(in srgb,var(--accent) 7%,transparent);}',
-  '.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px;}',
+  '.modal-foot{display:flex;direction:ltr;justify-content:flex-start;gap:8px;padding:14px;}',
   '@media(max-width:640px){.modal-body{grid-template-columns:minmax(0,1fr);}.pdf-side{order:-1;flex-direction:row;}.pg{width:70px;}}',
   '.toast{position:fixed;bottom:52px;left:50%;transform:translate(-50%,12px);display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:14px;font-size:.84rem;font-weight:600;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:99;max-width:calc(100vw - 32px);box-shadow:0 18px 40px -12px rgba(0,0,0,.4);}',
   '.toast.show{opacity:1;transform:translate(-50%,0);}',
