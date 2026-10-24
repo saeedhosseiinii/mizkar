@@ -1,6 +1,6 @@
 # میزکار
 
-میز کار روزانهٔ برنامه‌نویس، کاملاً آفلاین: https://saeedhosseiinii.github.io/mizkar/
+دفترچه و پیش‌نمایش راست‌چین، روی دستگاه خودت: https://saeedhosseiinii.github.io/mizkar/
 
 - پیش‌نمایش راست‌چین Markdown (جدول، Mermaid، فرمول ریاضی، callout)
 - JSON، YAML، CSV، TOML، INI، XML، Log، SQL، Diff، JWT و Cron با تشخیص خودکار
