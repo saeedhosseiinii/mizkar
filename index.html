@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl" data-skin="m3">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="1.17">
+<meta name="app-version" content="1.18">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#6d5efc">
@@ -208,6 +208,7 @@
     <div class="preview" id="preview"><article id="zoomWrap" class="content sheet"></article></div>
     <div class="findbar" id="findbar" data-ui hidden role="search">
       <div class="find-row">
+        <button class="ib sm" type="button" data-action="find-close" aria-label="بستن" title="بستن (Esc)"><svg class="i"><use href="#i-x"/></svg></button>
         <div class="seg find-scope" id="findScope" role="group" aria-label="جست‌وجو در"><button type="button" data-fs="preview" aria-pressed="true" title="جست‌وجو در پیش‌نمایش">پیش‌نمایش</button><button type="button" data-fs="source" aria-pressed="false" title="جست‌وجو در متن خام ورودی">متن خام</button></div>
         <input id="findQ" type="search" placeholder="جست‌وجو در پیش‌نمایش…" dir="auto" autocomplete="off" spellcheck="false" aria-label="جست‌وجو">
         <span class="find-count" id="findCount"></span>
@@ -216,7 +217,6 @@
         <button class="find-opt" type="button" id="findCase" aria-pressed="false" title="حساس به حروف بزرگ و کوچک">Aa</button>
         <button class="find-opt" type="button" id="findRegex" aria-pressed="false" title="عبارت باقاعده (regex)">.*</button>
         <button class="ib sm" type="button" data-action="find-replace-toggle" id="findRepBtn" aria-pressed="false" aria-label="جایگزینی" title="جایگزینی"><svg class="i"><use href="#i-swap"/></svg></button>
-        <button class="ib sm" type="button" data-action="find-close" aria-label="بستن" title="بستن (Esc)"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <div class="find-row" id="findRep" hidden>
         <input id="findR" type="text" placeholder="جایگزین با…" dir="auto" autocomplete="off" spellcheck="false" aria-label="جایگزین با">
