@@ -7283,9 +7283,9 @@ var NB_CSS = [
   '#nb .nb-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:right; }',
   '#nb .nb-dir-row{ color:var(--ink); font-weight:600; }',
   '#nb .nb-dir-row .nb-name{ font-weight:600; }',
-  '#nb .nb-caret{ display:inline-flex; transition:transform .15s ease; }',
-  '#nb .nb-dir-row.open .nb-caret{ transform:rotate(180deg); }',
-  '#nb .nb-kids{ margin-inline-start:14px; border-inline-start:1px dashed var(--border); padding-inline-start:2px; }',
+  '#nb .nb-caret{ display:inline-flex; width:18px; height:18px; flex:none; align-items:center; justify-content:center; transition:transform .15s ease; transform:rotate(90deg); }',
+  '#nb .nb-dir-row.open > .nb-caret{ transform:rotate(0deg); }',
+  '#nb .nb-kids{ margin-inline-start:18px; padding-inline-start:6px; border-inline-start:1px solid color-mix(in srgb, var(--muted) 55%, transparent); }',
   '#nb .nb-count{ color:var(--muted); font-size:11px; }',
   '#nb .nb-mark{ width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none; }',
   '#nb .nb-saved{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:0 6px; }',
@@ -9723,14 +9723,14 @@ function nbCommitMessage(list){
     node.notes.sort(function(a, b){ return nbNorm(a.path).localeCompare(nbNorm(b.path)); }).forEach(function(n){
       if (n.att){
         out += '<div class="nb-row nb-note-row nb-att-row" data-nb-att="' + escapeHtml(n.path) + '" tabindex="0" title="' + escapeHtml(n.path) + '">'
-          + icon('image') + '<span class="nb-name" dir="ltr">' + escapeHtml(n.path.split('/').pop()) + '</span>'
+          + '<span class="nb-caret"></span>' + icon('image') + '<span class="nb-name" dir="ltr">' + escapeHtml(n.path.split('/').pop()) + '</span>'
           + ((NB.attach[n.path] && NB.attach[n.path].dirty) ? '<i class="nb-mark"></i>' : '') + '</div>';
         return;
       }
       var f2 = n.file;
       out += '<div class="nb-row nb-note-row' + (activePath === n.path ? ' active' : '') + (f2.dirty ? ' dirty' : '') + '"'
         + ' data-nb-note="' + escapeHtml(n.path) + '" tabindex="0" title="' + escapeHtml(n.path) + '">'
-        + icon(f2.enc ? 'lock' : 'file') + '<span class="nb-name" dir="auto">' + escapeHtml(nbTitle(n.path)) + '</span>'
+        + '<span class="nb-caret"></span>' + icon(f2.enc ? 'lock' : 'file') + '<span class="nb-name" dir="auto">' + escapeHtml(nbTitle(n.path)) + '</span>'
         + (f2.dirty ? '<i class="nb-mark" title="تغییر ارسال نشده"></i>' : '') + '</div>';
     });
     return out;
