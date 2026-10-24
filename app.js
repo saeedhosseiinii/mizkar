@@ -394,9 +394,9 @@ var APP_CSS = [
   '.swatch:hover{transform:scale(1.12);}',
   '.swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ink-2);}',
   /* workspace */
-  '.work{--split:50%;flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,calc(var(--split) - 6px)) 12px minmax(0,1fr);grid-template-rows:minmax(0,1fr);padding:14px 16px 0;}',
+  '.work{--split:50%;flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,calc(var(--split) - 6px)) 12px minmax(0,1fr);grid-template-rows:minmax(0,1fr);padding:14px 16px 28px;box-sizing:border-box;}',
   '.work[data-view="editor"]{grid-template-columns:minmax(0,1fr);}',
-  '.work[data-view="preview"]{grid-template-columns:minmax(0,1fr);}',
+  '.work[data-view="preview"]{grid-template-columns:minmax(0,1fr);padding-bottom:96px;}',
   '.work[data-view="editor"] .divider,.work[data-view="editor"] .pane.out,.work[data-view="preview"] .divider,.work[data-view="preview"] .pane.editor{display:none;}',
   '.work.resizing{cursor:col-resize;user-select:none;}',
   '.work.resizing .pane{pointer-events:none;}',
@@ -724,10 +724,10 @@ var APP_CSS = [
   '.toast-act:hover{background:color-mix(in srgb,var(--bg) 32%,transparent);}',
   '.toast-act .i{color:inherit;width:14px;height:14px;}',
   '.pane.out{position:relative;}',
-  '.fabs{position:absolute;bottom:22px;left:34px;z-index:35;display:none;align-items:center;gap:10px;}',
+  '.fabs{position:absolute;bottom:28px;left:34px;z-index:35;display:none;align-items:center;gap:10px;}',
   '#work[data-view="preview"] .fabs{display:flex;}',
-  '#work[data-view="preview"] .preview{padding-bottom:110px;}',
-  '@media(max-width:760px){#work[data-view="preview"] .preview{padding-bottom:calc(132px + env(safe-area-inset-bottom,0px));}}',
+  '#work[data-view="preview"] .preview{padding-bottom:120px;}',
+  '@media(max-width:760px){#work[data-view="preview"]{padding-bottom:calc(var(--nb-nav-h,56px) + 28px + env(safe-area-inset-bottom,0px));}#work[data-view="preview"] .preview{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px));}#work[data-view="editor"]{padding-bottom:calc(var(--nb-nav-h,56px) + 20px + env(safe-area-inset-bottom,0px));}}',
   'body.readmode .fabs,body.drawer-open .fabs{display:none !important;}',
   '.fab{display:inline-flex;align-items:center;gap:9px;height:50px;padding:0 22px 0 18px;border-radius:17px;border:0;cursor:pointer;color:#fff;font-weight:800;font-size:.92rem;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,var(--accent-2)));box-shadow:0 16px 36px -12px color-mix(in srgb,var(--accent) 85%,transparent),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,filter .15s;}',
   '.fab:hover{transform:translateY(-2px);filter:brightness(1.06);}',
@@ -7501,7 +7501,8 @@ var NB_CSS = [
   '#nbBody .hm-task{padding:6px 4px;}',
   '#nbBody .hm-group h5{padding:0 4px;}',
   '/* --- a notebook note edited in place (inplace.js): one centred column, Markdown tinted behind the text --- */',
-  'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 60px;font-size:1rem;}',
+  'body.ip-on #work[data-view="editor"]{padding-bottom:72px;}',
+  'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 80px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
   /* ip-tint = phone chrome only (تمام). Markdown colour overlay removed: dual glyphs broke RTL select/jump. */
@@ -8095,10 +8096,10 @@ function nbFillPath(pattern, ctx){
     return String(v);
   }).replace(/\/{2,}/g, '/').replace(/^\/+/, '');
 }
-/** Fills a note template: {{date}} {{jdate}} {{gdate}} {{time}} {{weekday}} {{title}} {{prev}} {{next}} {{cursor}}. */
+/** Fills a note template: {{date}} {{jdate}} {{gdate}} {{jw}} {{time}} {{weekday}} {{title}} {{prev}} {{next}} {{cursor}}. */
 function nbFillTemplate(tpl, ctx, extra){
   var all = Object.assign({}, ctx, extra || {});
-  var text = String(tpl || '').replace(/\{\{(date|jdate|gdate|time|weekday|title|prev|next)\}\}/g, function(m, k){
+  var text = String(tpl || '').replace(/\{\{(date|jdate|gdate|jw|jy|jm|jd|gy|gm|gd|time|weekday|title|prev|next)\}\}/g, function(m, k){
     if (k === 'date') return all.jdateDash || all.jdate || all.gdate || '';
     var v = all[k];
     return v === undefined || v === null ? '' : String(v);
@@ -10342,14 +10343,14 @@ function nbCommitMessage(list){
        long press looked dead on a phone). A deliberate tap outside is a NEW touch and closes it at once. */
     var compat = e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents;
     if (compat && nbTouchSeq === nbMenuOpenedTouch) return;
-    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new')) nbMenuClose();
+    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"]')) nbMenuClose();
   }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    /* #m3Fab stays out of it too: on a phone the FAB is the switch of its own menu, not «outside» */
-    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new')) nbMenuClose();
+    /* FAB / «تازه» / «بیشتر» toggle their own menu — they are not «outside» */
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"]')) nbMenuClose();
   });
 
   /* --- settings --- */
@@ -13004,7 +13005,13 @@ function nbCommitMessage(list){
         nbMenu.anchor = b;
         return;
       }
-      if (what === 'more'){ var r2 = b.getBoundingClientRect(); nbMenu(r2.left, r2.top, nbMoreItems()); return; }
+      if (what === 'more'){
+        var m2 = $('nbMenu'), r2 = b.getBoundingClientRect();
+        if (m2 && !m2.hidden && nbMenu.anchor === b){ nbMenuClose(); return; }
+        nbMenu(r2.left, Math.max(8, r2.top - 320), nbMoreItems());
+        nbMenu.anchor = b;
+        return;
+      }
       NB.section = what;
       if (what === 'search') NB.focusSearch = true;
       if (NB.open) nbRender(); else nbSidebar(true);
@@ -13688,13 +13695,13 @@ function nbCommitMessage(list){
       }
     }
   });
-  // a press outside the text box (the margins of the page, the empty work area) ends editing; the press is
-  // judged where it starts, so a selection dragged out of the text never counts
+  // a press on the navy gutters / empty chrome (not the text box) ends editing; judged where it starts
+  // so a selection dragged out of the text never counts
   var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, #ipDone, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
     if (Date.now() < (ip.outsideUntil || 0)) return;
-    if (!e.target.closest || !e.target.closest('#work') || e.target.closest(IP_STAY)) return;
+    if (!e.target.closest || e.target.closest(IP_STAY)) return;
     ipRead();
   }, true);
   document.addEventListener('keydown', function(e){
