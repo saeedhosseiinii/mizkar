@@ -8853,7 +8853,8 @@ function nbCommitMessage(list){
     return Promise.all([baseTree].concat(workers))
       .then(function(r){
         var body = { tree: tree.filter(function(ent){ return ent && ent.sha; }) };
-        if (r[0]) body.base_tree = r[0];
+        // the empty tree is not stored as an object; naming it as base_tree is a 404
+        if (r[0] && r[0] !== NB_EMPTY_TREE) body.base_tree = r[0];
         return nbApi('POST', base + '/git/trees', body);
       })
       .then(function(treeRes){
@@ -8869,6 +8870,12 @@ function nbCommitMessage(list){
   }
 
   /* --- pull: one request for the whole tree, one per changed file --- */
+  /** Git's empty tree. GitHub has no object for it, so GET /git/trees of a commit that deleted every file is 404. */
+  var NB_EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+  function nbTreeEntries(tree){
+    if (tree.truncated) throw nbError(0, 'مخزن بزرگ تر از آن است که یک جا خوانده شود');
+    return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; });
+  }
   function nbTreeOnce(sha, page){
     if (nbIsGL()){
       var g = nbGL();
@@ -8876,11 +8883,24 @@ function nbCommitMessage(list){
         .then(function(list){ return (list || []).map(function(e){ return { path: e.path, type: e.type === 'tree' ? 'tree' : 'blob', sha: e.id }; }); });
     }
     var sp = nbSplitRepo();
-    return nbApi('GET', '/repos/' + sp.owner + '/' + sp.name + '/git/trees/' + sha + '?recursive=1')
-      .then(function(tree){
-        if (tree.truncated) throw nbError(0, 'مخزن بزرگ تر از آن است که یک جا خوانده شود');
-        return (tree.tree || []).map(function(e){ return { path: e.path, type: e.type, sha: e.sha }; });
-      });
+    var root = '/repos/' + sp.owner + '/' + sp.name;
+    if (!sha || sha === NB_EMPTY_TREE) return Promise.resolve([]);
+    function read(treeSha){
+      return nbApi('GET', root + '/git/trees/' + treeSha + '?recursive=1').then(nbTreeEntries);
+    }
+    return read(sha).catch(function(e){
+      if (!e || e.status !== 404) throw e;
+      // a commit SHA whose tree is empty: the trees endpoint 404s, the commit itself is still there
+      return nbApi('GET', root + '/git/commits/' + sha).then(function(c){
+        var treeSha = c && c.tree && c.tree.sha;
+        if (!treeSha || treeSha === NB_EMPTY_TREE) return [];
+        if (treeSha === sha) throw e;
+        return read(treeSha).catch(function(e2){
+          if (e2 && e2.status === 404) throw e;
+          throw e2;
+        });
+      }, function(){ throw e; });
+    });
   }
   /** Every file the repository has at a commit: {path: sha}. Empty for a repository with no commits. */
   function nbTreePaths(sha){
