@@ -8731,6 +8731,19 @@ function nbCommitMessage(list){
     return m.length >= 2 && m[0] && m[1] ? { owner: m[0], name: m[1] } : null;
   }
   function nbB64(text){ return btoa(unescape(encodeURIComponent(text))); }
+  /** Git's blob id for this exact text: sha1("blob <bytes>\\0" + utf8). Matches the tree, so a pull can skip the file. */
+  function nbGitBlobSha(text){
+    if (!crypto.subtle || !crypto.subtle.digest) return Promise.resolve('');
+    var bytes = new TextEncoder().encode(text == null ? '' : String(text));
+    var head = new TextEncoder().encode('blob ' + bytes.length + '\0');
+    var buf = new Uint8Array(head.length + bytes.length);
+    buf.set(head, 0); buf.set(bytes, head.length);
+    return crypto.subtle.digest('SHA-1', buf).then(function(dig){
+      var hex = '', u = new Uint8Array(dig), i;
+      for (i = 0; i < u.length; i++) hex += (u[i] < 16 ? '0' : '') + u[i].toString(16);
+      return hex;
+    }, function(){ return ''; });
+  }
   function nbEncodePath(p){ return String(p).split('/').map(encodeURIComponent).join('/'); }
   function nbPathKey(p){ try { return String(p || '').normalize('NFC'); } catch (e) { return String(p || ''); } }
   /** Git rejects an empty segment, «.» / «..», a leading slash, or a trailing slash. */
@@ -9072,13 +9085,35 @@ function nbCommitMessage(list){
         var f = NB.files[p];
         return f && !f.deleted && !f.isNew && p.slice(-1) !== '/' && !remote[p];
       });
-      var chain = Promise.resolve(), pulled = 0, merged = 0, fixed = 0;
+      var chain = Promise.resolve(), pulled = 0, merged = 0, fixed = 0, cleared = 0;
+      nbSyncActiveNote();
       jobs.forEach(function(job){
         chain = chain.then(function(){
           var local = NB.files[job.path];
-          // unsent secret note, server copy untouched: nothing to merge, and no passphrase for a pull
-          if (local && local.enc && local.dirty && local.sha && local.sha === job.sha) return true;
-          return nbFileText(job.path).then(function(text){
+          // a delete still has to be sent; the repository copy is not what the list is waiting on
+          if (local && local.deleted) return true;
+          var body = local ? (local.enc ? (nbIsEncrypted(local.text || '') ? local.text : null) : (local.text == null ? '' : String(local.text))) : null;
+          var same = body == null ? Promise.resolve(false) : nbGitBlobSha(body).then(function(sha){
+            if (sha && sha === job.sha){
+              local.sha = sha; local.remote = true; local.isNew = false;
+              // ciphertext already on the server, but the open plaintext was edited after that: it still waits to be sent
+              if (local.enc && local.plain != null && local.plain !== local.basePlain) return true;
+              if (local.dirty) cleared++;
+              local.base = body;
+              if (local.enc && local.plain != null) local.basePlain = local.plain;
+              local.dirty = false; local.movedFrom = '';
+              delete local.localCipher;
+              return true;
+            }
+            // bytes differ: remember the remote blob and leave the local edit queued. downloading it cannot take it off the list
+            if (local && local.dirty && sha && job.sha){ local.sha = job.sha; local.remote = true; }
+            return false;
+          });
+          return same.then(function(skip){
+            if (skip) return true;
+            // the blob on the server did not change: a local edit waits for ارسال, and nothing has to be downloaded
+            if (local && local.sha && local.sha === job.sha) return true;
+            return nbFileText(job.path).then(function(text){
             var enc = nbIsEncrypted(text);
             if (local && local.enc){
               if (!local.dirty){
@@ -9140,6 +9175,7 @@ function nbCommitMessage(list){
             if (e.status === 404 || e.status === 403) return false; // too big or gone: leave it as it is
             throw e;
           });
+          });
         });
       });
       gone.forEach(function(p){
@@ -9168,15 +9204,16 @@ function nbCommitMessage(list){
       }).then(function(){
         var n = pulled + gone.length;
         nbIdxInvalidate();
-        nbCountDirty(); nbRender(); NB.busy = false;
+        NB.busy = false;
+        nbPendRefresh(NB.conflicts.length ? 'conflict' : undefined);
         if (NB.conflicts.length){
-          nbSay('conflict'); nbShowConflicts();
+          nbShowConflicts();
           // a device meeting this repository for the first time: taking the repository's notes is usually what is meant
           if (firstSync) nbResetFromRepo('این دستگاه اولین بار است که با این مخزن همگام می شود و ' + faNum(NB.conflicts.length) + ' یادداشت با نسخهٔ مخزن فرق دارد.');
         }
         else {
-          nbSay();
-          if (merged && !opts.quiet) toast(faNum(merged) + ' یادداشت خودکار ادغام شد', 'swap');
+          if (cleared) toast(faNum(cleared) + ' تغییر با مخزن یکی بود و از صف خارج شد', 'check');
+          else if (merged && !opts.quiet) toast(faNum(merged) + ' یادداشت خودکار ادغام شد', 'swap');
           else if (!opts.quiet && n) toast('دفترچه به روز شد — ' + faNum(n) + ' یادداشت', 'check');
           else if (opts.loud && fixed) toast(faNum(fixed) + ' حذفِ ناموجود از صف برداشته شد — حالا ارسال کن', 'check');
           else if (opts.loud) toast('چیز تازه ای نیست', 'check');
@@ -9299,13 +9336,15 @@ function nbCommitMessage(list){
           if (fd.enc){
             return nbEnsurePlain(fd.path).then(function(ok){
               if (!ok || !NB.pass) throw nbError(0, 'یادداشت رمزدار «' + nbTitle(fd.path) + '» باز نشد — بدون گذرواژه ارسال نمی شود');
-              return nbEncrypt(fd.plain, NB.pass);
-            }).then(function(ct){
-              fd._ct = ct;
-              changes.push({ path: fd.path, text: ct, exists: !!fd.remote });
-              return true;
+              var sentPlain = fd.plain;
+              return nbEncrypt(sentPlain, NB.pass).then(function(ct){
+                fd._ct = ct; fd._sentPlain = sentPlain;
+                changes.push({ path: fd.path, text: ct, exists: !!fd.remote });
+                return true;
+              });
             });
           }
+          fd._sentText = fd.text;
           changes.push({ path: fd.path, text: fd.text, exists: !!fd.remote });
           return true;
         });
@@ -9329,15 +9368,27 @@ function nbCommitMessage(list){
         return nbCommitPush(uniq, message, baseSha, have);
       })
         .then(function(commit){
+          var shas = [];
           list.forEach(function(fd){
             if (fd.deleted){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return; }
+            var sent;
             if (fd.enc && fd._ct){                    // the working copy keeps the ciphertext that went up
-              fd.text = fd.base = fd._ct; fd.basePlain = fd.plain;
-              delete fd._ct; delete fd.localCipher;
-            } else fd.base = fd.text;
-            fd.dirty = false; fd.isNew = false; fd.sha = ''; fd.remote = true; fd.movedFrom = ''; fd.at = Date.now();
+              sent = fd._ct;
+              var sentPlain = fd._sentPlain;
+              fd.text = fd.base = sent; fd.basePlain = sentPlain;
+              delete fd._ct; delete fd._sentPlain; delete fd.localCipher;
+              fd.dirty = fd.plain !== sentPlain;
+            } else {
+              sent = fd._sentText != null ? fd._sentText : fd.text;
+              delete fd._sentText;
+              fd.base = sent;
+              fd.dirty = fd.text !== sent;
+            }
+            fd.isNew = false; fd.remote = true; fd.movedFrom = ''; fd.at = Date.now();
+            shas.push(nbGitBlobSha(sent == null ? '' : String(sent)).then(function(sha){ if (sha) fd.sha = sha; }));
           });
           Object.keys(NB.attach).forEach(function(k){
+            if (atts.indexOf(k) === -1) return;
             var a = NB.attach[k];
             if (a.deleted && a.dirty){ delete NB.attach[k]; return; }
             a.dirty = false;
@@ -9345,7 +9396,7 @@ function nbCommitMessage(list){
           });
           NB.lastCommit = commit.sha; NB.lastSync = Date.now(); NB.error = '';
           idbSet('nb-last' + nbStoreSuffix(), { commit: NB.lastCommit, at: NB.lastSync }, 'meta');
-          return Promise.all([nbSaveFiles(), nbSaveAttach()]);
+          return Promise.all(shas.concat([nbSaveFiles(), nbSaveAttach()]));
         })
         .then(function(){
           NB.busy = false;
