@@ -162,7 +162,7 @@ var CSS = [
   'th.sort-asc::after{content:"▲";opacity:.8;color:var(--accent);}',
   'th.sort-desc::after{content:"▼";opacity:.8;color:var(--accent);}',
   '.tfilter{display:flex;align-items:center;gap:10px;margin:0 0 8px;}',
-  '.tfilter input{width:min(280px,60%);height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.8rem;outline:none;}',
+  '.tfilter input{width:min(280px,60%);height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.8rem;outline:none;direction:rtl;text-align:right;}',
   '.tfilter input:focus{border-color:var(--accent);}',
   '.tf-count{font-size:.74rem;color:var(--muted);}',
   'tr[hidden]{display:none;}',
@@ -458,7 +458,7 @@ var APP_CSS = [
   '.bignote{margin:0 0 16px;padding:10px 14px;border-radius:12px;font-size:.85rem;line-height:1.9;background:color-mix(in srgb,#f59e0b 13%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);}',
   '.bignote button{margin-inline-start:6px;border:0;border-radius:8px;padding:3px 12px;font:inherit;font-weight:700;cursor:pointer;color:#fff;background:#d97706;}',
   '#popHistory{width:340px;max-height:min(460px,70vh);overflow:auto;}',
-  '.hist-q{width:calc(100% - 8px);margin:0 4px 6px;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.8rem;outline:none;}',
+  '.hist-q{width:calc(100% - 8px);margin:0 4px 6px;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--ink);padding:0 10px;font:inherit;font-size:.8rem;outline:none;direction:rtl;text-align:right;}',
   '.hist-q:focus{border-color:var(--accent);}',
   '#popHistory .pop-title,#popHistory .hist-q{position:sticky;z-index:1;background:var(--surface);}',
   '#popHistory .pop-title{top:-6px;margin:-6px -6px 0;padding:10px 14px 8px;}',
@@ -695,7 +695,7 @@ var APP_CSS = [
   '.pal-box{width:min(640px,calc(100vw - 24px));background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 40px 100px -20px rgba(0,0,0,.5);overflow:hidden;animation:pop .18s cubic-bezier(.2,.9,.3,1.2);}',
   '.pal-in{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);}',
   '.pal-in .i{color:var(--muted);}',
-  '.pal-in input{flex:1;border:0;outline:0;background:transparent;font-size:1rem;}',
+  '.pal-in input{flex:1;border:0;outline:0;background:transparent;font-size:1rem;direction:rtl;text-align:right;}',
   '.pal-in input:focus-visible{outline:0;}',
   '.pal-list{max-height:min(420px,55vh);overflow:auto;padding:6px;}',
   '.pal-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;cursor:pointer;font-size:.88rem;}',
@@ -4228,7 +4228,7 @@ if (typeof document !== 'undefined'){
       var bar = document.createElement('div');
       bar.className = 'tfilter';
       bar.setAttribute('data-ui', '');
-      bar.innerHTML = '<input type="search" dir="auto" placeholder="جست‌وجو در این جدول…" aria-label="جست‌وجو در جدول"><span class="tf-count">' + faNum(rows.length) + ' ردیف</span>';
+      bar.innerHTML = '<input type="text" dir="rtl" placeholder="جست‌وجو در این جدول…" aria-label="جست‌وجو در جدول"><span class="tf-count">' + faNum(rows.length) + ' ردیف</span>';
       wrap.insertBefore(bar, wrap.firstChild);
     }
   }
@@ -4271,6 +4271,7 @@ if (typeof document !== 'undefined'){
   var tfTimer = null;
   zoomWrap.addEventListener('input', function(e){
     if (!e.target.closest('.tfilter')) return;
+    syncFindDir(e.target);
     clearTimeout(tfTimer);
     var input = e.target;
     tfTimer = setTimeout(function(){ filterTable(input); }, 120);
@@ -5147,7 +5148,7 @@ if (typeof document !== 'undefined'){
   function drawHistory(){
     var list = historyLoad();
     $('popHistory').innerHTML = '<div class="pop-title">متن‌های اخیر' + (list.length ? ' (' + faNum(list.length) + ')' : '') + '</div>'
-      + (list.length > 6 ? '<input class="hist-q" id="histQ" type="search" dir="auto" placeholder="جست‌وجو در عنوان و متن…" aria-label="جست‌وجو در متن‌های اخیر" value="' + escapeHtml(histQuery) + '">' : '')
+      + (list.length > 6 ? '<input class="hist-q" id="histQ" type="text" dir="' + (histQuery ? 'auto' : 'rtl') + '" placeholder="جست‌وجو در عنوان و متن…" aria-label="جست‌وجو در متن‌های اخیر" value="' + escapeHtml(histQuery) + '">' : '')
       + '<div id="histList"></div>'
       + (list.length ? '<div class="hist-foot"><button type="button" data-action="history-clear">پاک کردن همه</button></div>' : '');
     drawHistoryList();
@@ -5165,7 +5166,7 @@ if (typeof document !== 'undefined'){
     $('histList').innerHTML = !list.length ? '<div class="hist-empty">هنوز متنی ذخیره نشده — با جایگزین کردن یا باز کردن متن، یا بستن یک تب، متن قبلی اینجا می‌آید.</div>'
       : shown ? rows : '<div class="hist-empty">چیزی پیدا نشد</div>';
   }
-  $('popHistory').addEventListener('input', function(e){ if (e.target.id === 'histQ'){ histQuery = e.target.value; drawHistoryList(); } });
+  $('popHistory').addEventListener('input', function(e){ if (e.target.id === 'histQ'){ syncFindDir(e.target); histQuery = e.target.value; drawHistoryList(); } });
   function openHistoryItem(k){
     var h = historyLoad()[k];
     if (!h) return;
@@ -6573,6 +6574,7 @@ if (typeof document !== 'undefined'){
     closePops();
     palette.hidden = false;
     palInput.value = typeof prefill === 'string' ? prefill : '';
+    syncFindDir(palInput);
     filterPalette();
     palInput.focus();
   }
@@ -6583,7 +6585,7 @@ if (typeof document !== 'undefined'){
     closePalette();
     e.run();
   }
-  palInput.addEventListener('input', filterPalette);
+  palInput.addEventListener('input', function(){ syncFindDir(palInput); filterPalette(); });
   palInput.addEventListener('keydown', function(e){
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
       e.preventDefault();
@@ -7317,6 +7319,8 @@ var NB_CSS = [
   '  width:100%; border:1px solid var(--border); background:var(--background, #fff); color:var(--ink); border-radius:8px;',
   '  padding:7px 9px; font:inherit; font-size:13px;',
   '}',
+  '#nbTreeQ,#nbFind,#nbTempQ,#nbKeysQ,.tfilter input,.hist-q,#palInput{ direction:rtl; text-align:right; }',
+  '#nbTreeQ:dir(ltr),#nbFind:dir(ltr),#nbTempQ:dir(ltr),#nbKeysQ:dir(ltr),.tfilter input:dir(ltr),.hist-q:dir(ltr),#palInput:dir(ltr){ direction:ltr; text-align:left; }',
   'html[data-theme="dark"] .nb-input{ background:#0a0e16; }',
   '.nb-field{ display:flex; flex-direction:column; gap:4px; margin-bottom:8px; }',
   '.nb-field label{ font-size:12px; color:var(--muted); }',
@@ -9703,7 +9707,7 @@ function nbCommitMessage(list){
     var html = '<div class="nb-list" id="nbList">';
     if (NB.section === 'notes'){
       var foldDirs = nbDirs(nbTree()), anyOpen = foldDirs.some(function(d){ return NB.expanded[d] !== false; });
-      html += '<div class="nb-search nb-tree-q"><input class="nb-input" id="nbTreeQ" type="search" dir="auto" placeholder="فیلتر یادداشت ها…" value="' + escapeHtml(NB.treeQuery || '') + '">'
+      html += '<div class="nb-search nb-tree-q"><input class="nb-input" id="nbTreeQ" type="text" dir="' + (NB.treeQuery ? 'auto' : 'rtl') + '" placeholder="فیلتر یادداشت ها…" value="' + escapeHtml(NB.treeQuery || '') + '">'
         + (foldDirs.length ? '<button type="button" class="btn-soft sm nb-foldall" data-nb-act="fold-all">' + (anyOpen ? 'بستن همه' : 'باز کردن همه') + '</button>' : '')
         + '</div>'
         + '<div id="nbTreeBox">' + nbTreeBoxHtml(noteCount, active) + '</div>';
@@ -9711,7 +9715,7 @@ function nbCommitMessage(list){
       html += nbTempsHtml();
     } else if (NB.section === 'search'){
       html += '<div class="nb-search">'
-        + '<input class="nb-input" id="nbFind" type="search" dir="auto" placeholder="جستجو در همهٔ یادداشت ها…" value="' + escapeHtml(NB.query || '') + '">'
+        + '<input class="nb-input" id="nbFind" type="text" dir="' + (NB.query ? 'auto' : 'rtl') + '" placeholder="جستجو در همهٔ یادداشت ها…" value="' + escapeHtml(NB.query || '') + '">'
         + '<div class="nb-filters">'
         + '<select id="nbFindCol"><option value="">همهٔ مجموعه ها</option>'
         + C.collections.map(function(c){ return '<option value="' + escapeHtml(c.id) + '"' + (NB.colFilter === c.id ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>'; }).join('')
@@ -9815,8 +9819,9 @@ function nbCommitMessage(list){
     var box = $('nb');
     if (!box) return;
     box.addEventListener('input', function(e){
-      if (e.target.id === 'nbFind'){ NB.query = e.target.value; nbRefreshSearch(); }
+      if (e.target.id === 'nbFind'){ syncFindDir(e.target); NB.query = e.target.value; nbRefreshSearch(); }
       if (e.target.id === 'nbTreeQ'){
+        syncFindDir(e.target);
         NB.treeQuery = e.target.value;
         var tb = $('nbTreeBox'), t = currentTab();
         if (tb) tb.innerHTML = nbTreeBoxHtml(NB.paths.filter(function(p){ return p.slice(-1) !== '/' && NB.files[p] && !NB.files[p].deleted; }).length, t && t.nb ? t.nb : '');
@@ -12593,7 +12598,7 @@ function nbCommitMessage(list){
     var match = function(text, title){ return !q || nbNorm(String(title || '') + ' ' + String(text || '')).indexOf(q) !== -1; };
     var openRows = openTabs.filter(function(x){ return match(x.text, tabLabel(x)); });
     var histRows = hist.filter(function(h){ return !h.nb && match(h.t, (h.name || '') + ' ' + (h.title || '')); });
-    var html = '<div class="nb-search"><input class="nb-input" id="nbTempQ" type="search" dir="auto" placeholder="جستجو در تب ها و متن های اخیر…" value="' + escapeHtml(NB.tempQuery || '') + '"></div>';
+    var html = '<div class="nb-search"><input class="nb-input" id="nbTempQ" type="text" dir="' + (NB.tempQuery ? 'auto' : 'rtl') + '" placeholder="جستجو در تب ها و متن های اخیر…" value="' + escapeHtml(NB.tempQuery || '') + '"></div>';
     html += '<div class="nb-temp-part"><h5>باز <b>' + faNum(openRows.length) + '</b></h5>';
     html += openRows.length ? openRows.map(function(x){
       return '<div class="nb-row nb-temp-row' + (x.id === activeTab ? ' active' : '') + '" data-nb-temp="' + x.id + '" tabindex="0">'
@@ -12900,10 +12905,10 @@ function nbCommitMessage(list){
   }
   function nbKeysDialog(){
     nbModalBox('کلیدهای میانبر',
-      '<input class="nb-input" id="nbKeysQ" type="search" dir="auto" placeholder="جستجوی کلید…">'
+      '<input class="nb-input" id="nbKeysQ" type="text" dir="rtl" placeholder="جستجوی کلید…">'
       + '<div class="nb-keys" id="nbKeysList">' + nbKeysRows('') + '</div>',
       '<button class="btn-soft" type="button" data-nb-mini-close>بستن</button>', 'keyboard');
-    $('nbKeysQ').addEventListener('input', function(){ $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
+    $('nbKeysQ').addEventListener('input', function(){ syncFindDir($('nbKeysQ')); $('nbKeysList').innerHTML = nbKeysRows($('nbKeysQ').value); });
   }
   addEventListener('keydown', function(e){
     if ((e.key === '?' || e.key === '؟') && !e.ctrlKey && !e.altKey && !e.metaKey){
