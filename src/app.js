@@ -4028,14 +4028,14 @@ if (typeof document !== 'undefined'){
   function faNum(n){ try { return n.toLocaleString('fa-IR'); } catch(e){ return String(n); } }
   function icon(name){ return '<svg class="i"><use href="#i-' + name + '"/></svg>'; }
   /** `action` ({label, icon, run}) adds a button to the toast, e.g. «بازگشت» after replacing the text. */
-  function toast(msg, ic, action){
+  function toast(msg, ic, action, ms){
     toastEl.innerHTML = icon(ic || 'check') + '<span>' + escapeHtml(msg) + '</span>'
       + (action ? '<button type="button" class="toast-act">' + icon(action.icon || 'undo') + escapeHtml(action.label) + '</button>' : '');
     toastEl.classList.toggle('has-action', !!action);
     if (action) toastEl.querySelector('.toast-act').onclick = function(){ toastEl.classList.remove('show'); action.run(); };
     toastEl.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, action ? 5000 : (ic === 'x' ? 8000 : 2400));
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, action ? 5000 : (ms || (ic === 'x' ? 8000 : 2400)));
   }
   function opts(){ return { normalize: optNorm.checked, bdi: optBdi.checked, cronTz: state.cronTz }; }
   function currentTheme(){ return root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
@@ -10615,7 +10615,8 @@ function nbCommitMessage(list){
       + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-cfg="reset">جایگزینی با نسخهٔ مخزن…</button></div>'
       + '<h5>پشتیبان</h5><div class="nb-actions">'
       + '<button class="btn-soft sm" type="button" data-nb-cfg="zip">دانلود همه به صورت zip</button>'
-      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label></div>';
+      + '<label class="btn-soft sm nb-file">وارد کردن zip<input type="file" id="nbZipIn" accept=".zip" hidden></label></div>'
+      + '<p class="nb-mini-text" id="nbZipStat"></p>';
     if (sec === 'cols') return '<div class="nb-collist">'
       + C.collections.map(function(c, i){
         var kind = (NB_CAL_KINDS.filter(function(k){ return k[0] === (c.calendar || ''); })[0] || ['', ''])[1];
@@ -10786,20 +10787,54 @@ function nbCommitMessage(list){
       }
     });
   }
+  function nbZipNote(text, done){
+    var el = $('nbZipStat');
+    if (el) el.textContent = text;
+    toast(text, done ? 'check' : 'upload', null, done ? 6000 : 60000);
+  }
   function nbImportZip(zi){
     var file = zi.files[0];
+    zi.value = '';
     if (!file) return;
+    if (NB.zipBusy){ nbZipNote('ورود zip هنوز تمام نشده'); return; }
+    NB.zipBusy = true;
+    nbZipNote('در حال خواندن zip…');
     file.arrayBuffer().then(function(buf){ return nbUnzip(new Uint8Array(buf)); }).then(function(entries){
-      var n = 0;
+      var todo = [];
       entries.forEach(function(en){
         if (/\/$/.test(en.path) || /^__MACOSX|\.DS_Store/i.test(en.path)) return;
         if (!/\.(md|markdown|txt|json)$/i.test(en.path)) return;
-        nbWrite(en.path.replace(/^\.\//, ''), nbUtf8Decode(en.data));
-        n++;
+        todo.push(en);
       });
-      toast(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', 'upload');
-    }).catch(function(e){ toast('zip خوانده نشد: ' + e.message, 'x'); });
-    zi.value = '';
+      var i = 0, n = todo.length;
+      if (!n){ NB.zipBusy = false; nbZipNote('فایل قابل ورودی در zip نبود'); toast('فایل قابل ورودی در zip نبود', 'x'); return; }
+      function step(){
+        var end = Math.min(i + 24, n);
+        for (; i < end; i++){
+          var en = todo[i], path = en.path.replace(/^\.\//, ''), text = nbUtf8Decode(en.data);
+          var f = NB.files[path];
+          if (!f) nbPutFile(path, text, '', { base: '', dirty: true, isNew: true, deleted: false });
+          else { f.text = text; f.dirty = true; f.deleted = false; f.at = Date.now(); }
+        }
+        if (i < n){ nbZipNote('در حال وارد کردن… ' + faNum(i) + ' از ' + faNum(n)); setTimeout(step, 0); return; }
+        NB.zipBusy = false;
+        nbCountDirty();
+        nbSaveFiles();
+        nbStatus();
+        if (NB.open) nbRender();
+        nbPendRefresh();
+        if (C.auto) nbScheduleCommit();
+        nbZipNote(faNum(n) + ' فایل از zip وارد شد — با «ارسال» به مخزن می رود', true);
+      }
+      nbZipNote('در حال وارد کردن… ۰ از ' + faNum(n));
+      setTimeout(step, 0);
+    }).catch(function(e){
+      NB.zipBusy = false;
+      var msg = 'zip خوانده نشد: ' + (e && e.message ? e.message : '');
+      var el = $('nbZipStat');
+      if (el) el.textContent = msg;
+      toast(msg, 'x');
+    });
   }
   /** Opens the settings page; `sec` picks a section (the gear in the top bar opens «متن و ظاهر» when connected). */
   function nbOpenSettings(sec){
