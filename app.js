@@ -12876,21 +12876,23 @@ function nbCommitMessage(list){
     edit.setAttribute('data-tip', 'ویرایش ↔ خواندن (Alt+2 / Alt+3)');
     edit.innerHTML = icon('pen') + '<span>ویرایش</span>';
     edit.addEventListener('click', function(e){
+      e.preventDefault();
       e.stopPropagation();
       // a notebook note is edited in place (one column); a temp tab gets the source next to the preview
-      // on a phone there is no room for two columns: it is always read ↔ edit
       var narrow = innerWidth <= 760, isNote = !!(currentTab() && currentTab().nb);
-      if (state.view === 'preview' && isNote && typeof ipEdit === 'function'){
-        ipEdit(0, '');
+      if (state.view !== 'preview'){
+        if (isNote && typeof ipGoRead === 'function') ipGoRead();
+        else { setView('preview'); saveState(); }
         return;
       }
-      if (state.view !== 'preview' && isNote && typeof ipGoRead === 'function'){
-        ipGoRead();
-        return;
+      if (isNote && typeof ipEdit === 'function'){
+        try { ipEdit(0, ''); } catch (err) {}
       }
-      setView(state.view === 'preview' ? (narrow ? 'editor' : 'split') : 'preview');
-      saveState();
-      if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
+      if (state.view === 'preview'){
+        setView(narrow || isNote ? 'editor' : 'split');
+        saveState();
+        setTimeout(function(){ try { ta.focus(); } catch (err) {} }, 0);
+      }
     });
     bar.insertBefore(edit, bar.firstChild);
     function syncEdit(){
@@ -13166,8 +13168,10 @@ function nbCommitMessage(list){
         else nbGoHome();
       } else if (w === 'edit'){
         if (state.view === 'preview'){
-          if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function') ipEdit(0, '');
-          else { setView('editor'); saveState(); setTimeout(function(){ ta.focus(); }, 0); }
+          if (typeof ipTab === 'function' && ipTab() && typeof ipEdit === 'function'){
+            try { ipEdit(0, ''); } catch (err) {}
+          }
+          if (state.view === 'preview'){ setView('editor'); saveState(); setTimeout(function(){ try { ta.focus(); } catch (err2) {} }, 0); }
         } else if (typeof ipGoRead === 'function'){
           ipGoRead();
         } else if (typeof ipTab === 'function' && ipTab() && typeof ipRead === 'function'){
@@ -13585,6 +13589,7 @@ function nbCommitMessage(list){
       return Promise.resolve(false);
     }
     var dropLocal = function(){
+      nbShareMarkGone(rec.id);
       nbShareReg = (nbShareReg || []).filter(function(x){ return x.id !== rec.id; });
       return nbShareSaveReg().then(function(){
         if (!quiet) toast('اشتراک برداشته شد — لینکش دیگر کار نمی کند', 'trash');
@@ -13608,6 +13613,22 @@ function nbCommitMessage(list){
         return fail(e.message || 'برداشتن اشتراک ممکن نشد');
       }, function(e2){ return fail((e && e.message) || e2.message); });
     });
+  }
+  /** Ids we already deleted. GitHub's gist list stays stale for a while and would put the row straight back. */
+  var nbShareGone = null;
+  function nbShareGoneMap(){
+    if (nbShareGone) return nbShareGone;
+    nbShareGone = {};
+    try {
+      JSON.parse(localStorage.getItem('mz2-share-gone') || '[]').forEach(function(id){ if (id) nbShareGone[id] = 1; });
+    } catch (e) {}
+    return nbShareGone;
+  }
+  function nbShareMarkGone(id){
+    if (!id) return;
+    var g = nbShareGoneMap();
+    g[id] = 1;
+    try { localStorage.setItem('mz2-share-gone', JSON.stringify(Object.keys(g))); } catch (e) {}
   }
   /** A gist we made: description carries the prefix, or the file is `.mizkar`. */
   function nbIsShareGist(g){
@@ -13642,19 +13663,20 @@ function nbCommitMessage(list){
         });
       };
       return page(1).then(function(list){
-        var known = {};
-        nbShareReg.forEach(function(r){ if (r && r.id) known[r.id] = r; });
+        var gone = nbShareGoneMap(), known = {};
+        nbShareReg = nbShareReg.filter(function(r){ return r && r.id && !gone[r.id]; });
+        nbShareReg.forEach(function(r){ known[r.id] = r; });
         var seen = {}, merged = [];
         (list || []).forEach(function(g){
-          if (!nbIsShareGist(g) || seen[g.id]) return;
+          if (!nbIsShareGist(g) || seen[g.id] || gone[g.id]) return;
           seen[g.id] = 1;
           merged.push(nbShareFromGist(g, known));
         });
-        nbShareReg.forEach(function(r){ if (r && r.id && !seen[r.id]) merged.push(r); });
+        nbShareReg.forEach(function(r){ if (r && r.id && !seen[r.id] && !gone[r.id]) merged.push(r); });
         nbShareReg = merged;
         nbShareSaveReg();
         return nbShareReg.slice();
-      }, function(){ return nbShareReg.slice(); });
+      }, function(){ return nbShareReg.filter(function(r){ return r && r.id && !nbShareGoneMap()[r.id]; }); });
     });
   }
   /** Past their date: removed the next time the app runs online. */
@@ -13678,26 +13700,32 @@ function nbCommitMessage(list){
       + ((C.provider || 'github') === 'github' ? 'خالی = همان توکن مخزن' : 'github_pat_…') + '" value="' + escapeHtml(C.gistToken || '') + '">'
       + '<small class="nb-mini-text">در <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">گیت هاب</a>، Account permissions › Gists › Read and write.</small></div>';
   }
+  function nbSharesPaint(list, filterPath){
+    var box = $('nbShareList');
+    if (!box) return;
+    list = (Array.isArray(list) ? list : []).filter(function(r){ return r && r.id && !nbShareGoneMap()[r.id]; });
+    var rows = filterPath ? list.filter(function(r){ return r.path === filterPath; }) : list;
+    box.innerHTML = rows.length ? rows.map(function(r){
+      var i = nbShareReg.indexOf(r);
+      if (i < 0) i = nbShareReg.findIndex ? nbShareReg.findIndex(function(x){ return x && x.id === r.id; }) : -1;
+      if (i < 0) return '';
+      return '<div class="nb-row nb-hist-row nb-share-row">' + icon(r.mode === 'open' ? 'link' : 'lock')
+        + '<span class="nb-name" dir="auto">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + (NB_SHARE_MODES[r.mode] || '')
+        + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
+        + '<span class="nb-hist-btns">'
+        + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
+        + (nbShareCanUpdate(r) ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
+        + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
+    }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست‌کلیک یک یادداشت یا تب موقت «اشتراک‌گذاری…» را بزن.') + '</p>';
+  }
   function nbSharesFill(filterPath){
     var box = $('nbShareList');
     if (!box) return;
     nbShareList().then(function(list){
       if (!$('nbShareList')) return;
-      list = Array.isArray(list) ? list : [];
-      var rows = filterPath ? list.filter(function(r){ return r.path === filterPath; }) : list;
-      $('nbShareList').innerHTML = rows.length ? rows.map(function(r){
-        var i = nbShareReg.indexOf(r);
-        if (i < 0) return '';
-        return '<div class="nb-row nb-hist-row nb-share-row">' + icon(r.mode === 'open' ? 'link' : 'lock')
-          + '<span class="nb-name" dir="auto">' + escapeHtml(r.title || 'بدون عنوان') + '<small> · ' + (NB_SHARE_MODES[r.mode] || '')
-          + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
-          + '<span class="nb-hist-btns">'
-          + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
-          + (nbShareCanUpdate(r) ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
-          + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
-      }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست‌کلیک یک یادداشت یا تب موقت «اشتراک‌گذاری…» را بزن.') + '</p>';
+      nbSharesPaint(list, filterPath);
     }).catch(function(){
-      if ($('nbShareList')) $('nbShareList').innerHTML = '<p class="nb-mini-text">خواندن فهرست اشتراک‌ها ممکن نشد.</p>';
+      if ($('nbShareList')) nbSharesPaint(nbShareReg || [], filterPath);
     });
   }
   function nbSharesClick(e){
@@ -13710,7 +13738,12 @@ function nbCommitMessage(list){
       copyToClipboard('', nbShareUrl(rec)).then(function(ok){ if (ok) toast('لینک کپی شد', 'link'); });
     } else if (u) nbShareUpdate(rec);
     else nbConfirm('برداشتن اشتراک', '«' + (rec.title || 'این اشتراک') + '» برداشته شود؟ لینکش دیگر کار نمی کند.', function(){
-      nbShareRemove(rec).then(function(){ nbSharesFill(); });
+      var row = d.closest('.nb-share-row');
+      nbShareRemove(rec).then(function(ok){
+        if (!ok) return;
+        if (row && row.parentNode) row.remove();
+        nbSharesPaint(nbShareReg || [], NB.shareFilter || '');
+      });
     });
     return true;
   }
@@ -13899,20 +13932,32 @@ function nbCommitMessage(list){
     if (typeof nbBackSync === 'function') nbBackSync();
   }
   function ipDblOpen(e){
-    if (!ipTab() || state.view !== 'preview') return;
-    if (e.target.closest('a,button,input,[data-ui],.mermaid,.katex')) return;
-    e.preventDefault();
-    var sel = window.getSelection ? window.getSelection() : null;
-    var word = sel ? String(sel).trim() : '';
-    // some browsers clear the selection before dblclick; fall back to the clicked token
-    if (!word && e.target && e.target.nodeType === 1){
-      var tok = (e.target.textContent || '').trim().split(/\s+/)[0] || '';
+    var el = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+    if (!el || !el.closest('#preview, #zoomWrap')) return;
+    if (el.closest('a, button, input, textarea, .cbtn, .eltools, .elbtn')) return;
+    if (state.view !== 'preview' || state.read) return;
+    ip.outsideUntil = Date.now() + 1600;
+    var block = el.closest(IP_BLOCKS);
+    var word = '';
+    try {
+      var sel = window.getSelection ? String(window.getSelection() || '').trim() : '';
+      word = sel;
+    } catch (err) {}
+    if (!word){
+      var tok = (el.textContent || '').trim().split(/\s+/)[0] || '';
       if (tok.length > 1 && tok.length < 60) word = tok;
     }
-    var block = e.target.closest(IP_BLOCKS);
-    ipEdit(block ? ipLineOf(block) : 0, word.length > 1 && word.length < 60 ? word : '', block ? block.getBoundingClientRect().top : e.clientY);
+    if (ipTab()){
+      try { ipEdit(block ? ipLineOf(block) : 0, word.length > 1 && word.length < 60 ? word : '', block ? block.getBoundingClientRect().top : e.clientY); }
+      catch (err2) {}
+    }
+    if (state.view === 'preview'){
+      setView('editor');
+      saveState();
+      setTimeout(function(){ try { ta.focus(); } catch (err3) {} }, 0);
+    }
   }
-  (zoomWrap.closest('.preview') || zoomWrap).addEventListener('dblclick', ipDblOpen);
+  document.addEventListener('dblclick', ipDblOpen, true);
   // ticking ☐ while reading: the n-th task box is the n-th checkbox line of the source (fences skipped)
   zoomWrap.addEventListener('click', function(e){
     var box = e.target.closest('li.task > .box');
