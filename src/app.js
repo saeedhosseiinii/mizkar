@@ -9813,9 +9813,11 @@ function nbCommitMessage(list){
     if (!t) return [];
     var after = function(fn){ return function(){ fn(); nbRender(); }; };
     var others = tabs.filter(function(x){ return !x.nb && x.id !== id && !x.pinned; });
+    var hasText = String(t.id === activeTab ? ta.value : t.text).trim();
     return [
       { label: 'باز کردن', act: function(){ nbPhoneLeavePanel(); switchTab(id); } },
       { label: 'ذخیره در دفترچه…', act: function(){ nbSaveTabDialog(id); } },
+      hasText ? { label: 'اشتراک‌گذاری با گیست…', act: function(){ nbShareFromTab(id); } } : null,
       { label: 'تغییر نام', act: function(){ nbPrompt('نام تب', tabLabel(t), function(v){ t.name = String(v || '').slice(0, 80); drawTabs(); saveState(); nbRender(); }); } },
       { label: t.pinned ? 'برداشتن سنجاق' : 'سنجاق', act: after(function(){ togglePin(id); }) },
       { label: 'تکثیر', act: after(function(){ duplicateTab(id); }) },
@@ -10816,7 +10818,13 @@ function nbCommitMessage(list){
   ACTIONS['nb-search'] = { label: 'جستجو در یادداشت ها', icon: 'search', kbd: 'Alt Shift F', kw: 'notebook search find notes', run: function(){ NB.section = 'search'; NB.focusSearch = true; if (!NB.open) nbSidebar(true); else nbRender(); var q = $('nbFind'); if (q){ q.focus(); q.select(); } } };
   ACTIONS['nb-cal'] = { label: 'تقویم دفترچه', icon: 'clock', kbd: 'Alt Shift C', kw: 'notebook calendar jalali month', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } };
   ACTIONS['nb-tasks'] = { label: 'کارهای دفترچه', icon: 'check', kbd: 'Alt Shift T', kw: 'notebook tasks todos', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } };
-  ACTIONS['nb-share'] = { label: 'اشتراک‌گذاری این یادداشت (گیست)…', icon: 'link', kw: 'share gist link password', run: function(){ var p = nbActivePath(); if (p) nbShareDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
+  ACTIONS['nb-share'] = { label: 'اشتراک‌گذاری با گیست…', icon: 'link', kw: 'share gist link password temp', run: function(){
+    var p = nbActivePath();
+    if (p){ nbShareDialog(p); return; }
+    var t = currentTab();
+    if (t && String(t.id === activeTab ? ta.value : t.text).trim()){ nbShareFromTab(t.id); return; }
+    toast('اول یک یادداشت یا تب با متن باز کن', 'x');
+  } };
   ACTIONS['nb-props'] = { label: 'ویژگی‌های یادداشت (front matter)…', icon: 'list', kw: 'front matter properties tags date', run: function(){ var p = nbActivePath(); if (p) nbFmDialog(p); else toast('اول یک یادداشت دفترچه را باز کن', 'x'); } };
   ACTIONS['nb-shares'] = { label: 'اشتراک‌ها (لینک های گیست)', icon: 'link', kw: 'shares gists links', run: function(){ nbOpenSettings('shares'); } };
   ACTIONS['nb-keys'] = { label: 'کلیدهای میانبر', icon: 'keyboard', kw: 'keyboard shortcuts keys map', run: function(){ nbKeysDialog(); } };
@@ -12086,9 +12094,13 @@ function nbCommitMessage(list){
   function nbTabMenuItems(t){
     if (!t) return [];
     if (t.nb) return [null, ['tree', 'نمایش در درخت', '', function(){ nbShowInTree(t.nb); }],
-      ['cloud', 'تاریخچهٔ این یادداشت', '', function(){ nbShowHistory(t.nb); }]];
-    if (String(t.text || '').trim()) return [null, ['cloud', 'ذخیره در دفترچه…', '', function(){ nbSaveTabDialog(t.id); }]];
-    return [];
+      ['cloud', 'تاریخچهٔ این یادداشت', '', function(){ nbShowHistory(t.nb); }],
+      ['link', 'اشتراک‌گذاری با گیست…', '', function(){ nbShareDialog(t.nb); }]];
+    var text = t.id === activeTab ? ta.value : t.text;
+    if (!String(text || '').trim()) return [];
+    return [null,
+      ['cloud', 'ذخیره در دفترچه…', '', function(){ nbSaveTabDialog(t.id); }],
+      ['link', 'اشتراک‌گذاری با گیست…', '', function(){ nbShareFromTab(t.id); }]];
   }
   window.nbTabMenuItems = nbTabMenuItems;
   /* the whole map, in one place */
@@ -12420,6 +12432,7 @@ function nbCommitMessage(list){
     nbMenu(x, y, [
       { label: 'باز کردن', act: function(){ nbHistOpen(idx); } },
       { label: 'ذخیره در دفترچه…', act: function(){ nbHistSaveToNotebook(idx); } },
+      String(h.t || '').trim() ? { label: 'اشتراک‌گذاری با گیست…', act: function(){ nbShareFromHist(idx); } } : null,
       { label: 'کپی متن', act: function(){ copyToClipboard('متن', h.t).then(function(ok){ toast(ok ? 'کپی شد' : 'کپی نشد', 'copy'); }); } },
       { label: 'نخستین خط ها', act: function(){ nbHistPreview(idx); } },
       null,
@@ -13407,23 +13420,77 @@ function nbCommitMessage(list){
     copyToClipboard('', url).then(function(ok){ toast(ok ? 'لینک اشتراک کپی شد' : 'کپی لینک ممکن نشد — از «اشتراک‌ها» بردار', ok ? 'link' : 'x'); });
   }
 
-  /** «اشتراک‌گذاری…» for a note: the three ways, an optional expiry, then one link. */
-  function nbShareDialog(path){
-    var f = NB.files[path];
-    if (!f || f.deleted){ toast('این یادداشت پیدا نشد', 'x'); return; }
-    if (f.enc && f.plain == null){ nbEnsurePlain(path).then(function(ok){ if (ok) nbShareDialog(path); }); return; }
+  /** Notebook path string, or `{ title, text, path?, enc? }` (temp tab / recent text). */
+  function nbShareResolve(src){
+    if (src && typeof src === 'object'){
+      var text = String(src.text == null ? '' : src.text);
+      return {
+        title: String(src.title || textTitle(text) || 'بدون عنوان').slice(0, 80),
+        text: text,
+        path: src.path || '',
+        enc: !!src.enc
+      };
+    }
+    var path = src, f = NB.files[path];
+    if (!f || f.deleted) return null;
+    return { title: nbTitle(path), text: nbTextOf(f), path: path, enc: !!f.enc };
+  }
+  /** Live content for an existing share (notebook note, or still-open temp tab). */
+  function nbShareLive(rec){
+    if (!rec || !rec.path) return null;
+    if (NB.files[rec.path] && !NB.files[rec.path].deleted){
+      var f = NB.files[rec.path];
+      if (f.enc && f.plain == null) return { needPlain: rec.path };
+      return { title: nbTitle(rec.path), text: nbTextOf(f) };
+    }
+    if (rec.path.indexOf('temp:') === 0){
+      var id = rec.path.slice(5);
+      var t = tabs.filter(function(x){ return x.id === id; })[0];
+      if (!t) return null;
+      if (typeof syncActiveTab === 'function') syncActiveTab();
+      var text = t.id === activeTab ? ta.value : t.text;
+      return { title: tabLabel(t, text), text: text };
+    }
+    return null;
+  }
+  function nbShareCanUpdate(rec){ return !!nbShareLive(rec); }
+  /** Share a temp (non-notebook) tab via gist. */
+  function nbShareFromTab(tabId){
+    if (typeof syncActiveTab === 'function') syncActiveTab();
+    var t = tabs.filter(function(x){ return x.id === tabId; })[0];
+    if (!t){ toast('این تب پیدا نشد', 'x'); return; }
+    if (t.nb){ nbShareDialog(t.nb); return; }
+    var text = t.id === activeTab ? ta.value : t.text;
+    if (!String(text || '').trim()){ toast('متن خالی است', 'x'); return; }
+    nbShareDialog({ title: tabLabel(t, text), text: text, path: 'temp:' + t.id });
+  }
+  /** Share a «اخیر» history row via gist. */
+  function nbShareFromHist(idx){
+    var h = (typeof historyLoad === 'function' ? historyLoad() : [])[idx];
+    if (!h || !String(h.t || '').trim()){ toast('این متن پیدا نشد', 'x'); return; }
+    nbShareDialog({ title: h.title || h.name || textTitle(h.t) || 'بدون عنوان', text: h.t, path: '' });
+  }
+  /** «اشتراک‌گذاری…» for a note or temp text: the three ways, an optional expiry, then one link. */
+  function nbShareDialog(src){
+    if (typeof src === 'string' && NB.files[src] && NB.files[src].enc && NB.files[src].plain == null){
+      nbEnsurePlain(src).then(function(ok){ if (ok) nbShareDialog(src); });
+      return;
+    }
+    var s = nbShareResolve(src);
+    if (!s){ toast('این متن پیدا نشد', 'x'); return; }
+    if (!String(s.text).trim()){ toast('متن خالی است', 'x'); return; }
     if (!nbShareToken()){
       nbConfirm('اشتراک‌گذاری با گیست', 'برای ساختن لینک یک توکن گیت هاب با دسترسی Gists لازم است. تنظیماتش را باز کنم؟', function(){ nbOpenSettings('shares'); });
       return;
     }
-    var secret = !!f.enc, text = nbTextOf(f);
+    var secret = !!s.enc, text = s.text;
     var pics = /!\[[^\]]*\]\((?!https?:)[^)]+\)/.test(text);
     var mode = secret ? 'key' : 'open';
     var opt = function(m, label, sub){
       return '<label class="nb-share-opt"><input type="radio" name="nbShareMode" value="' + m + '"' + (m === mode ? ' checked' : '') + (secret && m === 'open' ? ' disabled' : '') + '>'
         + '<span><b>' + label + '</b><small>' + sub + '</small></span></label>';
     };
-    nbModalBox('اشتراک‌گذاری: ' + nbTitle(path),
+    nbModalBox('اشتراک‌گذاری: ' + s.title,
       '<div class="nb-share">'
       + opt('open', 'باز', 'هر کس لینک را داشته باشد می خواند؛ متن روی گیست ساده است.')
       + opt('key', 'کلید در لینک', 'روی گیت هاب فقط متن رمزشده است؛ کلید داخل خود لینک است، پس لینک کامل کافی است.')
@@ -13442,11 +13509,13 @@ function nbCommitMessage(list){
       var m = pick(), pass = $('nbSharePass').value, days = +$('nbShareExp').value;
       if (m === 'pass' && pass.length < 4){ toast('گذرواژه دست کم ۴ نویسه باشد', 'x'); $('nbSharePass').focus(); return; }
       nbCloseMini();
-      nbShareCreate(path, m, pass, days);
+      nbShareCreate(s, m, pass, days);
     };
   }
-  function nbShareCreate(path, mode, pass, days){
-    var f = NB.files[path], title = nbTitle(path), text = nbTextOf(f);
+  function nbShareCreate(src, mode, pass, days){
+    var s = nbShareResolve(src);
+    if (!s){ toast('این متن پیدا نشد', 'x'); return Promise.resolve(null); }
+    var title = s.title, text = s.text, path = s.path || '';
     var exp = days ? homeAddDays(homeToday(), days) : '';
     var key = mode === 'key' ? nbShareKey() : '';
     var file = (nbSlug(title) || 'note') + (mode === 'open' ? '.md' : '.mizkar');
@@ -13467,17 +13536,23 @@ function nbCommitMessage(list){
       });
     }).catch(function(e){ toast(e.message || 'ساختن لینک ممکن نشد', 'x'); return null; });
   }
-  /** «بروزرسانی»: the note's current text goes into the same gist, so the same link shows it. */
+  /** «بروزرسانی»: the note's (or open temp tab's) current text goes into the same gist. */
   function nbShareUpdate(rec){
-    var f = NB.files[rec.path];
-    if (!f || f.deleted){ toast('یادداشتِ این اشتراک دیگر نیست', 'x'); return Promise.resolve(false); }
-    if (f.enc && f.plain == null) return nbEnsurePlain(rec.path).then(function(ok){ return ok ? nbShareUpdate(rec) : false; });
+    var live = nbShareLive(rec);
+    if (live && live.needPlain) return nbEnsurePlain(live.needPlain).then(function(ok){ return ok ? nbShareUpdate(rec) : false; });
+    if (!live){ toast('متنِ این اشتراک دیگر اینجا نیست', 'x'); return Promise.resolve(false); }
     var send = function(content){
       var files = {}; files[rec.file] = { content: content };
-      return nbGistApi('PATCH', '/gists/' + rec.id, { files: files }).then(function(){ rec.at = Date.now(); nbShareSaveReg(); toast('اشتراک به روز شد — همان لینک', 'check'); return true; });
+      return nbGistApi('PATCH', '/gists/' + rec.id, { files: files }).then(function(){
+        rec.at = Date.now();
+        rec.title = live.title;
+        nbShareSaveReg();
+        toast('اشتراک به روز شد — همان لینک', 'check');
+        return true;
+      });
     };
-    var payload = JSON.stringify({ t: nbTitle(rec.path), x: nbTextOf(f) });
-    if (rec.mode === 'open') return send(nbTextOf(f)).catch(function(e){ toast(e.message, 'x'); return false; });
+    var payload = JSON.stringify({ t: live.title, x: live.text });
+    if (rec.mode === 'open') return send(live.text).catch(function(e){ toast(e.message, 'x'); return false; });
     if (rec.mode === 'key' && rec.key) return nbEncrypt(payload, rec.key).then(send).catch(function(e){ toast(e.message, 'x'); return false; });
     return new Promise(function(resolve){
       nbPrompt('گذرواژهٔ همین اشتراک', '', function(pass){
@@ -13558,9 +13633,9 @@ function nbCommitMessage(list){
           + (r.at ? ' · ' + escapeHtml(nbShamsiLabel(new Date(r.at))) : '') + (r.exp ? ' · تا ' + escapeHtml(nbShamsiLabel(r.exp)) : '') + '</small></span>'
           + '<span class="nb-hist-btns">'
           + '<button type="button" class="elbtn xs" data-nb-share-copy="' + i + '">کپی لینک</button>'
-          + (r.path ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
+          + (nbShareCanUpdate(r) ? '<button type="button" class="elbtn xs" data-nb-share-up="' + i + '">بروزرسانی</button>' : '')
           + '<button type="button" class="elbtn xs" data-nb-share-del="' + i + '">برداشتن</button></span></div>';
-      }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست کلیکِ یک یادداشت «اشتراک‌گذاری…» را بزن.') + '</p>';
+      }).join('') : '<p class="nb-mini-text">' + (filterPath ? 'این یادداشت هنوز شیر نشده.' : 'هنوز چیزی شیر نشده. از ⋯ یا راست‌کلیک یک یادداشت یا تب موقت «اشتراک‌گذاری…» را بزن.') + '</p>';
     });
   }
   function nbSharesClick(e){
@@ -14217,7 +14292,7 @@ function nbCommitMessage(list){
     longPressAt: function(x, y, el){ return nbLongPressAt(x, y, el); }, tabMenuItems: nbTabMenuItems,
     moveToCollection: nbMoveNoteToCollection, showCollection: nbShowCollection, openAllIn: nbOpenAllIn,
     pending: nbPendingRows, pendDrop: nbPendDrop, move: nbMoveNote, shamsiStamp: nbShamsiStamp, setTaskDue: nbSetTaskDue, syncPop: function(){ return $('nbSyncPop'); },
-    rename: nbRenameDialog, h1: nbH1, fmDialog: nbFmDialog, fmWrite: nbFmWrite, shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog,
+    rename: nbRenameDialog, h1: nbH1, fmDialog: nbFmDialog, fmWrite: nbFmWrite, shareCreate: nbShareCreate, shareList: nbShareList, shareUpdate: nbShareUpdate, shareRemove: nbShareRemove, readGist: nbReadGistHash, shareExpire: nbShareExpire, shareDialog: nbShareDialog, shareFromTab: nbShareFromTab, shareFromHist: nbShareFromHist,
     trash: function(){ return NB.trash; }, trashRestore: nbTrashRestore, emptyTrash: nbEmptyTrash, menu: nbMenu, goHome: function(){ nbGoHome(); }, resetFromRepo: nbResetFromRepo, tempMenu: nbTempTabMenuItems, closeTopLayer: nbCloseTopLayer, backEntry: function(){ return nbBack.entry; },
     tempsHtml: nbTempsHtml, histOpen: nbHistOpen, histDelete: nbHistDelete, histMenu: nbHistMenu,
     histSave: nbHistSaveToNotebook, saveText: nbSaveTextDialog,
