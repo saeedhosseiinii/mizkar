@@ -9655,15 +9655,18 @@ function nbCommitMessage(list){
       if (e.target.id === 'nbFindCol'){ NB.colFilter = e.target.value; nbRefreshSearch(); }
     });
     box.addEventListener('click', function(e){
-      var anchorMenu = function(el, items){
-        var m = $('nbMenu');
-        if (m && !m.hidden && nbMenu.anchor === el){ nbMenuClose(); return; }
-        var r = el.getBoundingClientRect();
-        nbMenu(r.left, r.bottom + 4, items);
-        nbMenu.anchor = el;
-      };
-      if (e.target.closest('[data-nb-secs-more]')){ e.stopPropagation(); anchorMenu(e.target.closest('[data-nb-secs-more]'), nbSecsMoreItems()); return; }
-      if (e.target.closest('#nbPlus')){ e.stopPropagation(); anchorMenu($('nbPlus'), nbPlusItems()); return; }
+      if (e.target.closest('[data-nb-secs-more]')){
+        e.stopPropagation();
+        var elMore = e.target.closest('[data-nb-secs-more]'), rMore = elMore.getBoundingClientRect();
+        nbMenuToggle('secs-more', rMore.left, rMore.bottom + 4, nbSecsMoreItems());
+        return;
+      }
+      if (e.target.closest('#nbPlus')){
+        e.stopPropagation();
+        var elPlus = $('nbPlus'), rPlus = elPlus.getBoundingClientRect();
+        nbMenuToggle('nb-plus', rPlus.left, rPlus.bottom + 4, nbPlusItems());
+        return;
+      }
       if (e.target.closest('#nbHeadSync')){ e.stopPropagation(); nbToggleSyncPop($('nbHeadSync')); return; }
       var sec = e.target.closest('[data-nb-sec]');
       if (sec){ NB.section = sec.dataset.nbSec; nbRender(); return; }
@@ -10343,10 +10346,14 @@ function nbCommitMessage(list){
   }
 
   /* --- floating context menu --- */
+  /** Buttons that open/close #nbMenu — outside-click must not race their own toggle. */
+  var NB_MENU_BTN = '#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"], [data-nb-nav="new"], [data-nb-secs-more], #nbPlus, #uiTools, .ui-more, .ui-fmt, [data-nb-top="more"]';
   /** A menu at (x, y). `null` items are separators (never two in a row, never at either end). */
   function nbMenu(x, y, items){
     var m = $('nbMenu');
     nbMenuOpenedTouch = nbTouchSeq;
+    nbMenu.anchorId = null;
+    nbMenu.anchor = null;
     items = (items || []).filter(function(it, i, all){ return it || (i > 0 && all[i - 1] && all.slice(i + 1).some(Boolean)); });
     if (!items.some(Boolean)) return;
     if (!m.contains(document.activeElement)) nbMenu.back = document.activeElement;   // focus goes back there when it closes
@@ -10374,17 +10381,32 @@ function nbCommitMessage(list){
       // the item may open a submenu, which rebuilds this one: the click must not reach the «outside» closer
       e.stopPropagation();
       m.hidden = true;
+      nbMenu.anchorId = null;
+      nbMenu.anchor = null;
       var it = items[+b.dataset.nbMi];
       if (it && it.act) it.act();
       if (m.hidden) nbMenuFocusBack();
     };
+  }
+  /** Same as nbMenu, but a second click on the same control (stable `id`) closes it. */
+  function nbMenuToggle(id, x, y, items){
+    var m = $('nbMenu');
+    if (m && !m.hidden && nbMenu.anchorId === id){ nbMenuClose(); return false; }
+    nbMenu(x, y, items);
+    nbMenu.anchorId = id;
+    return true;
   }
   function nbMenuFocusBack(){
     var el = nbMenu.back;
     nbMenu.back = null;
     if (el && el.focus && document.contains(el) && (!document.activeElement || document.activeElement === document.body || $('nbMenu').contains(document.activeElement))) el.focus();
   }
-  function nbMenuClose(){ var m = $('nbMenu'); if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); } }
+  function nbMenuClose(){
+    var m = $('nbMenu');
+    if (m && !m.hidden){ m.hidden = true; nbMenuFocusBack(); }
+    nbMenu.anchorId = null;
+    nbMenu.anchor = null;
+  }
   /* The finger that opened a menu is still lifting: the browser then sends its own mousedown → click, and that
      one must not count as «outside» and close the menu the finger just opened. Only that instant gets grace — a
      deliberate tap outside (even a quick one) closes it right away. */
@@ -10396,14 +10418,14 @@ function nbCommitMessage(list){
        long press looked dead on a phone). A deliberate tap outside is a NEW touch and closes it at once. */
     var compat = e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents;
     if (compat && nbTouchSeq === nbMenuOpenedTouch) return;
-    if (e.target.closest && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"], [data-nb-secs-more], #nbPlus')) nbMenuClose();
+    if (e.target.closest && !e.target.closest(NB_MENU_BTN)) nbMenuClose();
   }, true);
   document.addEventListener('scroll', function(e){ if (!(e.target && e.target.closest && e.target.closest('#nbMenu'))) nbMenuClose(); }, true);
 
   document.addEventListener('click', function(e){
     var m = $('nbMenu');
-    /* FAB / «تازه» / «بیشتر» / پنل ⋯ toggle their own menu — they are not «outside» */
-    if (m && !m.hidden && document.contains(e.target) && !e.target.closest('#nbMenu, #m3Fab, .nb-nav-new, [data-nb-nav="more"], [data-nb-secs-more], #nbPlus')) nbMenuClose();
+    /* Icon toggles handle open/close themselves — they are not «outside» */
+    if (m && !m.hidden && document.contains(e.target) && !e.target.closest(NB_MENU_BTN)) nbMenuClose();
   });
 
   /* --- settings --- */
@@ -12871,15 +12893,15 @@ function nbCommitMessage(list){
       ['convert', 'تبدیل فرمت'], ['present', 'ارائه (اسلاید)'], null,
       ['theme', 'تم روشن / تیره'], ['dir', 'جهت پایه: راست‌به‌چپ / چپ‌به‌راست'], ['install', 'نصب به‌عنوان برنامه']
     ];
-    function menuAt(btn, items){
+    function menuAt(id, btn, items){
       var r = btn.getBoundingClientRect();
-      nbMenu(r.left, r.bottom + 6, items.filter(Boolean).filter(function(it){ return !it.hide; }));
+      nbMenuToggle(id, r.left, r.bottom + 6, items.filter(Boolean).filter(function(it){ return !it.hide; }));
     }
     function act(id){ return function(){ runAction(id); }; }
     tools.addEventListener('click', function(e){
       e.stopPropagation();
       closePops();
-      menuAt(tools, TOOL_ITEMS.map(function(it){
+      menuAt('ui-tools', tools, TOOL_ITEMS.map(function(it){
         if (!it) return null;
         return { label: it[1], act: act(it[0]), hide: it[0] === 'install' && $('btnInstall') && $('btnInstall').hidden };
       }));
@@ -12898,7 +12920,7 @@ function nbCommitMessage(list){
       more.addEventListener('click', function(e){
         e.stopPropagation();
         closePops();
-        menuAt(more, (typeof nbMobile === 'object' && nbMobile ? nbMobile.phoneItems : function(x){ return x; })([
+        menuAt('ui-more', more, (typeof nbMobile === 'object' && nbMobile ? nbMobile.phoneItems : function(x){ return x; })([
           { label: 'بزرگ‌نمایی (' + $('zLvl').textContent + ')', act: act('zoom-in') },
           { label: 'کوچک‌نمایی', act: act('zoom-out') },
           { label: 'اندازهٔ اصلی', act: act('zoom-reset') },
@@ -12925,7 +12947,7 @@ function nbCommitMessage(list){
           .concat(Object.keys(FMT_LABELS).map(function(k){
             return { label: (state.fmt === k ? '✓ ' : '') + FMT_LABELS[k], act: function(){ setFormat(k); saveState(); } };
           }));
-        nbMenu(r.left, Math.max(8, r.top - Math.min(items.length * 34 + 16, innerHeight * 0.7)), items);
+        nbMenuToggle('ui-fmt', r.left, Math.max(8, r.top - Math.min(items.length * 34 + 16, innerHeight * 0.7)), items);
       };
       fmt.addEventListener('click', openFmt);
       fmt.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openFmt(e); } });
@@ -13054,17 +13076,13 @@ function nbCommitMessage(list){
       var what = b.dataset.nbNav;
       if (what === 'home'){ nbGoHome(); return; }
       if (what === 'new'){
-        var m = $('nbMenu'), r = b.getBoundingClientRect();
-        if (m && !m.hidden && nbMenu.anchor === b){ nbMenuClose(); return; }
-        nbMenu(r.left, Math.max(8, r.top - 280), nbPlusItems());
-        nbMenu.anchor = b;
+        var r = b.getBoundingClientRect();
+        nbMenuToggle('nav-new', r.left, Math.max(8, r.top - 280), nbPlusItems());
         return;
       }
       if (what === 'more'){
-        var m2 = $('nbMenu'), r2 = b.getBoundingClientRect();
-        if (m2 && !m2.hidden && nbMenu.anchor === b){ nbMenuClose(); return; }
-        nbMenu(r2.left, Math.max(8, r2.top - 320), nbMoreItems());
-        nbMenu.anchor = b;
+        var r2 = b.getBoundingClientRect();
+        nbMenuToggle('nav-more', r2.left, Math.max(8, r2.top - 320), nbMoreItems());
         return;
       }
       NB.section = what;
@@ -13118,7 +13136,7 @@ function nbCommitMessage(list){
         nbToggleSyncPop(b);
       } else if (w === 'more' && path){
         var r = b.getBoundingClientRect();
-        nbMenu(r.left, r.bottom, [
+        nbMenuToggle('top-more', r.left, r.bottom, [
           { label: 'گرفتن و ارسال', act: function(){ nbPull({ loud: true }).then(function(){ if (nbCountDirty()) nbPush({ loud: true }); }); } },
           null
         ].concat(nbNoteMenuItems(path).filter(function(it){ return !it || !/^(باز کردن|باز کردن در تب تازه|سنجاق در تب)$/.test(it.label); })));
