@@ -4035,7 +4035,7 @@ if (typeof document !== 'undefined'){
     if (action) toastEl.querySelector('.toast-act').onclick = function(){ toastEl.classList.remove('show'); action.run(); };
     toastEl.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, action ? 5000 : 2400);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, action ? 5000 : (ic === 'x' ? 8000 : 2400));
   }
   function opts(){ return { normalize: optNorm.checked, bdi: optBdi.checked, cronTz: state.cronTz }; }
   function currentTheme(){ return root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
@@ -8609,11 +8609,18 @@ function nbCommitMessage(list){
         if (res.ok) return data;
         var left = res.headers.get('x-ratelimit-remaining');
         if ((res.status === 403 || res.status === 429) && left === '0') throw nbError(403, 'سهم درخواست های گیت هاب تمام شد — کمی بعد دوباره تلاش کن');
-        var msg = (data && data.message) || ('خطای گیت هاب (' + res.status + ')');
+        var raw = (data && data.message) || '';
+        var detail = data && data.errors && data.errors[0] && (data.errors[0].message || data.errors[0].code);
+        var msg = raw || ('خطای گیت هاب (' + res.status + ')');
+        if (detail && String(detail) !== raw) msg += ' — ' + detail;
         if (res.status === 401) msg = 'توکن پذیرفته نشد — توکن را دوباره بررسی کن';
-        if (res.status === 404) msg = 'پیدا نشد — نام مخزن، شاخه یا مسیر را بررسی کن';
-        if (res.status === 409 || res.status === 422) msg = /empty/i.test((data && data.message) || '') ? 'مخزن خالی است' : 'نسخهٔ تازه تری روی مخزن هست';
-        throw nbError(res.status, msg);
+        if (res.status === 404 && /\/repos\/[^/]+\/[^/]+\/?$/.test(path)) msg = 'پیدا نشد — نام مخزن را بررسی کن';
+        if (res.status === 403 && /resource not accessible|write|push/i.test(raw)) msg = 'توکن اجازهٔ نوشتن در مخزن را ندارد';
+        if ((res.status === 409 || res.status === 422) && /empty/i.test(raw)) msg = 'مخزن خالی است';
+        else if ((res.status === 409 || res.status === 422) && /fast.forward/i.test(raw)) msg = 'نسخهٔ تازه تری روی مخزن هست';
+        var err = nbError(res.status, msg);
+        err.gh = raw;
+        throw err;
       });
     }, function(){
       throw nbError(0, 'اتصال به گیت هاب برقرار نشد' + (navigator.onLine === false ? ' — آفلاین هستی' : ''));
@@ -8625,6 +8632,14 @@ function nbCommitMessage(list){
   }
   function nbB64(text){ return btoa(unescape(encodeURIComponent(text))); }
   function nbEncodePath(p){ return String(p).split('/').map(encodeURIComponent).join('/'); }
+  function nbPathKey(p){ try { return String(p || '').normalize('NFC'); } catch (e) { return String(p || ''); } }
+  /** Git rejects an empty segment, «.» / «..», a leading slash, or a trailing slash. */
+  function nbGitPathOk(p){
+    if (!p || /[\0\\]/.test(p) || p.charAt(0) === '/' || /\/$/.test(p)) return false;
+    var parts = p.split('/');
+    for (var i = 0; i < parts.length; i++){ if (!parts[i] || parts[i] === '.' || parts[i] === '..') return false; }
+    return true;
+  }
   function nbIsNote(p){
     for (var i = 0; i < IGNORE.length; i++){ if (p.indexOf(IGNORE[i]) === 0) return false; }
     return /\.(md|markdown|txt)$/i.test(p) || p === (C && C.configPath);
@@ -8783,10 +8798,17 @@ function nbCommitMessage(list){
     function worker(){
       if (next >= changes.length) return Promise.resolve(true);
       var i = next++, c = changes[i];
-      if (c.deleted){ tree[i] = { path: c.path, mode: '100644', type: 'blob', sha: null }; return worker(); }
-      return nbApi('POST', base + '/git/blobs', { content: c.b64 || nbB64(c.text), encoding: 'base64' }).then(function(blob){
+      if (c.deleted){ tree[i] = { path: c.path, sha: null }; return worker(); }
+      var content;
+      try { content = c.b64 || nbB64(c.text == null ? '' : String(c.text)); }
+      catch (err) { return Promise.reject(nbError(0, '«' + c.path + '» برای ارسال مناسب نیست')); }
+      return nbApi('POST', base + '/git/blobs', { content: content, encoding: 'base64' }).then(function(blob){
+        if (!blob || !blob.sha) throw nbError(0, '«' + c.path + '» در مخزن ثبت نشد');
         tree[i] = { path: c.path, mode: '100644', type: 'blob', sha: blob.sha };
         return worker();
+      }, function(e){
+        if (e && c.path && String(e.message || '').indexOf(c.path) === -1) e.message += ' — ' + c.path;
+        throw e;
       });
     }
     var workers = [];
@@ -9071,10 +9093,17 @@ function nbCommitMessage(list){
       var havePromise = baseSha ? nbTreePaths(baseSha) : nbDefaultBranchPaths();
       return havePromise.then(function(have){ return nbPushChanges(have); });
     }).catch(function(e){
+      var fast = e && (e.status === 409 || e.status === 422) && /fast.forward|نسخهٔ تازه تر/.test((e.gh || '') + ' ' + (e.message || ''));
+      if (fast && !opts.retried){
+        NB.busy = false;
+        return nbPull({ quiet: true }).then(function(){
+          if (NB.conflicts.length){ toast('اول تعارض ها را حل کن', 'x'); return false; }
+          return nbPush({ retried: true, force: opts.force, loud: opts.loud });
+        });
+      }
       NB.busy = false;
-      var conflict = !!(e && (e.status === 409 || e.status === 422));
-      NB.error = conflict ? 'نسخهٔ تازه تری روی مخزن هست' : ((e && e.message) || 'خطا');
-      nbSay(conflict ? 'conflict' : (navigator.onLine === false ? 'offline' : 'error'));
+      NB.error = (e && e.message) || 'خطا';
+      nbSay(navigator.onLine === false ? 'offline' : 'error');
       toast(NB.error, 'x');
       return false;
     });
@@ -9083,9 +9112,13 @@ function nbCommitMessage(list){
      * dropped (it would fail the whole commit), and create/update follow the tree, not this device's memory.
      */
     function nbPushChanges(have){
+      var byKey = Object.create(null);
+      Object.keys(have).forEach(function(p){ byKey[nbPathKey(p)] = p; });
+      function serverPath(p){ return Object.prototype.hasOwnProperty.call(have, p) ? p : (byKey[nbPathKey(p)] || ''); }
       list = list.filter(function(fd){
-        if (fd.deleted && !have[fd.path]){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return false; }
-        fd.remote = !!have[fd.path];
+        if (!fd.path || fd.path.slice(-1) === '/') return false;
+        if (fd.deleted && !serverPath(fd.path)){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return false; }
+        fd.remote = !!serverPath(fd.path);
         return true;
       });
       atts = atts.filter(function(k){
@@ -9103,7 +9136,8 @@ function nbCommitMessage(list){
       var changes = [], chain = Promise.resolve();
       list.forEach(function(fd){
         chain = chain.then(function(){
-          if (fd.deleted){ changes.push({ path: fd.path, deleted: true }); return true; }
+          if (fd.deleted){ changes.push({ path: serverPath(fd.path), deleted: true }); return true; }
+          if (!nbGitPathOk(fd.path)) throw nbError(0, 'این مسیر به مخزن نمی رود: ' + fd.path);
           if (fd.enc){
             return nbEnsurePlain(fd.path).then(function(ok){
               if (!ok || !NB.pass) throw nbError(0, 'یادداشت رمزدار «' + nbTitle(fd.path) + '» باز نشد — بدون گذرواژه ارسال نمی شود');
@@ -9127,7 +9161,15 @@ function nbCommitMessage(list){
         });
       });
       var message = nbCommitMessage(list.length ? list : atts.map(function(k){ return { path: k }; }));
-      return chain.then(function(){ return nbCommitPush(changes, message, baseSha); })
+      return chain.then(function(){
+        var seen = Object.create(null), uniq = [];
+        changes.forEach(function(c){
+          if (seen[c.path] != null){ uniq[seen[c.path]] = c; return; }
+          seen[c.path] = uniq.length;
+          uniq.push(c);
+        });
+        return nbCommitPush(uniq, message, baseSha);
+      })
         .then(function(commit){
           list.forEach(function(fd){
             if (fd.deleted){ delete NB.files[fd.path]; NB.paths = NB.paths.filter(function(p){ return p !== fd.path; }); return; }
@@ -12375,10 +12417,10 @@ function nbCommitMessage(list){
       if (!b) return;
       var w = b.dataset.nbPop;
       if (w === 'fix'){ var bl = nbPushBlocked(); m.hidden = true; if (bl) bl.act(); return; }
+      if (w === 'push'){ nbPush({ loud: true }); return; }
       m.hidden = true;
       if (w === 'settings') nbOpenSettings();
       else if (w === 'pull') nbPull({ loud: true });
-      else if (w === 'push') nbPush({ loud: true });
       else if (w === 'open') nbSidebar(true);
     };
   }
