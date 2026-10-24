@@ -8246,21 +8246,37 @@ function nbTidyTpl(text){
   var res = out.join('\n');
   return res.replace(/\n+$/, res.trim() ? '\n' : '');   // a template ends with one newline, not a blank block
 }
-/** Front matter — the simple `key: value` and `key: [a, b]` forms Obsidian writes. */
+/** Front matter — `key: value`, `key: [a, b]`, and a YAML list (`tags:` then `  - one`). One list item is one tag. */
 function nbParseFm(text){
   var out = { data: {}, body: String(text), raw: '' };
   var m = String(text).match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
   if (!m) return out;
   out.raw = m[1];
   out.body = String(text).slice(m[0].length);
-  m[1].split(/\r?\n/).forEach(function(line){
-    var kv = line.match(/^\s*([A-Za-z_\u0600-\u06FF][\w\u0600-\u06FF .-]*)\s*:\s*(.*)$/);
-    if (!kv) return;
-    var key = kv[1].trim(), val = kv[2].trim();
+  var lines = m[1].split(/\r?\n/), i, line, kv, key, val, items;
+  for (i = 0; i < lines.length; i++){
+    line = lines[i];
+    kv = line.match(/^([A-Za-z_\u0600-\u06FF][\w\u0600-\u06FF .-]*)\s*:\s*(.*)$/);
+    if (!kv) continue;
+    key = kv[1].trim();
+    val = kv[2].trim();
+    if (!val || val === '|' || val === '>'){
+      items = [];
+      while (i + 1 < lines.length && /^\s*-\s+\S/.test(lines[i + 1])){
+        i++;
+        items.push(lines[i].replace(/^\s*-\s+/, '').trim().replace(/^["']|["']$/g, ''));
+      }
+      if (items.length){ out.data[key] = items.filter(Boolean); continue; }
+    }
     if (/^\[.*\]$/.test(val)) out.data[key] = val.slice(1, -1).split(',').map(function(s){ return s.trim().replace(/^["']|["']$/g, ''); }).filter(Boolean);
     else out.data[key] = val.replace(/^["']|["']$/g, '');
-  });
+  }
   return out;
+}
+/** The note's date: `date`, `created`, or the Persian key `تاریخ`. */
+function nbFmDate(data){
+  data = data || {};
+  return data.date || data.created || data['تاریخ'] || '';
 }
 /** Tags from front matter plus `#tag` in the text (Persian letters allowed). */
 function nbTags(text){
@@ -10058,7 +10074,7 @@ function nbCommitMessage(list){
     ];
   }
   /* --- «ویژگی‌ها»: the front matter as a form (date with the Shamsi picker, tags, any other key) --- */
-  var NB_FM_DATES = /^(date|created|updated|due)$/i;
+  var NB_FM_DATES = /^(date|created|updated|due|تاریخ)$/i;
   /** The note's text with its front matter replaced by `rows` ([key, value]; arrays become [a, b]); none → no block. */
   function nbFmWrite(text, rows){
     var fm = nbParseFm(text), body = fm.raw ? fm.body : String(text);
@@ -11411,7 +11427,7 @@ function nbCommitMessage(list){
       var col = nbCollectionOf(p);
       if (!col || !col.calendar || String(col.path).indexOf('{title}') === -1) return;
       var fm = (f.enc && f.plain == null) ? {} : nbParseFm(nbTextOf(f)).data;
-      var stamp = nbShamsiStamp(fm.date || fm.created) || nbShamsiStamp(nbStampOfPath(p));
+      var stamp = nbShamsiStamp(nbFmDate(fm)) || nbShamsiStamp(nbStampOfPath(p));
       if (!stamp) return;
       var g = nbStampToDate(stamp), key = homeStamp(g.getFullYear(), g.getMonth() + 1, g.getDate());
       (nbDayIdx[key] = nbDayIdx[key] || []).push({ path: p, col: col });
@@ -12058,7 +12074,7 @@ function nbCommitMessage(list){
     if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
     if (f.enc && f.plain == null){ toast('اول یادداشت رمزدار را باز کن — تاریخش داخل متن است', 'lock'); return; }
     var fm = nbParseFm(nbTextOf(f)).data;
-    var stamp = nbShamsiStamp(fm.date || fm.created) || nbShamsiStamp(nbStampOfPath(path));
+    var stamp = nbShamsiStamp(nbFmDate(fm)) || nbShamsiStamp(nbStampOfPath(path));
     var date = stamp ? nbStampToDate(stamp) : new Date();
     // «1405-08-05 جلسه» keeps only «جلسه»: the pattern adds its own date
     var title = nbTitle(path).replace(/^[0-9۰-۹]{4}[-_.][0-9۰-۹]{1,2}[-_.][0-9۰-۹]{1,2}[\s_-]*/, '') || nbTitle(path);
