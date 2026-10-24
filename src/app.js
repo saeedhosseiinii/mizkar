@@ -8610,7 +8610,7 @@ function nbCommitMessage(list){
       NB.trash = (Array.isArray(t) ? t : []).filter(function(x){ return x && x.at > month; });   // a month, then it goes for good
     }, function(){});
     return Promise.all([idbGet('all' + nbStoreSuffix(), 'notes'), idbGet('nb-last' + nbStoreSuffix(), 'meta'), idbGet('attach' + nbStoreSuffix(), 'queue')]).then(function(r){
-      if (r[0] && Array.isArray(r[0].files)) r[0].files.forEach(function(f){ if (f && f.path){ NB.files[f.path] = f; if (NB.paths.indexOf(f.path) === -1) NB.paths.push(f.path); } });
+      if (r[0] && Array.isArray(r[0].files)) r[0].files.forEach(function(f){ if (f && f.path){ nbRepairUnlockedCipher(f); NB.files[f.path] = f; if (NB.paths.indexOf(f.path) === -1) NB.paths.push(f.path); } });
       if (r[1] && typeof r[1] === 'object'){ NB.lastCommit = r[1].commit || ''; NB.lastSync = r[1].at || 0; }
       if (r[2] && Array.isArray(r[2].files)) r[2].files.forEach(function(a){ if (a && a.path) NB.attach[a.path] = a; });
       nbIdxInvalidate();
@@ -9057,12 +9057,14 @@ function nbCommitMessage(list){
               // both sides changed a secret note: decrypt base, mine and theirs and compare plain to plain
               return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
                 if (!pass) throw nbError(0, 'locked');
-                NB.pass = pass;
                 return Promise.all([
                   local.plain != null ? local.plain : nbDecrypt(local.localCipher || local.text, pass),
                   local.basePlain != null ? local.basePlain : (nbIsEncrypted(local.base || '') ? nbDecrypt(local.base, pass) : ''),
                   enc ? nbDecrypt(text, pass) : text
-                ]);
+                ]).then(function(r){ NB.pass = pass; return r; }, function(e){
+                  if (NB.pass === pass) NB.pass = '';
+                  throw e;
+                });
               }).then(function(r){
                 var mine = r[0], base = r[1], theirs = r[2], mg = nbMerge3(base, mine, theirs);
                 if (!mg.conflicts.length){
@@ -11874,16 +11876,49 @@ function nbCommitMessage(list){
       else nbAskPass(true).then(function(p){ if (p){ NB.pass = p; go(); } });
     });
   }
+  /**
+   * A lock cleared without plaintext is not a decrypt: the body is still ciphertext (or only in
+   * localCipher) and must stay locked, otherwise the next send can upload an empty note.
+   */
+  function nbRepairUnlockedCipher(f){
+    if (!f || f.enc || f.plain != null) return;
+    var text = f.text || '';
+    if (!nbIsEncrypted(text)){
+      if (String(text).trim()) return;
+      if (nbIsEncrypted(f.localCipher || '')){ f.enc = true; f.plain = null; return; }
+      if (!nbIsEncrypted(f.base || '')) return;
+      f.text = f.base;
+    }
+    f.enc = true;
+    f.plain = null;
+    if ((f.text || '') === (f.base || '')) f.dirty = false;
+  }
   /** Turns a note into a secret one (or back): the working copy keeps plaintext, git gets ciphertext. */
   function nbToggleEncrypt(path){
     var f = NB.files[path];
     if (!f) return;
     if (f.enc){
-      f.enc = false;
-      if (f.plain != null){ f.text = f.plain; f.plain = null; }
-      toast('رمزگذاری برداشته شد — با ارسال، متن ساده روی مخزن می رود', 'x');
-      var t0 = nbTabFor(path);
-      if (t0) t0.secret = false;
+      var drop = function(){
+        var file = NB.files[path];
+        if (!file || !file.enc || file.plain == null) return;
+        file.enc = false;
+        file.text = file.plain;
+        file.plain = null;
+        file.localCipher = '';
+        file.dirty = true;
+        file.at = Date.now();
+        var t0 = nbTabFor(path);
+        if (t0){
+          t0.secret = false;
+          t0.text = file.text;
+          if (t0.id === activeTab){ ta.value = file.text; render(); }
+        }
+        toast('رمزگذاری برداشته شد — با ارسال، متن ساده روی مخزن می رود', 'x');
+        nbCountDirty(); nbRender(); nbSaveFiles(); saveState();
+      };
+      if (f.plain != null) drop();
+      else nbEnsurePlain(path).then(function(ok){ if (ok) drop(); });
+      return;
     } else {
       if (!NB.pass){
         nbAskPass(true).then(function(p){ if (p){ NB.pass = p; nbToggleEncrypt(path); } });
@@ -11902,11 +11937,26 @@ function nbCommitMessage(list){
     var f = NB.files[path];
     if (!f || !f.enc) return Promise.resolve(true);
     if (f.plain != null) return Promise.resolve(true);
-    return (NB.pass ? Promise.resolve(NB.pass) : nbAskPass(true)).then(function(pass){
-      if (!pass) return false;
-      NB.pass = pass;
-      return nbDecrypt(f.localCipher || f.text, pass).then(function(plain){ f.plain = plain; if (f.basePlain == null && !f.dirty) f.basePlain = plain; return true; },
-        function(e){ toast('رمزگشایی نشد — گذرواژه درست است؟ (' + e.message + ')', 'x'); return false; });
+    var cipher = nbIsEncrypted(f.localCipher || '') ? f.localCipher : (nbIsEncrypted(f.text || '') ? f.text : '');
+    if (!cipher){ toast('متن رمزدار این یادداشت روی دستگاه نیست', 'x'); return Promise.resolve(false); }
+    function tryPass(pass, quiet){
+      if (!pass) return Promise.resolve(false);
+      return nbDecrypt(cipher, pass).then(function(plain){
+        NB.pass = pass;
+        f.plain = plain;
+        if (f.basePlain == null && !f.dirty) f.basePlain = plain;
+        return true;
+      }, function(e){
+        if (NB.pass === pass) NB.pass = '';
+        if (!quiet) toast('رمزگشایی نشد — گذرواژه درست است؟ (' + e.message + ')', 'x');
+        return false;
+      });
+    }
+    if (!NB.pass) return nbAskPass(true).then(function(pass){ return tryPass(pass, false); });
+    return tryPass(NB.pass, true).then(function(ok){
+      if (ok) return true;
+      NB.pass = '';
+      return nbAskPass(true).then(function(pass){ return tryPass(pass, false); });
     });
   }
 
