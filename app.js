@@ -8732,6 +8732,14 @@ function nbCommitMessage(list){
   }
   function nbB64(text){ return btoa(unescape(encodeURIComponent(text))); }
   /** Git's blob id for this exact text: sha1("blob <bytes>\\0" + utf8). Matches the tree, so a pull can skip the file. */
+  /** Same note with or without a final newline, and with Windows line endings folded to LF. */
+  function nbBlobCandidates(text){
+    var s = String(text == null ? '' : text), lf = s.replace(/\r\n/g, '\n'), out = [], seen = {};
+    function add(x){ if (!seen[x]){ seen[x] = 1; out.push(x); } }
+    add(s); add(lf);
+    add(lf.charAt(lf.length - 1) === '\n' ? lf.slice(0, -1) : lf + '\n');
+    return out;
+  }
   function nbGitBlobSha(text){
     if (!crypto.subtle || !crypto.subtle.digest) return Promise.resolve('');
     var bytes = new TextEncoder().encode(text == null ? '' : String(text));
@@ -9071,49 +9079,103 @@ function nbCommitMessage(list){
     var firstSync = !NB.lastCommit;
     return nbRemoteTree(!!opts.loud).then(function(tree){
       if (tree.unchanged){ NB.busy = false; nbSay(); if (opts.loud) toast('چیز تازه ای نیست', 'check'); return false; }
-      var remote = {};
-      tree.entries.forEach(function(en){ remote[en.path] = en; });
+      var remote = {}, remoteKey = {};
+      tree.entries.forEach(function(en){
+        remote[en.path] = en;
+        remoteKey[nbPathKey(en.path).toLowerCase()] = en;
+      });
+      var localKey = {};
+      NB.paths.slice().forEach(function(p){
+        var f = NB.files[p];
+        if (!f) return;
+        var k = nbPathKey(p).toLowerCase();
+        (localKey[k] || (localKey[k] = [])).push(f);
+      });
+      function nbLooseText(s){ return String(s || '').replace(/\r\n/g, '\n').replace(/\n+$/, ''); }
+      function nbAdoptPath(f, path){
+        if (!f || f.path === path) return f;
+        var old = f.path;
+        delete NB.files[old];
+        NB.paths = NB.paths.filter(function(p){ return p !== old; });
+        f.path = path;
+        NB.files[path] = f;
+        if (NB.paths.indexOf(path) === -1) NB.paths.push(path);
+        nbRetargetTab(old, path);
+        nbOrderSwapKey(old, path);
+        return f;
+      }
       (tree.attach || []).forEach(function(en){
         var a = NB.attachMeta[en.path];
         if (!a || a.sha !== en.sha) NB.attachMeta[en.path] = { path: en.path, sha: en.sha, remote: true };
       });
+      function nbMatchBlob(text, sha){
+        var list = nbBlobCandidates(text), i = 0;
+        function step(){
+          if (i >= list.length) return Promise.resolve('');
+          var body = list[i++];
+          return nbGitBlobSha(body).then(function(got){ return got === sha ? body : step(); });
+        }
+        return step();
+      }
       var jobs = tree.entries.filter(function(en){
+        var twins = localKey[nbPathKey(en.path).toLowerCase()] || [];
         var local = NB.files[en.path];
+        if (twins.some(function(f){ return f && (f.dirty || f.deleted); })) return true;
         return !(local && local.sha === en.sha && !local.dirty);
       });
       var gone = NB.paths.filter(function(p){
         var f = NB.files[p];
-        return f && !f.deleted && !f.isNew && p.slice(-1) !== '/' && !remote[p];
+        return f && !f.deleted && !f.isNew && p.slice(-1) !== '/' && !remote[p] && !remoteKey[nbPathKey(p).toLowerCase()];
       });
       var chain = Promise.resolve(), pulled = 0, merged = 0, fixed = 0, cleared = 0;
       nbSyncActiveNote();
       jobs.forEach(function(job){
         chain = chain.then(function(){
-          var local = NB.files[job.path];
+          var key = nbPathKey(job.path).toLowerCase();
+          var twins = (localKey[key] || []).filter(function(f){ return f && NB.files[f.path] === f; });
+          var local = NB.files[job.path] || twins[0] || null;
           // a delete still has to be sent; the repository copy is not what the list is waiting on
           if (local && local.deleted) return true;
-          var body = local ? (local.enc ? (nbIsEncrypted(local.text || '') ? local.text : null) : (local.text == null ? '' : String(local.text))) : null;
-          var same = body == null ? Promise.resolve(false) : nbGitBlobSha(body).then(function(sha){
-            if (sha && sha === job.sha){
-              local.sha = sha; local.remote = true; local.isNew = false;
-              // ciphertext already on the server, but the open plaintext was edited after that: it still waits to be sent
+          // already on this device: compare the blob id, and do not GET /contents for every note
+          if (local){
+            var texts = [];
+            function pushText(f){
+              if (!f) return;
+              if (f.enc){ if (nbIsEncrypted(f.text || '')) texts.push(f.text); return; }
+              texts.push(f.text == null ? '' : String(f.text));
+            }
+            pushText(local);
+            twins.forEach(pushText);
+            var probe = Promise.resolve('');
+            texts.forEach(function(t){ probe = probe.then(function(hit){ return hit || nbMatchBlob(t, job.sha); }); });
+            return probe.then(function(hit){
+              if (!hit){
+                if (local.path !== job.path) nbAdoptPath(local, job.path);
+                local.remote = true;
+                return true;
+              }
+              if (local.path !== job.path) nbAdoptPath(local, job.path);
+              local.sha = job.sha; local.remote = true; local.isNew = false;
               if (local.enc && local.plain != null && local.plain !== local.basePlain) return true;
               if (local.dirty) cleared++;
-              local.base = body;
+              if (!local.enc) local.text = hit;
+              local.base = local.enc ? local.text : hit;
               if (local.enc && local.plain != null) local.basePlain = local.plain;
               local.dirty = false; local.movedFrom = '';
               delete local.localCipher;
+              twins.forEach(function(f){
+                if (!f || f === local || f.path === local.path || !NB.files[f.path]) return;
+                var twin = f.enc ? (f.text || '') : String(f.text || '');
+                if (f.dirty && nbLooseText(twin) !== nbLooseText(hit)) return;
+                if (f.dirty) cleared++;
+                delete NB.files[f.path];
+                NB.paths = NB.paths.filter(function(p){ return p !== f.path; });
+              });
+              localKey[key] = [local];
               return true;
-            }
-            // bytes differ: remember the remote blob and leave the local edit queued. downloading it cannot take it off the list
-            if (local && local.dirty && sha && job.sha){ local.sha = job.sha; local.remote = true; }
-            return false;
-          });
-          return same.then(function(skip){
-            if (skip) return true;
-            // the blob on the server did not change: a local edit waits for ارسال, and nothing has to be downloaded
-            if (local && local.sha && local.sha === job.sha) return true;
-            return nbFileText(job.path).then(function(text){
+            });
+          }
+          return nbFileText(job.path).then(function(text){
             var enc = nbIsEncrypted(text);
             if (local && local.enc){
               if (!local.dirty){
@@ -9175,7 +9237,6 @@ function nbCommitMessage(list){
             if (e.status === 404 || e.status === 403) return false; // too big or gone: leave it as it is
             throw e;
           });
-          });
         });
       });
       gone.forEach(function(p){
@@ -9193,7 +9254,7 @@ function nbCommitMessage(list){
         NB.paths.slice().forEach(function(p){
           var f = NB.files[p];
           if (!f || p.slice(-1) === '/') return;
-          if (remote[p]){ f.remote = true; f.isNew = false; return; }
+          if (remote[p] || remoteKey[nbPathKey(p).toLowerCase()]){ f.remote = true; f.isNew = false; return; }
           if (f.deleted){ delete NB.files[p]; NB.paths = NB.paths.filter(function(x){ return x !== p; }); fixed++; return; }   // removing what is not there
           if (f.remote || !f.isNew){ f.remote = false; f.isNew = true; }   // gone there, kept here (edited): it will be created again
         });
