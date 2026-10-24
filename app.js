@@ -12971,6 +12971,27 @@ function nbCommitMessage(list){
       header.appendChild(expBox);
       if (expWrap) expBox.appendChild(expWrap);
     }
+    /* Brand logo = notebook panel toggle (desktop/tablet). Old shells had a <span.logo>; upgrade in place. */
+    (function wireBrandLogo(){
+      var logo = document.querySelector('.brand .logo') || $('btnBrand');
+      if (!logo) return;
+      if (logo.tagName !== 'BUTTON'){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = logo.className || 'logo';
+        btn.innerHTML = logo.innerHTML;
+        logo.parentNode.replaceChild(btn, logo);
+        logo = btn;
+      }
+      logo.id = 'btnBrand';
+      logo.type = 'button';
+      logo.setAttribute('data-action', 'notebook');
+      logo.setAttribute('aria-label', 'دفترچه');
+      logo.setAttribute('data-tip', 'دفترچه: یادداشت‌های گیت‌هاب · Ctrl+\\');
+      logo.setAttribute('aria-pressed', String(!!(typeof NB !== 'undefined' && NB.open)));
+      var oldNb = $('btnNotebook');
+      if (oldNb) oldNb.hidden = true;
+    })();
   })();
 
   /* === /UI === */
