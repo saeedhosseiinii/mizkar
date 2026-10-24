@@ -9044,6 +9044,8 @@ function nbCommitMessage(list){
       jobs.forEach(function(job){
         chain = chain.then(function(){
           var local = NB.files[job.path];
+          // unsent secret note, server copy untouched: nothing to merge, and no passphrase for a pull
+          if (local && local.enc && local.dirty && local.sha && local.sha === job.sha) return true;
           return nbFileText(job.path).then(function(text){
             var enc = nbIsEncrypted(text);
             if (local && local.enc){
