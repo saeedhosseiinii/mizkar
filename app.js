@@ -7373,8 +7373,13 @@ var NB_CSS = [
   '#nb .nb-back-title{ font-size:11.5px; color:var(--muted); padding:0 6px 4px; }',
   '#nb .nb-att-row .nb-name{ direction:rtl; text-align:right; color:var(--muted); }',
   '#nb .nb-cal-head{ display:flex; align-items:center; gap:6px; padding:2px 2px 8px; }',
-  '#nb .nb-cal-head b{ flex:1; text-align:center; font-size:13.5px; }',
+  '#nb .nb-cal-head b,#nb .nb-cal-mo{ flex:1; text-align:center; font-size:13.5px; font-weight:700; }',
+  '#nb .nb-cal-mo{ border:0; background:transparent; color:var(--ink); font:inherit; cursor:pointer; border-radius:8px; padding:4px 8px; }',
+  '#nb .nb-cal-mo.has{ color:var(--accent); }',
   '#nb .nb-cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }',
+  '#nb .nb-cal-with-wk{ grid-template-columns:26px repeat(7,1fr); }',
+  '#nb .nb-cal-wk{ border:0; background:transparent; color:var(--muted); font:inherit; font-size:10px; font-weight:700; cursor:pointer; border-radius:8px; padding:0; }',
+  '#nb .nb-cal-wk.has{ color:var(--accent); }',
   '#nb .nb-cal-wd{ text-align:center; font-size:11px; color:var(--muted); padding-bottom:2px; }',
   '#nb .nb-cal-cell{ position:relative; aspect-ratio:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center;',
   '  border-radius:9px; font-size:12px; color:var(--ink-2); cursor:pointer; border:1px solid transparent; }',
@@ -8487,6 +8492,7 @@ function nbCommitMessage(list){
     'templates/daily.md': '---\ntype: daily\ndate: {{date}}\ncreated: {{gdate}}\ntags: [روزانه]\n---\n# {{jdate}} — {{weekday}}\n\n## کارها\n- [ ] \n\n## یادداشت ها\n{{cursor}}\n\n← [[{{prev}}]] · [[{{next}}]]\n',
     'templates/meeting.md': '---\ntype: meeting\ndate: {{date}}\ncreated: {{gdate}}\ntags: [جلسه]\n---\n# {{title}} — {{jdate}}\n\n**حاضران:** \n**موضوع:** {{cursor}}\n\n## تصمیم ها\n- \n\n## کارها\n- [ ] \n\n← [[{{prev}}]]\n',
     'templates/weekly.md': '---\ntype: weekly\ndate: {{date}}\ncreated: {{gdate}}\ntags: [هفتگی]\n---\n# هفته {{jw}} — {{jdate}}\n\n## این هفته\n- \n\n## بعد\n- \n\n{{cursor}}\n',
+    'templates/monthly.md': '---\ntype: monthly\ndate: {{date}}\ncreated: {{gdate}}\ntags: [ماهانه]\n---\n# {{jy}}/{{jm}}\n\n## این ماه\n{{cursor}}\n\n',
     'templates/idea.md': '---\ntype: idea\ndate: {{date}}\ncreated: {{gdate}}\ntags: [ایده]\n---\n# {{title}}\n\n**جرقه:** {{cursor}}\n\n## چرا\n\n\n## قدم بعدی\n- [ ] \n'
   };
   var IGNORE = ['.obsidian/', '.git/'];
@@ -9909,6 +9915,10 @@ function nbCommitMessage(list){
         else nbCalShift(+what);
         return;
       }
+      var week = e.target.closest('[data-nb-week]');
+      if (week){ nbPeriodClick('week', week.dataset.nbWeek); return; }
+      var month = e.target.closest('[data-nb-month]');
+      if (month){ nbPeriodClick('month', month.dataset.nbMonth); return; }
       var day = e.target.closest('[data-nb-day]');
       if (day){ nbDayClick(day.dataset.nbDay); return; }
       var tag = e.target.closest('[data-nb-tag]');
@@ -10393,14 +10403,15 @@ function nbCommitMessage(list){
     toast('تعارض: ' + faNum(NB.conflicts.length) + ' یادداشت هم اینجا و هم روی مخزن عوض شده', 'x');
   }
   /* --- collections: a folder with a calendar and a template --- */
-  var NB_CAL_KINDS = [['day', 'یک یادداشت در روز'], ['many', 'چند یادداشت در روز (با عنوان)'], ['week', 'یک یادداشت در هفته'], ['', 'بدون تقویم (فقط عنوان)']];
-  var NB_PRESETS = [['templates/daily.md', 'روزانه'], ['templates/meeting.md', 'جلسه'], ['templates/weekly.md', 'هفتگی'], ['templates/idea.md', 'ایده'], ['', 'خالی']];
+  var NB_CAL_KINDS = [['day', 'یک یادداشت در روز'], ['many', 'چند یادداشت در روز (با عنوان)'], ['week', 'یک یادداشت در هفته'], ['month', 'یک یادداشت در ماه'], ['', 'بدون تقویم (فقط عنوان)']];
+  var NB_PRESETS = [['templates/daily.md', 'روزانه'], ['templates/meeting.md', 'جلسه'], ['templates/weekly.md', 'هفتگی'], ['templates/monthly.md', 'ماهانه'], ['templates/idea.md', 'ایده'], ['', 'خالی']];
   /** The path pattern for a folder and a calendar kind; `byMonth` puts dated notes in year/month folders. */
   function nbPatternFor(folder, kind, byMonth){
     var f = String(folder || '').replace(/^\/+|\/+$/g, '').trim() || 'یادداشت ها';
     if (kind === 'day') return f + (byMonth ? '/{jy}/{jm}' : '') + '/{jy}-{jm}-{jd}.md';
     if (kind === 'many') return f + (byMonth ? '/{jy}/{jm}' : '') + '/{jy}-{jm}-{jd} {title}.md';
     if (kind === 'week') return f + (byMonth ? '/{jy}' : '') + '/{jy}-W{jw}.md';
+    if (kind === 'month') return f + (byMonth ? '/{jy}' : '') + '/{jy}-{jm}.md';
     return f + '/{title}.md';
   }
   function nbFolderOfPattern(pattern){ return String(pattern || '').split('/{')[0].replace(/\/[^\/]*\{.*$/, '').replace(/\/+$/, ''); }
@@ -10413,7 +10424,7 @@ function nbCommitMessage(list){
     var name = c ? c.name : (folder ? folder.split('/').pop() : '');
     var kind = c ? (c.calendar || '') : 'day';
     var dir = c ? nbFolderOfPattern(c.path) : (folder || '');
-    var byMonth = c ? /\{jm\}\//.test(c.path) || /\{jy\}\/\{jy\}-W/.test(c.path) : true;
+    var byMonth = c ? /\{jy\}\/|\{jm\}\//.test(c.path) : true;
     var tpls = nbTemplateFiles();
     var body = '<div class="nb-field"><label>نام</label><input class="nb-input" id="nbColName" dir="auto" placeholder="مثلاً: جلسه ها" value="' + escapeHtml(name) + '"></div>'
       + '<div class="nb-field"><label>پوشه</label><input class="nb-input" id="nbColDir" dir="auto" placeholder="همان نام" value="' + escapeHtml(dir) + '"></div>'
@@ -10439,7 +10450,7 @@ function nbCommitMessage(list){
     function preview(){
       if (!custom) $('nbColPath').value = pattern();
       $('nbColMonth').parentNode.hidden = !$('nbColKind').value;
-      $('nbColEx').textContent = 'مثلاً: ' + nbFillPath(pattern(), nbCtx(new Date(), $('nbColKind').value === 'day' || $('nbColKind').value === 'week' ? '' : 'عنوان یادداشت', C.weekStart));
+      $('nbColEx').textContent = 'مثلاً: ' + nbFillPath(pattern(), nbCtx(new Date(), /^(day|week|month)$/.test($('nbColKind').value) ? '' : 'عنوان یادداشت', C.weekStart));
     }
     ['nbColName', 'nbColDir', 'nbColKind', 'nbColMonth'].forEach(function(id){ $(id).addEventListener('input', preview); $(id).addEventListener('change', preview); });
     $('nbColPath').addEventListener('input', function(){ custom = true; preview(); });
@@ -11390,7 +11401,7 @@ function nbCommitMessage(list){
     var date = new Date(d.gy, d.gm - 1, d.gd, 12, 0);
     var shown = nbCalFiltered(), out = [];
     shown.forEach(function(col){
-      if (!col.path || String(col.path).indexOf('{title}') !== -1) return;
+      if (!col.path || col.calendar === 'week' || col.calendar === 'month' || String(col.path).indexOf('{title}') !== -1) return;
       var p = nbFillPath(String(col.path), nbCtx(date, '', C.weekStart));
       if (NB.files[p] && !NB.files[p].deleted) out.push({ path: p, col: col });
     });
@@ -11412,30 +11423,46 @@ function nbCommitMessage(list){
       NB.calMonth = { jy: +t.jy, jm: +t.jm };
     }
     var cells = nbCalCells();
+    var mg = nbJToG(NB.calMonth.jy, NB.calMonth.jm, 1);
+    var mStamp = mg.gy + '-' + nbPad2(mg.gm) + '-' + nbPad2(mg.gd);
+    var mNotes = nbPeriodNotes('month', new Date(mg.gy, mg.gm - 1, mg.gd, 12));
     var html = '<div class="nb-cal-head">'
       + '<button type="button" class="ib sm" data-nb-cal="-1" aria-label="ماه قبل">' + icon('chev') + '</button>'
-      + '<b>' + escapeHtml(NB_MONTHS[NB.calMonth.jm - 1]) + ' ' + nbFaN(NB.calMonth.jy) + '</b>'
+      + '<button type="button" class="nb-cal-mo' + (mNotes.length ? ' has' : '') + '" data-nb-month="' + mStamp + '" title="' + escapeHtml(mNotes.length ? mNotes.map(function(n){ return nbDayChoiceLabel(n, mNotes); }).join(' · ') : 'یادداشت این ماه') + '">'
+      + escapeHtml(NB_MONTHS[NB.calMonth.jm - 1]) + ' ' + nbFaN(NB.calMonth.jy) + '</button>'
       + '<button type="button" class="ib sm" data-nb-cal="1" aria-label="ماه بعد"><span style="display:inline-flex;transform:rotate(180deg)">' + icon('chev') + '</span></button>'
       + '<button type="button" class="elbtn xs" data-nb-cal="today">امروز</button>'
       + '</div>'
-      + '<div class="nb-cal-grid">' + NB_WD.map(function(w){ return '<span class="nb-cal-wd">' + w + '</span>'; }).join('') + '</div>'
-      + '<div class="nb-cal-grid nb-cal-days">';
-    cells.forEach(function(c){
-      if (!c){ html += '<span class="nb-cal-cell empty"></span>'; return; }
-      var notes = nbDayNotes(c);
-      var dots = notes.slice(0, 4).map(function(n){
-        var col = n.col ? n.col.color : '#6d5efc';
-        return '<i class="nb-cal-dot" style="background:' + escapeHtml(col || '#6d5efc') + '"></i>';
-      }).join('');
-      html += '<span class="nb-cal-cell' + (c.today ? ' today' : '') + (notes.length ? ' has' : '') + '" data-nb-day="' + c.gy + '-' + nbPad2(c.gm) + '-' + nbPad2(c.gd) + '" title="' + (notes.length ? notes.map(function(n){ return nbDayChoiceLabel(n, notes); }).join(' · ') : 'خالی') + '">'
-        + (C.showGregorian ? '<i class="nb-cal-g">' + faNum(c.gd) + '</i>' : '')
-        + faNum(c.jd) + '<span class="nb-cal-dots">' + dots + '</span></span>';
-    });
+      + '<div class="nb-cal-grid nb-cal-with-wk"><span class="nb-cal-wd"></span>' + NB_WD.map(function(w){ return '<span class="nb-cal-wd">' + w + '</span>'; }).join('') + '</div>'
+      + '<div class="nb-cal-grid nb-cal-with-wk nb-cal-days">';
+    for (var r = 0; r < cells.length; r += 7){
+      var row = cells.slice(r, r + 7), sample = null;
+      row.forEach(function(c){ if (c && !sample) sample = c; });
+      if (sample){
+        var wDate = new Date(sample.gy, sample.gm - 1, sample.gd, 12);
+        var wNotes = nbPeriodNotes('week', wDate);
+        var wStamp = sample.gy + '-' + nbPad2(sample.gm) + '-' + nbPad2(sample.gd);
+        html += '<button type="button" class="nb-cal-wk' + (wNotes.length ? ' has' : '') + '" data-nb-week="' + wStamp + '" title="'
+          + escapeHtml(wNotes.length ? wNotes.map(function(n){ return nbDayChoiceLabel(n, wNotes); }).join(' · ') : 'یادداشت این هفته') + '">'
+          + faNum(+nbCtx(wDate, '', C.weekStart).jw) + '</button>';
+      } else html += '<span></span>';
+      row.forEach(function(c){
+        if (!c){ html += '<span class="nb-cal-cell empty"></span>'; return; }
+        var notes = nbDayNotes(c);
+        var dots = notes.slice(0, 4).map(function(n){
+          var col = n.col ? n.col.color : '#6d5efc';
+          return '<i class="nb-cal-dot" style="background:' + escapeHtml(col || '#6d5efc') + '"></i>';
+        }).join('');
+        html += '<span class="nb-cal-cell' + (c.today ? ' today' : '') + (notes.length ? ' has' : '') + '" data-nb-day="' + c.gy + '-' + nbPad2(c.gm) + '-' + nbPad2(c.gd) + '" title="' + escapeHtml(notes.length ? notes.map(function(n){ return nbDayChoiceLabel(n, notes); }).join(' · ') : 'خالی') + '">'
+          + (C.showGregorian ? '<i class="nb-cal-g">' + faNum(c.gd) + '</i>' : '')
+          + faNum(c.jd) + '<span class="nb-cal-dots">' + dots + '</span></span>';
+      });
+    }
     html += '</div>'
       + '<div class="nb-cal-legend">' + C.collections.map(function(col){
         return '<span class="nb-cal-lg" data-nb-lg="' + escapeHtml(col.id) + '" role="button" tabindex="0"><i style="background:' + escapeHtml(col.color || '#6d5efc') + '"></i>' + escapeHtml(col.name) + '</span>';
       }).join('') + '</div>'
-      + '<div class="nb-hint">روی هر روز بزن: یادداشت همان روز باز می شود، یا با انتخاب مجموعه ساخته می شود. نقطه ها رنگ مجموعه را دارند.</div>';
+      + '<div class="nb-hint">روز، شمارهٔ هفته و نام ماه: اگر یادداشت باشد باز می‌شود، وگرنه ساخته می‌شود.</div>';
     return html;
   }
   function nbDayChoiceLabel(n, notes){
@@ -11455,8 +11482,34 @@ function nbCommitMessage(list){
     var notes = nbDayNotes({ gy: +p[0], gm: +p[1], gd: +p[2] });
     if (notes.length === 1){ nbOpen(notes[0].path); return; }
     if (notes.length > 1){ nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, notes.map(function(n){ return { label: nbDayChoiceLabel(n, notes), act: function(){ nbOpen(n.path); } }; })); return; }
-    var candidates = C.collections.filter(function(c){ return c.calendar && c.calendar !== 'week'; });
+    var candidates = C.collections.filter(function(c){ return c.calendar === 'day' || c.calendar === 'many'; });
     if (!candidates.length){ toast('مجموعه ای با تقویم روزانه نداری — در تنظیمات دفترچه بساز', 'x'); return; }
+    if (candidates.length === 1){ nbMakeOnDate(candidates[0], date); return; }
+    nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, candidates.map(function(c){
+      return { label: 'یادداشت در «' + c.name + '»', act: function(){ nbMakeOnDate(c, date); } };
+    }));
+  }
+  function nbPeriodNotes(kind, date){
+    var out = [];
+    nbCalFiltered().forEach(function(col){
+      if (col.calendar !== kind || !col.path || String(col.path).indexOf('{title}') !== -1) return;
+      var p = nbFillPath(String(col.path), nbCtx(date, '', C.weekStart));
+      if (NB.files[p] && !NB.files[p].deleted) out.push({ path: p, col: col });
+    });
+    return out;
+  }
+  function nbPeriodClick(kind, stamp){
+    var p = String(stamp).split('-');
+    var date = new Date(+p[0], +p[1] - 1, +p[2], 12, 0);
+    var notes = nbPeriodNotes(kind, date);
+    var word = kind === 'week' ? 'هفتگی' : 'ماهانه';
+    if (notes.length === 1){ nbOpen(notes[0].path); return; }
+    if (notes.length > 1){
+      nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, notes.map(function(n){ return { label: nbDayChoiceLabel(n, notes), act: function(){ nbOpen(n.path); } }; }));
+      return;
+    }
+    var candidates = C.collections.filter(function(c){ return c.calendar === kind; });
+    if (!candidates.length){ toast('مجموعهٔ ' + word + ' نداری — در تنظیمات دفترچه بساز', 'x'); return; }
     if (candidates.length === 1){ nbMakeOnDate(candidates[0], date); return; }
     nbMenu(innerWidth / 2 - 90, innerHeight / 2 - 60, candidates.map(function(c){
       return { label: 'یادداشت در «' + c.name + '»', act: function(){ nbMakeOnDate(c, date); } };
@@ -11468,7 +11521,12 @@ function nbCommitMessage(list){
       return;
     }
     var made = nbNewNote(col, date, '');
-    if (made.exists){ toast('همان روز یادداشت دارد — بازش کردم', 'x'); nbOpen(made.path); return; }
+    if (made.exists){
+      var when = col.calendar === 'week' ? 'همان هفته' : col.calendar === 'month' ? 'همان ماه' : 'همان روز';
+      toast(when + ' یادداشت دارد — بازش کردم', 'check');
+      nbOpen(made.path);
+      return;
+    }
     nbOpen(made.path, made.cursor);
     toast('ساخته شد: ' + made.path, 'plus');
   }
