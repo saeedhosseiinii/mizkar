@@ -8615,8 +8615,11 @@ function nbCommitMessage(list){
 
   /* --- GitHub transport (the Git Data API, so many files land in one commit) --- */
   function nbError(status, msg){ var e = new Error(msg); e.status = status; return e; }
+  function nbWait(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
+  var nbRateTold = 0;
   function nbIsGL(){ return (C && C.provider) === 'gitlab'; }
-  function nbApi(method, path, body, raw){
+  function nbApi(method, path, body, raw, attempt){
+    attempt = attempt || 0;
     var url = /^https?:/.test(path) ? path : (nbIsGL() ? 'https://gitlab.com/api/v4' : 'https://api.github.com') + path;
     var headers = nbIsGL()
       ? { 'Accept': raw ? 'text/plain' : 'application/json' }
@@ -8634,18 +8637,29 @@ function nbCommitMessage(list){
       return res.json().then(function(data){
         if (res.ok) return data;
         var left = res.headers.get('x-ratelimit-remaining');
-        if ((res.status === 403 || res.status === 429) && left === '0') throw nbError(403, 'سهم درخواست های گیت هاب تمام شد — کمی بعد دوباره تلاش کن');
-        var raw = (data && data.message) || '';
+        var gh = (data && data.message) || '';
+        var limited = (res.status === 403 || res.status === 429) && (left === '0' || /secondary rate|rate limit|abuse detection/i.test(gh));
+        if (limited && attempt < 3){
+          var wait = parseInt(res.headers.get('retry-after'), 10);
+          if (!wait || wait < 1) wait = 15 * (attempt + 1);
+          if (wait > 60) wait = 60;
+          if (Date.now() - nbRateTold > 20000){
+            nbRateTold = Date.now();
+            toast('گیت هاب کمی صبر خواست — ارسال خودش ادامه پیدا می‌کند', 'clock');
+          }
+          return nbWait(wait * 1000).then(function(){ return nbApi(method, path, body, raw, attempt + 1); });
+        }
+        if (limited) throw nbError(429, 'گیت هاب موقتاً درخواست‌ها را محدود کرده — یکی دو دقیقه صبر کن و دوباره ارسال کن');
         var detail = data && data.errors && data.errors[0] && (data.errors[0].message || data.errors[0].code);
-        var msg = raw || ('خطای گیت هاب (' + res.status + ')');
-        if (detail && String(detail) !== raw) msg += ' — ' + detail;
+        var msg = gh || ('خطای گیت هاب (' + res.status + ')');
+        if (detail && String(detail) !== gh) msg += ' — ' + detail;
         if (res.status === 401) msg = 'توکن پذیرفته نشد — توکن را دوباره بررسی کن';
         if (res.status === 404 && /\/repos\/[^/]+\/[^/]+\/?$/.test(path)) msg = 'پیدا نشد — نام مخزن را بررسی کن';
-        if (res.status === 403 && /resource not accessible|write|push/i.test(raw)) msg = 'توکن اجازهٔ نوشتن در مخزن را ندارد';
-        if ((res.status === 409 || res.status === 422) && /empty/i.test(raw)) msg = 'مخزن خالی است';
-        else if ((res.status === 409 || res.status === 422) && /fast.forward/i.test(raw)) msg = 'نسخهٔ تازه تری روی مخزن هست';
+        if (res.status === 403 && /resource not accessible|write|push/i.test(gh)) msg = 'توکن اجازهٔ نوشتن در مخزن را ندارد';
+        if ((res.status === 409 || res.status === 422) && /empty/i.test(gh)) msg = 'مخزن خالی است';
+        else if ((res.status === 409 || res.status === 422) && /fast.forward/i.test(gh)) msg = 'نسخهٔ تازه تری روی مخزن هست';
         var err = nbError(res.status, msg);
-        err.gh = raw;
+        err.gh = gh;
         throw err;
       });
     }, function(){
@@ -8850,7 +8864,7 @@ function nbCommitMessage(list){
       if (!sha) throw nbError(0, 'این فایل ها روی مخزن پیدا نشدند');
       return { sha: sha };
     });
-    // blobs go up four at a time; the tree keeps the order of the writes
+    // one blob at a time: four at once makes GitHub answer with a secondary rate limit
     var tree = new Array(writes.length), next = 0;
     function worker(){
       if (next >= writes.length) return Promise.resolve(true);
@@ -8858,7 +8872,9 @@ function nbCommitMessage(list){
       var content;
       try { content = c.b64 || nbB64(c.text == null ? '' : String(c.text)); }
       catch (err) { return Promise.reject(nbError(0, '«' + c.path + '» برای ارسال مناسب نیست')); }
-      return nbApi('POST', base + '/git/blobs', { content: content, encoding: 'base64' }).then(function(blob){
+      return nbWait(i ? 280 : 0).then(function(){
+        return nbApi('POST', base + '/git/blobs', { content: content, encoding: 'base64' });
+      }).then(function(blob){
         if (!blob || !blob.sha) throw nbError(0, '«' + c.path + '» در مخزن ثبت نشد');
         tree[i] = { path: c.path, mode: '100644', type: 'blob', sha: blob.sha };
         return worker();
@@ -8867,8 +8883,7 @@ function nbCommitMessage(list){
         throw e;
       });
     }
-    var workers = [];
-    for (var w = 0; w < Math.min(4, writes.length); w++) workers.push(worker());
+    var workers = [worker()];
     // base_tree must name a tree: the base commit's own tree, so every untouched file stays
     var baseTree = baseSha ? nbApi('GET', base + '/git/commits/' + baseSha).then(function(c){
       if (!c || !c.tree || !c.tree.sha) throw nbError(0, 'درخت commit پایه خوانده نشد');
