@@ -10044,6 +10044,7 @@ function nbCommitMessage(list){
           })(),
           { label: 'تغییر نام پوشه', act: function(){ nbRenameFolder(folder); } },
           { label: 'دانلود zip این پوشه', act: function(){ nbDownloadZip(folder); } },
+          { label: 'رمزگذاری این پوشه', act: function(){ nbEncryptFolder(folder); } },
           { label: 'حذف پوشه', danger: true, act: function(){
             nbConfirm('حذف پوشه', 'همهٔ یادداشت های «' + folder + '» حذف شوند؟', function(){ nbDeletePath(folder + '/'); toast('پوشه برای حذف صف شد', 'trash'); });
           } }
@@ -11841,6 +11842,36 @@ function nbCommitMessage(list){
     return nbKeyFromPass(pass, nbBytesB64(salt[1]), kdf ? +kdf[1] : 150000).then(function(key){
       return crypto.subtle.decrypt({ name: 'AES-GCM', iv: nbBytesB64(iv[1]) }, key, nbBytesB64(body));
     }).then(function(plain){ return new TextDecoder().decode(plain); });
+  }
+  /** Marks every plain note under a folder as secret. Git receives ciphertext on the next send; names stay visible. */
+  function nbEncryptFolder(folder){
+    var pre = String(folder || '').replace(/\/+$/, '');
+    if (!pre) return;
+    var paths = NB.paths.filter(function(p){
+      var f = NB.files[p];
+      return p.indexOf(pre + '/') === 0 && p.slice(-1) !== '/' && nbIsNote(p) && f && !f.deleted && !f.enc && !nbReadOnly(p);
+    });
+    if (!paths.length){ toast('در این پوشه یادداشت رمزنشده‌ای نیست', 'lock'); return; }
+    nbConfirm('رمزگذاری پوشه', faNum(paths.length) + ' یادداشت در «' + pre + '» رمز شود؟ با ارسال بعدی روی مخزن فقط متن رمزشده می‌رود. نام فایل‌ها خوانا می‌ماند.', function(){
+      var go = function(){
+        paths.forEach(function(p){
+          var f = NB.files[p];
+          f.enc = true;
+          f.plain = f.plain != null ? f.plain : f.text;
+          f.dirty = true;
+          f.at = Date.now();
+          var tab = nbTabFor(p);
+          if (tab) tab.secret = true;
+        });
+        nbCountDirty();
+        nbRender();
+        nbSaveFiles();
+        saveState();
+        toast(faNum(paths.length) + ' یادداشت رمز شد — ارسال کن تا روی مخزن برود', 'lock');
+      };
+      if (NB.pass) go();
+      else nbAskPass(true).then(function(p){ if (p){ NB.pass = p; go(); } });
+    });
   }
   /** Turns a note into a secret one (or back): the working copy keeps plaintext, git gets ciphertext. */
   function nbToggleEncrypt(path){
