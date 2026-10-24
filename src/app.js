@@ -634,9 +634,11 @@ var APP_CSS = [
   + '.elwrap>.tfilter{order:-2;margin-bottom:6px;}'
   + '.codewrap>pre,.elwrap>.twrap,.elwrap>pre,.elwrap>.math-display{order:1;min-width:0;}'
   + '}',
-  /* status bar */
-  '.status{display:flex;align-items:center;gap:16px;height:36px;flex:none;padding:0 22px;font-size:.73rem;color:var(--muted);}',
+  /* status bar — equal block padding so Persian text is not optically stuck to the bottom edge */
+  '.status{display:flex;align-items:center;gap:16px;min-height:36px;box-sizing:border-box;flex:none;padding:8px 22px;font-size:.73rem;line-height:1.2;color:var(--muted);}',
+  '.status kbd{border-bottom-width:1px;line-height:1;vertical-align:middle;}',
   '.st-fmt{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--ink-2);}',
+  '.status .st-fmt,.status .st-tag,.status #stCount,.status .st-nb,.status .st-upd,.status .st-k{line-height:1.2;}',
   '.st-fmt::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);}',
   '.st-sp{flex:1;}',
   '.st-upd-wrap{position:relative;}',
@@ -774,7 +776,7 @@ var APP_CSS = [
   '  .pane{height:72vh;}',
   '  .sheet{border-radius:14px;}',
   '  .preview{padding:14px 10px 40px;}',
-  '  .status{padding:0 12px;}',
+  '  .status{padding:8px 12px;}',
   '  #stDir,#stZoom{display:none;}',
   '  .fabs{bottom:16px;left:24px;}',
   '  body.drawer-open #work[data-view="preview"] .pane.editor{top:auto;left:8px;right:8px;bottom:8px;width:auto;height:70vh;animation-name:slideup;}',
