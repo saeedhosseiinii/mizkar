@@ -8775,8 +8775,12 @@ function nbCommitMessage(list){
       });
     });
   }
-  /** One commit carrying every change, on either provider. */
-  function nbCommitPush(changes, message, baseSha){
+  /**
+   * One commit carrying every change, on either provider.
+   * A deletion is not sent as sha:null: GitHub answers 404 for that body. The new tree lists every file
+   * that stays (its existing blob) and the files just written, and simply leaves the deleted paths out.
+   */
+  function nbCommitPush(changes, message, baseSha, have){
     if (nbIsGL()){
       var g = nbGL();
       var actions = changes.map(function(c){
@@ -8791,14 +8795,14 @@ function nbCommitMessage(list){
     var sp = nbSplitRepo(), base = '/repos/' + sp.owner + '/' + sp.name;
     if (!baseSha) return nbFirstCommit(base, changes, message).then(function(first){
       // the rest of the batch goes on top of that first commit, the usual way
-      return first.rest.length ? nbCommitPush(first.rest, message, first.sha) : { sha: first.sha };
+      return first.rest.length ? nbCommitPush(first.rest, message, first.sha, have) : { sha: first.sha };
     });
-    // blobs go up four at a time; the tree keeps the order of the changes
-    var tree = new Array(changes.length), next = 0;
+    // blobs go up four at a time; deletions are applied by omitting the path from the new tree
+    var tree = new Array(changes.length), next = 0, deleted = Object.create(null);
     function worker(){
       if (next >= changes.length) return Promise.resolve(true);
       var i = next++, c = changes[i];
-      if (c.deleted){ tree[i] = { path: c.path, sha: null }; return worker(); }
+      if (c.deleted){ deleted[c.path] = 1; return worker(); }
       var content;
       try { content = c.b64 || nbB64(c.text == null ? '' : String(c.text)); }
       catch (err) { return Promise.reject(nbError(0, '«' + c.path + '» برای ارسال مناسب نیست')); }
@@ -8820,9 +8824,27 @@ function nbCommitMessage(list){
     }) : Promise.resolve('');
     return Promise.all([baseTree].concat(workers))
       .then(function(r){
-        var body = { tree: tree };
-        if (r[0]) body.base_tree = r[0];
-        return nbApi('POST', base + '/git/trees', body);
+        var drop = Object.keys(deleted).length;
+        if (!drop){
+          var body = { tree: tree.filter(function(ent){ return ent && ent.sha; }) };
+          if (r[0]) body.base_tree = r[0];
+          return nbApi('POST', base + '/git/trees', body);
+        }
+        if (!have) throw nbError(0, 'فهرست مخزن برای حذف خوانده نشد');
+        var replaced = Object.create(null), entries = [], added = 0;
+        tree.forEach(function(ent){
+          if (!ent || !ent.sha) return;
+          replaced[ent.path] = 1;
+          if (!Object.prototype.hasOwnProperty.call(have, ent.path)) added++;
+          entries.push(ent);
+        });
+        Object.keys(have).forEach(function(p){
+          if (deleted[p] || replaced[p]) return;
+          entries.push({ path: p, mode: '100644', type: 'blob', sha: have[p] });
+        });
+        var expect = Object.keys(have).length - Object.keys(deleted).filter(function(p){ return Object.prototype.hasOwnProperty.call(have, p); }).length + added;
+        if (entries.length !== expect) throw nbError(0, 'حذف لغو شد تا فایلی از مخزن جا نماند');
+        return nbApi('POST', base + '/git/trees', { tree: entries });
       })
       .then(function(treeRes){
         return nbApi('POST', base + '/git/commits', { message: message, tree: treeRes.sha, parents: baseSha ? [baseSha] : [] });
@@ -9168,7 +9190,7 @@ function nbCommitMessage(list){
           seen[c.path] = uniq.length;
           uniq.push(c);
         });
-        return nbCommitPush(uniq, message, baseSha);
+        return nbCommitPush(uniq, message, baseSha, have);
       })
         .then(function(commit){
           list.forEach(function(fd){
