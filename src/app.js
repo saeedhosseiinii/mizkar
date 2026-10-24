@@ -13,7 +13,7 @@ var CSS = [
   'html,body{margin:0;padding:0;}',
   'body{background:var(--bg);color:var(--ink);font-family:Inter,"Vazirmatn","Vazir",Tahoma,"Segoe UI",sans-serif;direction:rtl;line-height:1.9;-webkit-font-smoothing:antialiased;}',
   'body.ltren .preview,body.ltren .doc{direction:ltr;}',
-  '.sheet,.doc{max-width:var(--sheet-w,860px);transition:max-width .2s;margin:0 auto;background:var(--paper);border:1px solid var(--border);border-radius:18px;padding:46px 54px 56px;box-shadow:var(--shadow-sheet);}',
+  '.sheet,.doc{max-width:var(--sheet-w,860px);transition:max-width .2s;margin:0 auto;background:var(--paper);border:1px solid var(--border);border-radius:18px;padding:48px 54px;box-shadow:var(--shadow-sheet);}',
   '.content{font-size:var(--content-size);line-height:1.95;color:var(--ink);overflow-wrap:break-word;}',
   '.content>:first-child{margin-top:0;}',
   '.content>:last-child{margin-bottom:0;}',
@@ -394,9 +394,9 @@ var APP_CSS = [
   '.swatch:hover{transform:scale(1.12);}',
   '.swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ink-2);}',
   /* workspace */
-  '.work{--split:50%;flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,calc(var(--split) - 6px)) 12px minmax(0,1fr);grid-template-rows:minmax(0,1fr);padding:14px 16px 28px;box-sizing:border-box;}',
+  '.work{--split:50%;flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,calc(var(--split) - 6px)) 12px minmax(0,1fr);grid-template-rows:minmax(0,1fr);padding:16px;box-sizing:border-box;}',
   '.work[data-view="editor"]{grid-template-columns:minmax(0,1fr);}',
-  '.work[data-view="preview"]{grid-template-columns:minmax(0,1fr);padding-bottom:96px;}',
+  '.work[data-view="preview"]{grid-template-columns:minmax(0,1fr);}',
   '.work[data-view="editor"] .divider,.work[data-view="editor"] .pane.out,.work[data-view="preview"] .divider,.work[data-view="preview"] .pane.editor{display:none;}',
   '.work.resizing{cursor:col-resize;user-select:none;}',
   '.work.resizing .pane{pointer-events:none;}',
@@ -450,7 +450,7 @@ var APP_CSS = [
   '#zoomWrap :not(pre)>code,#zoomWrap .filelink{cursor:copy;}',
   '#zoomWrap :not(pre)>code:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);}',
   '.preview,textarea#input{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;}',
-  '.preview{flex:1;min-height:0;overflow:auto;padding:28px 26px 64px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 8%,transparent) 1px,transparent 1.2px);background-size:20px 20px;scroll-behavior:smooth;}',
+  '.preview{flex:1;min-height:0;overflow:auto;padding:28px 26px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 8%,transparent) 1px,transparent 1.2px);background-size:20px 20px;scroll-behavior:smooth;}',
   'body.handmode .preview{cursor:grab;user-select:none;}',
   'body.handmode .preview.dragging{cursor:grabbing;}',
   '#zoomWrap{animation:fade .25s ease-out;}',
@@ -728,8 +728,7 @@ var APP_CSS = [
   '.pane.out{position:relative;}',
   '.fabs{position:absolute;bottom:28px;left:34px;z-index:35;display:none;align-items:center;gap:10px;}',
   '#work[data-view="preview"] .fabs{display:flex;}',
-  '#work[data-view="preview"] .preview{padding-bottom:120px;}',
-  '@media(max-width:760px){#work[data-view="preview"]{padding-bottom:calc(var(--nb-nav-h,56px) + 28px + env(safe-area-inset-bottom,0px));}#work[data-view="preview"] .preview{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px));}#work[data-view="editor"]{padding-bottom:calc(var(--nb-nav-h,56px) + 20px + env(safe-area-inset-bottom,0px));}}',
+  '@media(max-width:760px){#work[data-view="preview"] .preview,#work[data-view="editor"] textarea#input{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px));}}',
   'body.readmode .fabs,body.drawer-open .fabs{display:none !important;}',
   '.fab{display:inline-flex;align-items:center;gap:9px;height:50px;padding:0 22px 0 18px;border-radius:17px;border:0;cursor:pointer;color:#fff;font-weight:800;font-size:.92rem;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,var(--accent-2)));box-shadow:0 16px 36px -12px color-mix(in srgb,var(--accent) 85%,transparent),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,filter .15s;}',
   '.fab:hover{transform:translateY(-2px);filter:brightness(1.06);}',
@@ -771,7 +770,7 @@ var APP_CSS = [
   '  .bar-end>.sep,.bar-end>[data-action="palette"],.bp-label{display:none;}',
   '  .pop{position:fixed;top:118px;left:10px;right:10px;width:auto !important;min-width:0;}',
   '  .brand-name{display:inline;}',
-  '  .work,.work[data-view]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px;padding:12px 10px 0;}',
+  '  .work,.work[data-view]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px;padding:12px 10px;}',
   '  .divider{display:none !important;}',
   '  .pane{height:72vh;}',
   '  .sheet{border-radius:14px;}',
@@ -7550,8 +7549,7 @@ var NB_CSS = [
   '#nbBody .hm-task{padding:6px 4px;}',
   '#nbBody .hm-group h5{padding:0 4px;}',
   '/* --- a notebook note edited in place (inplace.js): one centred column, Markdown tinted behind the text --- */',
-  'body.ip-on #work[data-view="editor"]{padding-bottom:72px;}',
-  'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px 80px;font-size:1rem;}',
+  'body.ip-on #work[data-view="editor"] textarea#input{max-width:min(100%,calc(var(--sheet-w,860px) + 44px));margin:0 auto;padding:28px 22px;font-size:1rem;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-hint{display:none;}',
   'body.ip-on #work[data-view="editor"] .pane.editor .ph-title::after{content:" · Esc: خواندن";font-weight:500;color:var(--muted);}',
   /* ip-tint = phone chrome only (تمام). Markdown colour overlay removed: dual glyphs broke RTL select/jump. */
@@ -12878,7 +12876,15 @@ function nbCommitMessage(list){
       // a notebook note is edited in place (one column); a temp tab gets the source next to the preview
       // on a phone there is no room for two columns: it is always read ↔ edit
       var narrow = innerWidth <= 760, isNote = !!(currentTab() && currentTab().nb);
-      setView(state.view === 'preview' ? ((narrow || isNote) ? 'editor' : 'split') : 'preview');
+      if (state.view === 'preview' && isNote && typeof ipEdit === 'function'){
+        ipEdit(0, '');
+        return;
+      }
+      if (state.view !== 'preview' && isNote && typeof ipGoRead === 'function'){
+        ipGoRead();
+        return;
+      }
+      setView(state.view === 'preview' ? (narrow ? 'editor' : 'split') : 'preview');
       saveState();
       if (state.view !== 'preview') setTimeout(function(){ ta.focus(); }, 0);
     });
@@ -13813,8 +13819,8 @@ function nbCommitMessage(list){
       if (inLine < 0) inLine = row.toLowerCase().indexOf(word.toLowerCase());
       if (inLine >= 0){ selStart = pos + inLine; selEnd = selStart + word.length; }
     }
-    // a phone's second tap also fires a compatibility mousedown on the preview; ignore it or we bounce back to reading
-    ip.outsideUntil = Date.now() + 800;
+    // the second tap/click of a double-click (and a phone's delayed compatibility mousedown) must not bounce back to reading
+    ip.outsideUntil = Date.now() + 1400;
     setView('editor');
     saveState();
     if (typeof syncInputDir === 'function') syncInputDir();
@@ -13865,8 +13871,10 @@ function nbCommitMessage(list){
     if (typeof nbShellSync === 'function') nbShellSync();
     if (typeof nbBackSync === 'function') nbBackSync();
   }
-  zoomWrap.addEventListener('dblclick', function(e){
-    if (!ipTab() || state.view !== 'preview' || e.target.closest('a,button,input,[data-ui],.mermaid,.katex,time')) return;
+  function ipDblOpen(e){
+    if (!ipTab() || state.view !== 'preview') return;
+    if (e.target.closest('a,button,input,[data-ui],.mermaid,.katex')) return;
+    e.preventDefault();
     var sel = window.getSelection ? window.getSelection() : null;
     var word = sel ? String(sel).trim() : '';
     // some browsers clear the selection before dblclick; fall back to the clicked token
@@ -13876,7 +13884,8 @@ function nbCommitMessage(list){
     }
     var block = e.target.closest(IP_BLOCKS);
     ipEdit(block ? ipLineOf(block) : 0, word.length > 1 && word.length < 60 ? word : '', block ? block.getBoundingClientRect().top : e.clientY);
-  });
+  }
+  (zoomWrap.closest('.preview') || zoomWrap).addEventListener('dblclick', ipDblOpen);
   // ticking ☐ while reading: the n-th task box is the n-th checkbox line of the source (fences skipped)
   zoomWrap.addEventListener('click', function(e){
     var box = e.target.closest('li.task > .box');
@@ -13902,10 +13911,13 @@ function nbCommitMessage(list){
   var IP_STAY = 'textarea, .mdbar, .pane-head, #nb, #nbNav, #nbTop, #ipDone, .bar, .tabs, .status, .modal, .pop, .ctx-menu, #nbMenu, #nbMini, #nbMini2, #nbModal, .findbar, #palette, .toast, .fabs';
   document.addEventListener('mousedown', function(e){
     if (!ipTab() || state.view !== 'editor' || e.button !== 0) return;
+    if (e.detail > 1) return;                                 // the second press of a double-click is still the gesture that opened the editor
     if (Date.now() < (ip.outsideUntil || 0)) return;
+    if (Date.now() < (ip.touchUntil || 0)) return;            // a touch's delayed mouse event is not a click on the gutter
     if (!e.target.closest || e.target.closest(IP_STAY)) return;
     ipRead();
   }, true);
+  document.addEventListener('touchend', function(){ ip.touchUntil = Date.now() + 900; }, { passive: true });
   document.addEventListener('keydown', function(e){
     var t = ipTab();
     if (!t || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -14341,7 +14353,7 @@ function nbCommitMessage(list){
      app the dblclick it expects. */
   (function(){
     /* Deliberate double-tap: slower than a bounce, roomy second tap, open delay lets a fling cancel. */
-    var TAP_MIN = 340, TAP_MAX = 780, TAP_DIST = 22, TAP_OPEN = 480, TAP_COOL = 2000;
+    var TAP_MIN = 160, TAP_MAX = 500, TAP_DIST = 28, TAP_OPEN = 180, TAP_COOL = 450;
     var last = 0, lx = 0, ly = 0, done = 0, pending = 0;
     function cancelPending(){ if (pending){ clearTimeout(pending); pending = 0; } }
     document.addEventListener('touchmove', function(){ cancelPending(); }, { passive: true });
