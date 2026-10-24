@@ -441,8 +441,8 @@ var APP_CSS = [
   '.tp-cell{width:18px;height:18px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);cursor:pointer;padding:0;}',
   '.tp-cell.on{background:color-mix(in srgb,var(--accent) 35%,transparent);border-color:var(--accent);}',
   '.tp-size{margin-top:8px;font-size:.76rem;color:var(--muted);text-align:center;}',
-  /* plaintext: each line follows its first strong char — full-English lines go left, Persian stay right */
-  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);unicode-bidi:plaintext;text-align:start;}',
+  /* one direction for the whole buffer; syncInputDir picks rtl or ltr */
+  'textarea#input{flex:1;width:100%;min-height:0;resize:none;border:none;outline:none;padding:20px 22px 40px;font-size:.96rem;line-height:1.95;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;caret-color:var(--accent);unicode-bidi:embed;text-align:start;}',
   'textarea#input::placeholder{color:var(--muted);opacity:.7;}',
   '.divider{position:relative;cursor:col-resize;touch-action:none;}',
   '.divider::before{content:"";position:absolute;top:50%;left:4px;right:4px;height:56px;transform:translateY(-50%);border-radius:4px;background:var(--border-strong);transition:background .15s,height .15s;}',
@@ -4456,19 +4456,20 @@ if (typeof document !== 'undefined'){
     processMermaid(theme, null, false);
   }
   /**
-   * Buffer dir is a fallback; CSS unicode-bidi:plaintext gives each line its own direction from the
-   * first strong character, so a full-English paragraph goes left and a Persian one stays right.
-   * Code-only formats force LTR for the whole buffer.
+   * One direction for the whole editor. unicode-bidi:plaintext followed the first Latin word
+   * (often the front matter «tags:») and pulled a Persian note to the left.
+   * Code with no Persian stays LTR; a Persian note stays RTL even when it opens with English front matter.
    */
   function syncInputDir(){
     if (!ta) return;
-    var dir;
+    var dir = 'rtl';
     if (state.ltr) dir = 'ltr';
     else {
       var fmt = (typeof effectiveFormat === 'function' ? effectiveFormat() : state.fmt) || 'auto';
       var codeLike = /^(json|yaml|yml|toml|ini|xml|sql|csv|log|diff|jwt|cron|js|ts|css|html|code)$/i.test(fmt);
-      var sample = (ta.value || '').slice(0, 8000);
-      dir = (codeLike && typeof hasRTL === 'function' && !hasRTL(sample)) ? 'ltr' : 'rtl';
+      var sample = String(ta.value || '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').slice(0, 8000);
+      if (codeLike && typeof hasRTL === 'function' && !hasRTL(sample)) dir = 'ltr';
+      else if (!codeLike && typeof textDir === 'function' && textDir(sample) === 'ltr') dir = 'ltr';
     }
     ta.setAttribute('dir', dir);
     var md = document.querySelector('.ta-md');
