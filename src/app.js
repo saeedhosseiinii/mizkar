@@ -7488,6 +7488,8 @@ var NB_CSS = [
   '.nb-pend-open small{display:block;color:var(--muted);font-size:.7rem;}',
   '.nb-pend-btns{display:flex;gap:8px;flex:none;}',
   '#nbSyncPop .nb-actions{padding:8px 2px 4px;}',
+  '.nb-sync-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 2px 4px;}',
+  '.nb-sync-main,.nb-sync-side{display:flex;gap:8px;align-items:center;}',
   '.nb-pend-why{font-size:.76rem;color:var(--warn,#b45309);padding:2px 2px 6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}',
   '.nb-diff{max-height:min(56vh,460px);overflow:auto;font-size:.76rem;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:6px 8px;}',
   '.nb-diff-line{display:flex;gap:6px;align-items:flex-start;white-space:pre-wrap;word-break:break-word;}',
@@ -12921,10 +12923,12 @@ function nbCommitMessage(list){
       + ' <button type="button" class="elbtn xs" data-nb-pop="fix">' + escapeHtml(blocked.btn) + '</button></div>' : '';
     var body = '<div class="nb-pend-head">' + (n ? faNum(n) + ' تغییر منتظر ارسال' : 'همه چیز فرستاده شده') + '</div>' + nbPendHtml();
     return head + why + body
-      + '<div class="nb-actions"><button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button>'
+      + '<div class="nb-sync-bar"><div class="nb-sync-main">'
       + '<button class="btn-primary sm" type="button" data-nb-pop="push">ارسال همه</button>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="pull">گرفتن</button></div>'
+      + '<div class="nb-sync-side">'
       + '<button class="btn-soft sm" type="button" data-nb-pop="settings">تنظیمات</button>'
-      + '<button class="btn-soft sm" type="button" data-nb-pop="open">نوار کناری</button></div>'
+      + '<button class="btn-soft sm" type="button" data-nb-pop="open">یادداشت‌ها</button></div></div>'
       + '<p class="nb-pop-ver">نسخه: ' + escapeHtml(nbBuildVersion()) + '</p>';
   }
   function nbSyncPopWire(){
@@ -13284,7 +13288,7 @@ function nbCommitMessage(list){
     { label: 'پرش به فایل', kbd: 'Ctrl P', run: function(){ if (typeof openQuickOpen === 'function') openQuickOpen(); } },
     { label: 'تقویم', kbd: 'Alt Shift C', run: function(){ NB.section = 'cal'; if (!NB.open) nbSidebar(true); else nbRender(); } },
     { label: 'کارها', kbd: 'Alt Shift T', run: function(){ NB.section = 'tasks'; if (!NB.open) nbSidebar(true); else nbRender(); } },
-    { label: 'نوار کناری', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
+    { label: 'یادداشت‌ها', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
     { label: 'ویرایش / خواندن', kbd: 'Alt 2 یا Alt 3', run: function(){ setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview'); saveState(); } },
     { label: 'ارسال به مخزن (در تب یادداشت)', kbd: 'Ctrl S', run: function(){ nbPush({ loud: true }); } },
     { label: 'گرفتن از مخزن', kbd: 'Alt Shift R', run: function(){ nbPull({ loud: true }); } },
