@@ -7437,18 +7437,19 @@ var NB_CSS = [
   '.nb-temp-part h5{margin:10px 2px 4px;font-size:.74rem;font-weight:800;color:var(--muted);}',
   '.nb-temp-part h5 b{color:var(--accent);margin-inline-start:4px;}',
   '.nb-temp-g{margin:8px 2px 2px;font-size:.7rem;font-weight:700;color:var(--muted);opacity:.9;}',
-  '.nb-hist-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:9px;cursor:pointer;}',
+  '.nb-hist-row{display:flex;align-items:flex-start;gap:8px;padding:6px;border-radius:9px;cursor:pointer;position:relative;}',
   '.nb-hist-row:hover{background:var(--surface-2);}',
-  '.nb-hist-row .nb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem;}',
-  '.nb-hist-meta{flex:none;color:var(--muted);font-size:.68rem;}',
+  '.nb-hist-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}',
+  '#nb .nb-hist-row .nb-name{flex:none;display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.84rem;font-weight:700;color:var(--ink);}',
+  '.nb-hist-meta{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:.68rem;}',
   '.nb-preview{max-height:min(52vh,420px);overflow:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px;font-size:.78rem;white-space:pre-wrap;word-break:break-word;}',
   '/* the recent texts live in the sidebar «موقت» now, not in the top bar */',
   'body.ui-calm .ui-near #btnHistory, body.ui-calm .ui-near [data-action="history"]{display:none;}',
   '',
   '/* the row actions show on hover or focus; on a phone they are always there (no hover) */',
-  '.nb-hist-btns{display:flex;gap:3px;flex:none;opacity:0;transition:opacity .12s;}',
+  '.nb-hist-btns{display:flex;gap:3px;flex:none;opacity:0;transition:opacity .12s;position:absolute;inset-inline-start:4px;top:4px;background:var(--surface);border-radius:8px;padding:2px;}',
   '.nb-hist-row:hover .nb-hist-btns,.nb-hist-row:focus-within .nb-hist-btns,.nb-hist-row:focus .nb-hist-btns{opacity:1;}',
-  '@media (max-width:760px){ .nb-hist-btns{opacity:1;} .nb-hist-meta{display:none;} }',
+  '@media (max-width:760px){ .nb-hist-btns{position:static;opacity:1;background:none;padding:0;margin-top:4px;} }',
   '',
   '/* ================= §4 موبایل: حس اپ ================= */',
   '/* the pull-to-refresh hint */',
@@ -12441,8 +12442,8 @@ function nbCommitMessage(list){
           var idx = hist.indexOf(h);
           return '<div class="nb-row nb-hist-row" data-nb-hist-item="' + idx + '" tabindex="0" title="' + escapeHtml(nbHistFirstLines(h)) + '">'
             + icon(h.closed ? 'x' : 'clock')
-            + '<span class="nb-name" dir="auto">' + escapeHtml(h.name || h.title || 'بدون عنوان') + '</span>'
-            + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span>'
+            + '<span class="nb-hist-main"><span class="nb-name" dir="auto">' + escapeHtml(h.name || h.title || 'بدون عنوان') + '</span>'
+            + '<span class="nb-hist-meta">' + escapeHtml(nbKindLabel(h)) + ' · ' + nbByteSize((h.t || '').length) + ' · ' + escapeHtml(relTime((h.at - Date.now()) / 1000)) + '</span></span>'
             + '<span class="nb-hist-btns">'
             + '<button type="button" class="elbtn xs" data-nb-hist-open="' + idx + '">باز کردن</button>'
             + '<button type="button" class="elbtn xs" data-nb-hist-save="' + idx + '">ذخیره در دفترچه…</button>'
