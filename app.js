@@ -9744,8 +9744,9 @@ function nbCommitMessage(list){
     var html = '<div class="nb-list" id="nbList">';
     if (NB.section === 'notes'){
       var foldDirs = nbDirs(nbTree()), anyOpen = foldDirs.some(function(d){ return NB.expanded[d] !== false; });
-      html += '<div class="nb-search nb-tree-q"><input class="nb-input" id="nbTreeQ" type="text" dir="' + (NB.treeQuery ? 'auto' : 'rtl') + '" placeholder="فیلتر یادداشت ها…" value="' + escapeHtml(NB.treeQuery || '') + '">'
+      html += '<div class="nb-search nb-tree-q">'
         + (foldDirs.length ? '<button type="button" class="btn-soft sm nb-foldall" data-nb-act="fold-all">' + (anyOpen ? 'بستن همه' : 'باز کردن همه') + '</button>' : '')
+        + '<input class="nb-input" id="nbTreeQ" type="text" dir="' + (NB.treeQuery ? 'auto' : 'rtl') + '" placeholder="فیلتر یادداشت ها…" value="' + escapeHtml(NB.treeQuery || '') + '">'
         + '</div>'
         + '<div id="nbTreeBox">' + nbTreeBoxHtml(noteCount, active) + '</div>';
     } else if (NB.section === 'temps'){
