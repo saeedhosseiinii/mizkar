@@ -13562,13 +13562,42 @@ function nbCommitMessage(list){
       if ($('nbMiniInput')) $('nbMiniInput').type = 'password';
     });
   }
+  /** True when the gist is still reachable (secret gists are visible to anyone who knows the id). */
+  function nbShareStillAlive(id){
+    return nbGistApi('GET', '/gists/' + id, null, true).then(function(){ return true; }, function(e){
+      if (e.status === 404) return false;
+      throw e;
+    });
+  }
   function nbShareRemove(rec, quiet){
-    return nbGistApi('DELETE', '/gists/' + rec.id).catch(function(e){ if (e.status !== 404) throw e; }).then(function(){
+    if (!rec || !rec.id){
+      if (!quiet) toast('این اشتراک پیدا نشد', 'x');
+      return Promise.resolve(false);
+    }
+    var dropLocal = function(){
       nbShareReg = (nbShareReg || []).filter(function(x){ return x.id !== rec.id; });
-      nbShareSaveReg();
-      if (!quiet) toast('اشتراک برداشته شد — لینکش دیگر کار نمی کند', 'trash');
-      return true;
-    }, function(e){ if (!quiet) toast(e.message, 'x'); return false; });
+      return nbShareSaveReg().then(function(){
+        if (!quiet) toast('اشتراک برداشته شد — لینکش دیگر کار نمی کند', 'trash');
+        return true;
+      });
+    };
+    var fail = function(msg){
+      if (!quiet) toast(msg || 'برداشتن اشتراک ممکن نشد', 'x');
+      return false;
+    };
+    // Never treat DELETE 404 as success: GitHub often returns 404 when the token cannot delete.
+    // Secret gists stay readable anonymously if they still exist — verify before claiming success.
+    return nbGistApi('DELETE', '/gists/' + rec.id).then(function(){
+      return nbShareStillAlive(rec.id).then(function(alive){
+        if (alive) return fail('توکن اجازهٔ برداشتن گیست را ندارد — در تنظیمات «اشتراک‌ها» توکن با دسترسی Gists (خواندن و نوشتن) بگذار');
+        return dropLocal();
+      }, function(e){ return fail(e.message); });
+    }, function(e){
+      return nbShareStillAlive(rec.id).then(function(alive){
+        if (!alive) return dropLocal();
+        return fail(e.message || 'برداشتن اشتراک ممکن نشد');
+      }, function(e2){ return fail((e && e.message) || e2.message); });
+    });
   }
   /** Every share: what GitHub has (any device made it) joined with what this device remembers. */
   function nbShareList(){
@@ -13647,7 +13676,9 @@ function nbCommitMessage(list){
       if (rec.mode === 'key' && !rec.key) toast('کلید این لینک روی این دستگاه نیست — لینک بدون کلید کپی شد', 'x');
       copyToClipboard('', nbShareUrl(rec)).then(function(ok){ if (ok) toast('لینک کپی شد', 'link'); });
     } else if (u) nbShareUpdate(rec);
-    else nbConfirm('برداشتن اشتراک', '«' + (rec.title || 'این اشتراک') + '» برداشته شود؟ لینکش دیگر کار نمی کند.', function(){ nbShareRemove(rec).then(function(){ nbSharesFill(); }); });
+    else nbConfirm('برداشتن اشتراک', '«' + (rec.title || 'این اشتراک') + '» برداشته شود؟ لینکش دیگر کار نمی کند.', function(){
+      nbShareRemove(rec).then(function(){ nbSharesFill(); });
+    });
     return true;
   }
 
