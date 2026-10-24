@@ -10136,11 +10136,7 @@ function nbCommitMessage(list){
         copyToClipboard('پیوند', link).then(function(ok){ toast(ok ? 'کپی شد: ' + link : 'کپی نشد', ok ? 'link' : 'x'); });
       } },
       { label: 'دانلود md', act: function(){ nbDownload(path); } },
-      { label: 'حذف', danger: true, act: function(){
-        nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
-          nbDeletePath(path); toast('برای حذف صف شد', 'trash');
-        });
-      } }
+      { label: 'حذف', danger: true, act: function(){ nbAskDelete(path); } }
     ];
   }
   /* --- small dialogs, in the app's own style --- */
@@ -10999,6 +10995,26 @@ function nbCommitMessage(list){
 
   /* --- wiring --- */
   function nbActivePath(){ var t = currentTab(); return t && t.nb ? t.nb : ''; }
+  /** The same confirm the note menu uses. Delete and Backspace call it when the user is not typing. */
+  function nbAskDelete(path){
+    if (!path || !NB.files[path] || NB.files[path].deleted) return;
+    if (nbReadOnly(path)){ toast('این پوشه فقط خواندنی است', 'lock'); return; }
+    nbConfirm('حذف یادداشت', '«' + nbTitle(path) + '» حذف شود؟ با ارسال بعدی از مخزن هم برداشته می شود.', function(){
+      nbDeletePath(path); toast('برای حذف صف شد', 'trash');
+    });
+  }
+  /** A note row in the list, or the open note while reading. Empty while typing, so Delete still erases characters. */
+  function nbDeleteKeyPath(){
+    var t = document.activeElement;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]')) return '';
+    if (nbLayerOpen()) return '';
+    if (typeof deck !== 'undefined' && deck && !deck.hidden) return '';
+    if (typeof palette !== 'undefined' && palette && !palette.hidden) return '';
+    var row = t && t.closest && t.closest('[data-nb-note]');
+    if (row && row.dataset.nbNote) return row.dataset.nbNote;
+    if (state.view !== 'preview') return '';
+    return nbActivePath() || '';
+  }
   nbTrap();
   /* the toolbar button carries data-action="notebook", so the app's own dispatch opens the drawer —
      a second listener here would toggle it twice and it would never look open */
@@ -11067,6 +11083,10 @@ function nbCommitMessage(list){
   setInterval(nbAutoTick, 60000);
   document.addEventListener('visibilitychange', nbAutoTick);
   addEventListener('keydown', function(e){
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !e.isComposing){
+      var delPath = nbDeleteKeyPath();
+      if (delPath){ e.preventDefault(); e.stopPropagation(); nbAskDelete(delPath); return; }
+    }
     if (e.key === 'Escape'){
       if (typeof NBD === 'object' && NBD.on) return;              // drag.js cancels the drag; nothing else closes
       // one Esc closes one layer: the editor's own Esc (back to reading) must not run as well
@@ -12997,7 +13017,8 @@ function nbCommitMessage(list){
     { label: 'نوار کناری', kbd: 'Ctrl \\', run: function(){ nbSidebar(); } },
     { label: 'ویرایش / خواندن', kbd: 'Alt 2 یا Alt 3', run: function(){ setView(state.view === 'preview' ? (currentTab() && currentTab().nb ? 'editor' : 'split') : 'preview'); saveState(); } },
     { label: 'ارسال به مخزن (در تب یادداشت)', kbd: 'Ctrl S', run: function(){ nbPush({ loud: true }); } },
-    { label: 'گرفتن از مخزن', kbd: 'Alt Shift R', run: function(){ nbPull({ loud: true }); } }
+    { label: 'گرفتن از مخزن', kbd: 'Alt Shift R', run: function(){ nbPull({ loud: true }); } },
+    { label: 'حذف یادداشت (در فهرست یا هنگام خواندن)', kbd: 'Delete', run: function(){ var p = nbDeleteKeyPath(); if (p) nbAskDelete(p); } }
   ];
   function nbKeysRows(q){
     var norm = nbNorm(q || '');
