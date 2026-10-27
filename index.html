@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دفترچه</title>
+<meta name="description" content="میزکار حالا «دفترچه» است: https://daftarcheh.github.io/">
+<meta property="og:site_name" content="دفترچه">
+<meta property="og:title" content="دفترچه">
+<meta property="og:description" content="یادداشت فارسی، همگام با گیت‌هاب — حتی آفلاین.">
+<meta property="og:image" content="https://daftarcheh.github.io/icon-512.png">
+<link rel="canonical" href="https://daftarcheh.github.io/">
+<script>
+  /* the app moved: same path after /mizkar/, same query and #… (share links keep working) */
+  (function(){
+    var rest = location.pathname.replace(/^\/mizkar\/?/, '');
+    location.replace('https://daftarcheh.github.io/' + rest + location.search + location.hash);
+  })();
+</script>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.9 system-ui,sans-serif;background:#f3f4f8;color:#1f2330;}
+  @media (prefers-color-scheme:dark){body{background:#14161c;color:#e7e9ef;}a{color:#a99cff;}}
+  main{padding:24px;text-align:center;}
+</style>
+</head>
+<body>
+<main>
+  <p>میزکار حالا «دفترچه» است و به آدرس تازه رفته.</p>
+  <p><a id="go" href="https://daftarcheh.github.io/">daftarcheh.github.io</a></p>
+</main>
+<script>document.getElementById('go').href = 'https://daftarcheh.github.io/' + location.search + location.hash;</script>
+</body>
+</html>
